@@ -16,6 +16,7 @@ export interface Categoria {
   id: string;
   nombre: string;
   descripcion: string | null;
+  imagen_url?: string | null;
   activa: boolean;
   created_at?: string;
   // Campos calculados para admin

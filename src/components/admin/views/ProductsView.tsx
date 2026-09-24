@@ -26,7 +26,7 @@ import {
   toggleProductActive,
   updateProductStock,
   getAdminCategories,
-  uploadMediaFile,
+  PROJECT_MEDIA_OPTIONS,
 } from '../../../services/adminService';
 import { Producto, Categoria } from '../../../types/database';
 import { isPermissionError } from '../../../utils/supabaseSqlFix';
@@ -62,7 +62,6 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
   const [formCategory, setFormCategory] = useState('');
   const [formImageUrl, setFormImageUrl] = useState('');
   const [formActive, setFormActive] = useState(true);
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   // Inline stock editing
   const [editingStockId, setEditingStockId] = useState<string | null>(null);
@@ -114,25 +113,6 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
     setFormActive(prod.activo);
     setIsModalOpen(true);
     setActionMessage(null);
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploadingImage(true);
-    try {
-      const url = await uploadMediaFile('product-images', file);
-      setFormImageUrl(url);
-      setActionMessage({ type: 'success', text: 'Imagen subida exitosamente a Supabase Storage.' });
-    } catch (err: any) {
-      setActionMessage({
-        type: 'error',
-        text: `${err.message} Puedes usar una URL directa de imagen mientras tanto.`,
-      });
-    } finally {
-      setIsUploadingImage(false);
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -625,42 +605,66 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                 </div>
               </div>
 
-              {/* Image Input + Storage Upload */}
+              {/* Image Path Selection & Input (public/images/products/) */}
               <div className="space-y-2">
-                <label className="block text-slate-300 font-semibold">Imagen del Producto</label>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    placeholder="https://images.unsplash.com/..."
+                <div className="flex items-center justify-between">
+                  <label className="block text-slate-300 font-semibold text-xs">
+                    Ruta de Imagen del Producto
+                  </label>
+                  <span className="text-[10px] text-amber-400 font-mono">
+                    public/images/products/
+                  </span>
+                </div>
+
+                <input
+                  type="text"
+                  placeholder="/images/products/perfume-1.jpg"
+                  value={formImageUrl}
+                  onChange={(e) => setFormImageUrl(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-xs placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                />
+
+                {/* Seleccionar archivo existente del proyecto */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-400 whitespace-nowrap">
+                    Archivo existente:
+                  </span>
+                  <select
                     value={formImageUrl}
                     onChange={(e) => setFormImageUrl(e.target.value)}
-                    className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-[11px] placeholder-slate-600 focus:outline-none focus:border-amber-500"
-                  />
-                  <label className="px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold flex items-center gap-1.5 cursor-pointer border border-slate-700">
-                    <Upload size={14} className={isUploadingImage ? 'animate-bounce text-amber-400' : ''} />
-                    <span className="hidden sm:inline">Subir</span>
-                    <input
-                      type="file"
-                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                      disabled={isUploadingImage}
-                    />
-                  </label>
+                    className="flex-1 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-xs focus:outline-none focus:border-amber-500 font-mono cursor-pointer"
+                  >
+                    <option value="">-- Seleccionar imagen en public/images/products/ --</option>
+                    {PROJECT_MEDIA_OPTIONS.products.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <p className="text-[10px] text-slate-500">
-                  Formatos: JPG, PNG, WEBP (máx. 5 MB). Se guarda en el bucket <code className="text-amber-400">product-images</code>.
-                </p>
+
+                <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 space-y-1">
+                  <p className="text-amber-400 font-medium">
+                    📁 Archivos locales del proyecto (sin Supabase Storage):
+                  </p>
+                  <p>
+                    Para agregar nuevas fotos, cópialas a <code className="text-amber-300">public/images/products/</code> e introduce su ruta aquí (ej: <code className="text-amber-300">/images/products/gorra-1.webp</code>).
+                  </p>
+                </div>
+
                 {formImageUrl && (
                   <div className="flex items-center gap-3 p-2 bg-slate-950 rounded-xl border border-slate-800">
                     <img
                       src={formImageUrl}
                       alt="Preview"
-                      className="w-12 h-12 object-cover rounded-lg bg-black"
+                      className="w-12 h-12 object-cover rounded-lg bg-black border border-slate-800"
                     />
-                    <span className="text-[11px] text-slate-400 truncate flex-1">
-                      {formImageUrl}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] text-slate-500 block">Ruta asignada:</span>
+                      <span className="text-[11px] text-amber-400 font-mono truncate block">
+                        {formImageUrl}
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>

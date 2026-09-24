@@ -18,7 +18,7 @@ import {
   Globe,
 } from 'lucide-react';
 import { useStoreConfig } from '../../../context/StoreConfigContext';
-import { uploadMediaFile, DEFAULT_STORE_CONFIG } from '../../../services/adminService';
+import { PROJECT_MEDIA_OPTIONS, DEFAULT_STORE_CONFIG } from '../../../services/adminService';
 import { SUPABASE_FIX_SQL } from '../../../utils/supabaseSqlFix';
 
 export const SettingsView: React.FC = () => {
@@ -38,9 +38,6 @@ export const SettingsView: React.FC = () => {
   const [facebook, setFacebook] = useState(config.facebook || '');
   const [twitter, setTwitter] = useState(config.twitter || '');
 
-  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
-  const [isUploadingCatalogVideo, setIsUploadingCatalogVideo] = useState(false);
-  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [copiedSql, setCopiedSql] = useState(false);
 
@@ -70,82 +67,25 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploadingVideo(true);
+  const handleApplyHeroVideo = async () => {
     try {
-      const publicUrl = await uploadMediaFile('site-assets', file);
-      setHeroVideoUrl(publicUrl);
-      await updateConfig({ hero_video_url: publicUrl });
+      await updateConfig({ hero_video_url: heroVideoUrl });
       setActionMessage({
         type: 'success',
-        text: 'Video subido exitosamente a Supabase Storage y configurado en el Hero.',
+        text: 'Ruta del video Hero aplicada exitosamente a la tienda.',
       });
     } catch (err: any) {
-      setActionMessage({
-        type: 'error',
-        text: `${err.message} Puedes pegar una URL directa de video MP4 en el campo de texto.`,
-      });
-    } finally {
-      setIsUploadingVideo(false);
-    }
-  };
-
-  const handleCatalogVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploadingCatalogVideo(true);
-    try {
-      const publicUrl = await uploadMediaFile('site-assets', file);
-      setCatalogVideoUrl(publicUrl);
-      await updateConfig({ catalog_video_url: publicUrl });
-      setActionMessage({
-        type: 'success',
-        text: 'Video de fondo para el catálogo subido exitosamente.',
-      });
-    } catch (err: any) {
-      setActionMessage({
-        type: 'error',
-        text: `${err.message} Puedes pegar una URL directa de video MP4 en el campo de texto.`,
-      });
-    } finally {
-      setIsUploadingCatalogVideo(false);
-    }
-  };
-
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploadingLogo(true);
-    try {
-      const publicUrl = await uploadMediaFile('site-assets', file);
-      setLogoUrl(publicUrl);
-      await updateConfig({ logo_url: publicUrl });
-      setActionMessage({
-        type: 'success',
-        text: 'Logo subido exitosamente a Supabase Storage.',
-      });
-    } catch (err: any) {
-      setActionMessage({
-        type: 'error',
-        text: `${err.message} Puedes ingresar una URL directa de logo.`,
-      });
-    } finally {
-      setIsUploadingLogo(false);
+      setActionMessage({ type: 'error', text: err?.message || 'Error al aplicar video.' });
     }
   };
 
   const handleRestoreDefaultVideo = async () => {
-    const def = DEFAULT_STORE_CONFIG.hero_video_url;
+    const def = '/videos/WhatsApp Video 2026-09-23 at 23.53.18.mp4';
     setHeroVideoUrl(def);
     await updateConfig({ hero_video_url: def });
     setActionMessage({
       type: 'success',
-      text: 'Video de fondo restaurado al video original de respaldo.',
+      text: 'Video de portada restablecido al video oficial cargado.',
     });
   };
 
@@ -226,7 +166,7 @@ export const SettingsView: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
           <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black border border-slate-800 relative shadow-2xl">
             <video
-              src={heroVideoUrl}
+              src={heroVideoUrl || '/videos/hero.mp4'}
               autoPlay
               muted
               loop
@@ -234,52 +174,71 @@ export const SettingsView: React.FC = () => {
               className="w-full h-full object-cover"
             />
             <div className="absolute bottom-2 left-2 bg-slate-950/80 backdrop-blur-md px-2.5 py-1 rounded-lg text-[10px] text-amber-400 font-mono">
-              Vista previa en vivo
+              Ruta activa: {heroVideoUrl || '/videos/hero.mp4'}
             </div>
           </div>
 
           <div className="space-y-4 text-xs">
             <div>
-              <label className="block text-slate-300 font-semibold mb-1">
-                URL del Video (MP4)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-slate-300 font-semibold">
+                  Ruta del Video Hero
+                </label>
+                <span className="text-[10px] text-amber-400 font-mono">
+                  public/videos/hero.mp4
+                </span>
+              </div>
               <input
-                type="url"
+                type="text"
                 value={heroVideoUrl}
                 onChange={(e) => setHeroVideoUrl(e.target.value)}
-                placeholder="https://..."
+                placeholder="/videos/hero.mp4"
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-[11px] focus:outline-none focus:border-amber-500"
               />
             </div>
 
             <div>
-              <span className="block text-slate-300 font-semibold mb-1">
-                Subir Video al bucket <code className="text-amber-400">site-assets</code>
-              </span>
-              <label className="w-full py-3 px-4 rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 flex items-center justify-center gap-2 cursor-pointer transition-all text-amber-400 font-semibold">
-                <Upload size={16} className={isUploadingVideo ? 'animate-bounce' : ''} />
-                <span>
-                  {isUploadingVideo ? 'Subiendo video a site-assets...' : 'Seleccionar video (.mp4, .webm - máx. 50 MB)'}
-                </span>
-                <input
-                  type="file"
-                  accept=".mp4,.webm,video/mp4,video/webm"
-                  onChange={handleVideoUpload}
-                  disabled={isUploadingVideo}
-                  className="hidden"
-                />
+              <label className="block text-slate-400 text-[11px] mb-1">
+                Seleccionar video existente del proyecto:
               </label>
+              <select
+                value={heroVideoUrl}
+                onChange={(e) => setHeroVideoUrl(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
+              >
+                <option value="/videos/hero.mp4">Video Principal (/videos/hero.mp4)</option>
+                {PROJECT_MEDIA_OPTIONS.videos.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Formatos: MP4, WEBM (máx. 50 MB). El video se reproduce a pantalla completa en la portada de la tienda.
-            </p>
+            <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 space-y-1.5">
+              <span className="text-amber-400 font-semibold block">
+                🎥 Video del proyecto (sin Supabase Storage):
+              </span>
+              <p>
+                El archivo principal debe colocarse en <code className="text-amber-300">public/videos/hero.mp4</code>. Si cambias de video, colócalo en <code className="text-amber-300">public/videos/</code> e introduce su ruta relativa arriba.
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleApplyHeroVideo}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 cursor-pointer transition-all"
+              >
+                Aplicar Video a la Tienda
+              </button>
+            </div>
 
             {/* Configurar Video de Fondo del Catálogo / Productos */}
             <div className="pt-4 border-t border-slate-800 space-y-2">
               <div className="flex items-center justify-between">
                 <label className="block text-slate-300 font-semibold">
-                  Video de Fondo de la Sección de Productos (Catálogo)
+                  Video Opcional para el Catálogo
                 </label>
                 {catalogVideoUrl && (
                   <button
@@ -294,29 +253,16 @@ export const SettingsView: React.FC = () => {
                   </button>
                 )}
               </div>
-              <div className="flex gap-2">
-                <input
-                  type="url"
-                  value={catalogVideoUrl}
-                  onChange={(e) => setCatalogVideoUrl(e.target.value)}
-                  onBlur={() => updateConfig({ catalog_video_url: catalogVideoUrl })}
-                  placeholder="https://... (video .mp4 de fondo para el catálogo)"
-                  className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-[11px] focus:outline-none focus:border-amber-500"
-                />
-                <label className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer flex items-center gap-1.5 border border-slate-700 text-xs">
-                  <Upload size={14} className={isUploadingCatalogVideo ? 'animate-bounce text-amber-400' : ''} />
-                  <span className="hidden sm:inline">Subir Video</span>
-                  <input
-                    type="file"
-                    accept="video/mp4,video/webm,video/*"
-                    onChange={handleCatalogVideoUpload}
-                    disabled={isUploadingCatalogVideo}
-                    className="hidden"
-                  />
-                </label>
-              </div>
+              <input
+                type="text"
+                value={catalogVideoUrl}
+                onChange={(e) => setCatalogVideoUrl(e.target.value)}
+                onBlur={() => updateConfig({ catalog_video_url: catalogVideoUrl })}
+                placeholder="/videos/hero.mp4"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-[11px] focus:outline-none focus:border-amber-500"
+              />
               <p className="text-[11px] text-slate-500">
-                Este video se reproducirá suavemente en bucle y con efecto de contraste detrás de tus gorras y productos.
+                Ruta relativa de video existente en el proyecto.
               </p>
             </div>
           </div>
@@ -351,31 +297,37 @@ export const SettingsView: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-slate-300 font-semibold mb-1">
-              Logotipo (bucket <code className="text-amber-400">site-assets</code>)
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="url"
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-slate-300 font-semibold">
+                Ruta del Logotipo
+              </label>
+              <span className="text-[10px] text-amber-400 font-mono">
+                public/images/logo/
+              </span>
+            </div>
+            <input
+              type="text"
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              placeholder="/images/logo/logo.png"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-[11px] focus:outline-none focus:border-amber-500"
+            />
+            <div className="mt-2 flex items-center gap-2">
+              <select
                 value={logoUrl}
                 onChange={(e) => setLogoUrl(e.target.value)}
-                placeholder="https://..."
-                className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-[11px] focus:outline-none focus:border-amber-500"
-              />
-              <label className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer flex items-center gap-1.5 border border-slate-700">
-                <Upload size={14} className={isUploadingLogo ? 'animate-bounce text-amber-400' : ''} />
-                <span className="hidden sm:inline">Subir</span>
-                <input
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.webp,.svg,image/jpeg,image/png,image/webp,image/svg+xml"
-                  onChange={handleLogoUpload}
-                  disabled={isUploadingLogo}
-                  className="hidden"
-                />
-              </label>
+                className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-xs focus:outline-none focus:border-amber-500 font-mono cursor-pointer"
+              >
+                <option value="/images/logo/logotipo.jpeg">Logotipo Oficial (/images/logo/logotipo.jpeg)</option>
+                {PROJECT_MEDIA_OPTIONS.logo.map((l) => (
+                  <option key={l.value} value={l.value}>
+                    {l.label}
+                  </option>
+                ))}
+              </select>
             </div>
-            <p className="text-[10px] text-slate-500 mt-1">
-              Formatos: JPG, PNG, WEBP, SVG (máx. 50 MB).
+            <p className="text-[10px] text-slate-400 mt-1">
+              Ubicado en <code className="text-amber-400">public/images/logo/logo.png</code>. Sin Supabase Storage.
             </p>
           </div>
         </div>

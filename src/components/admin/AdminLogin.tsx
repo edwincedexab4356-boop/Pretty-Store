@@ -85,18 +85,30 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
       </div>
 
       {/* Login Box */}
-      <div className="w-full max-w-md bg-slate-900/90 border border-amber-500/30 rounded-3xl p-8 sm:p-10 shadow-2xl backdrop-blur-xl relative z-10">
+      <div className="w-full max-w-md bg-[#0e0e12] border border-[#c5a059]/30 rounded-3xl p-8 sm:p-10 shadow-2xl backdrop-blur-xl relative z-10">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto mb-4 shadow-lg shadow-amber-500/10">
-            <Lock size={28} />
+          <div className="relative w-18 h-18 rounded-full p-[1.5px] bg-gradient-to-tr from-[#c5a059] via-[#f3e5ab] to-[#b5662c] shadow-[0_0_20px_rgba(197,160,89,0.35)] mx-auto mb-4">
+            <div className="w-full h-full rounded-full overflow-hidden bg-black flex items-center justify-center">
+              <img
+                src="/images/logo/logotipo.jpeg"
+                alt="Logo"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  if (!target.src.endsWith('/images/logo/logo.png')) {
+                    target.src = '/images/logo/logo.png';
+                  }
+                }}
+              />
+            </div>
           </div>
-          <span className="text-xs uppercase font-bold tracking-widest text-amber-400 block mb-1">
+          <span className="text-[10px] uppercase font-bold tracking-[0.25em] text-[#c5a059] block mb-1">
             Acceso Administrativo
           </span>
           <h1 className="text-2xl sm:text-3xl font-bold text-white font-serif-luxury">
             Panel de Control
           </h1>
-          <p className="text-xs text-slate-400 mt-2">
+          <p className="text-xs text-slate-400 mt-2 font-light">
             {mode === 'login'
               ? 'Ingresa tus credenciales de administrador para continuar'
               : 'Registra la cuenta administradora de tu tienda en Supabase'}

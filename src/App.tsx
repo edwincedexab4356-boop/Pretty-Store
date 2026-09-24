@@ -6,6 +6,7 @@ import { useAdminNavigation } from './hooks/useAdminRoute';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { Header } from './components/common/Header';
 import { Hero } from './components/hero/Hero';
+import { EditorialSection } from './components/editorial/EditorialSection';
 import { CategoryFilter } from './components/catalog/CategoryFilter';
 import { ProductGrid } from './components/catalog/ProductGrid';
 import { ProductGridSkeleton } from './components/catalog/ProductGridSkeleton';
@@ -60,7 +61,7 @@ function StoreApp({ onOpenAdmin }: StoreAppProps) {
       const castError = err as CatalogError;
       setCatalogError({
         failedQuery: castError.failedQuery || 'connection',
-        message: castError.message || 'Error inesperado al cargar el catálogo.',
+        message: castError.message || 'Error al cargar el catálogo.',
         details: castError.details,
         hint: castError.hint,
         code: castError.code,
@@ -74,7 +75,7 @@ function StoreApp({ onOpenAdmin }: StoreAppProps) {
   useEffect(() => {
     loadData();
 
-    // Supabase Realtime subscriptions: Listen to products and categories updates
+    // Supabase Realtime subscriptions
     try {
       const supabase = getSupabaseClient();
       const channel = supabase
@@ -141,14 +142,14 @@ function StoreApp({ onOpenAdmin }: StoreAppProps) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-amber-500 selection:text-slate-950 font-sans">
-      {/* Clean public Header */}
+    <div className="min-h-screen bg-[#09090b] text-stone-100 flex flex-col font-sans-clean antialiased selection:bg-[#c5a059] selection:text-black">
+      {/* 1. Header / Navbar */}
       <Header
         onNavigateSection={handleNavigateSection}
         onOpenAdmin={onOpenAdmin}
       />
 
-      {/* Hero with dynamic user video */}
+      {/* 2. Cinematic Hero with Auto-Playing Video */}
       <div id="hero">
         <Hero
           videoUrl={config.hero_video_url}
@@ -157,7 +158,17 @@ function StoreApp({ onOpenAdmin }: StoreAppProps) {
         />
       </div>
 
-      {/* Categories Filter Strip */}
+      {/* 3. Alternating Editorial Blocks (Big Images + Text) */}
+      <EditorialSection
+        onSelectCategory={(id) => {
+          setSelectedCategoryId(id);
+          const el = document.getElementById('catalogo');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }}
+        onExploreClick={handleExploreClick}
+      />
+
+      {/* 4. Minimalist Category Filter Strip */}
       {status !== 'unconfigured' && status !== 'error' && (
         <CategoryFilter
           categories={categories}
@@ -172,18 +183,20 @@ function StoreApp({ onOpenAdmin }: StoreAppProps) {
         />
       )}
 
-      {/* Main Catalog Section */}
+      {/* 5. Main Catalog Section */}
       <main className="flex-1">
         {status === 'loading' ? (
           <section id="catalogo" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <ProductGridSkeleton />
           </section>
         ) : status === 'error' ? (
-          <section className="max-w-xl mx-auto py-16 px-4 text-center">
-            <p className="text-slate-400 text-sm mb-4">No se pudo cargar el catálogo en este momento.</p>
+          <section className="max-w-md mx-auto py-20 px-4 text-center">
+            <p className="text-stone-400 text-xs mb-4 font-light">
+              No se pudo conectar con el catálogo en este momento.
+            </p>
             <button
               onClick={loadData}
-              className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer"
+              className="px-6 py-2.5 bg-white hover:bg-stone-200 text-stone-950 text-xs uppercase tracking-[0.16em] font-medium transition-colors cursor-pointer"
             >
               Reintentar
             </button>
@@ -197,24 +210,24 @@ function StoreApp({ onOpenAdmin }: StoreAppProps) {
           />
         )}
 
-        {/* Benefits & Value Proposition */}
+        {/* 6. Brand Commitment & Value Proposition */}
         <FeaturesSection />
       </main>
 
-      {/* Clean Footer */}
+      {/* 7. Clean Minimalist Luxury Footer */}
       <Footer
         categories={categories}
         onSelectCategory={setSelectedCategoryId}
         onOpenAdmin={onOpenAdmin}
       />
 
-      {/* Interactive Cart Slide-over Drawer */}
+      {/* 8. Slide-Over Cart Drawer */}
       <CartDrawer />
 
-      {/* Interactive Checkout Demo Modal */}
+      {/* 9. Interactive Checkout Modal */}
       <CheckoutDemoModal />
 
-      {/* Floating Add to Cart Toast Notification */}
+      {/* 10. Quiet Toast Notification */}
       <ToastNotification />
     </div>
   );

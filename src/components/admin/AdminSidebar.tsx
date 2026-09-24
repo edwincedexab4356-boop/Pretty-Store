@@ -66,22 +66,34 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
       {/* Sidebar container */}
       <aside
-        className={`fixed top-0 left-0 bottom-0 z-50 w-64 bg-slate-900 border-r border-slate-800 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-0 left-0 bottom-0 z-50 w-64 bg-[#0e0e12] border-r border-[#c5a059]/20 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           isOpenMobile ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Header / Brand */}
-        <div className="p-6 border-b border-slate-800/80 flex items-center justify-between">
+        <div className="p-6 border-b border-[#c5a059]/20 flex items-center justify-between bg-[#09090b]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-serif font-bold text-lg">
-              É
+            <div className="relative w-10 h-10 rounded-full p-[1px] bg-gradient-to-tr from-[#c5a059] via-[#f3e5ab] to-[#b5662c] shadow-[0_0_12px_rgba(197,160,89,0.3)] shrink-0">
+              <div className="w-full h-full rounded-full overflow-hidden bg-black flex items-center justify-center">
+                <img
+                  src={config.logo_url || '/images/logo/logotipo.jpeg'}
+                  alt={config.nombre_tienda || 'Logo'}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    if (!target.src.endsWith('/images/logo/logo.png')) {
+                      target.src = '/images/logo/logo.png';
+                    }
+                  }}
+                />
+              </div>
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white tracking-wide truncate max-w-[130px]">
-                {config.nombre_tienda || 'Élégance'}
+              <h2 className="text-sm font-bold text-white tracking-wide truncate max-w-[130px] font-serif-luxury">
+                {config.nombre_tienda || 'AURA'}
               </h2>
-              <span className="text-[10px] text-amber-400 font-semibold uppercase tracking-wider block">
-                Panel Admin
+              <span className="text-[9px] text-[#c5a059] font-semibold uppercase tracking-wider block">
+                Panel Administrativo
               </span>
             </div>
           </div>
@@ -107,11 +119,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 onClick={() => handleSelect(item.id)}
                 className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-amber-500 text-slate-950 font-bold shadow-lg shadow-amber-500/20'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                    ? 'bg-gold-gradient text-slate-950 font-bold shadow-lg shadow-[#c5a059]/20'
+                    : 'text-slate-300 hover:text-white hover:bg-white/5'
                 }`}
               >
-                <span className={isActive ? 'text-slate-950' : 'text-amber-400/80'}>
+                <span className={isActive ? 'text-slate-950' : 'text-[#c5a059]'}>
                   {item.icon}
                 </span>
                 <span>{item.label}</span>

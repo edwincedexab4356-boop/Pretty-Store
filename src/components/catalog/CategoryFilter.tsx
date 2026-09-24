@@ -1,5 +1,4 @@
 import React from 'react';
-import { Sparkles, Watch, Briefcase, Award, Shield, Layers } from 'lucide-react';
 import { Categoria } from '../../types/database';
 
 interface CategoryFilterProps {
@@ -17,63 +16,43 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
   productCountMap,
   totalProductsCount,
 }) => {
-  const getCategoryIcon = (cat: Categoria) => {
-    const n = `${cat.nombre} ${cat.id}`.toLowerCase();
-    if (n.includes('perfume') || n.includes('fragancia') || n.includes('aroma')) {
-      return <Sparkles size={18} />;
-    }
-    if (n.includes('reloj') || n.includes('watch') || n.includes('tiempo')) {
-      return <Watch size={18} />;
-    }
-    if (n.includes('cartera') || n.includes('bolso') || n.includes('billetera') || n.includes('maletin')) {
-      return <Briefcase size={18} />;
-    }
-    if (n.includes('gorra') || n.includes('sombrero') || n.includes('cap')) {
-      return <Award size={18} />;
-    }
-    if (n.includes('correa') || n.includes('cinturon') || n.includes('belt') || n.includes('faja')) {
-      return <Shield size={18} />;
-    }
-    return <Layers size={18} />;
-  };
-
   return (
-    <section id="categorias" className="py-12 bg-slate-950 border-t border-slate-900">
+    <section id="categorias" className="pt-20 pb-8 bg-[#09090b] text-stone-100 border-b border-white/[0.06]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-2xl mx-auto mb-8">
-          <h2 className="text-2xl sm:text-3xl font-bold text-white font-serif-luxury tracking-wide">
-            Colecciones & Categorías
+        {/* Minimal Editorial Header */}
+        <div className="text-center max-w-xl mx-auto mb-10">
+          <span className="text-[10px] sm:text-[11px] uppercase tracking-[0.35em] text-[#c5a059] font-medium block mb-2">
+            Selección Exclusiva
+          </span>
+          <h2 className="text-2xl sm:text-4xl font-serif-luxury font-light text-white tracking-tight">
+            Colecciones
           </h2>
-          <p className="mt-2 text-sm text-slate-400">
-            Navega por nuestras líneas exclusivas diseñadas con los más altos estándares de calidad.
+          <p className="mt-2 text-xs sm:text-sm text-stone-400 font-light">
+            Explora cada línea de producto según tu preferencia de estilo y ocasión.
           </p>
         </div>
 
-        {/* Categories horizontal bar / pills */}
-        <div className="flex items-center justify-start sm:justify-center gap-2.5 overflow-x-auto pb-4 no-scrollbar">
-          {/* "Todos" button */}
+        {/* Minimalist Tab Navigation Bar */}
+        <div className="flex items-center justify-start sm:justify-center gap-6 sm:gap-8 overflow-x-auto pb-4 no-scrollbar border-b border-white/[0.06]">
+          {/* 'Todos' Tab */}
           <button
             onClick={() => onSelectCategory('all')}
-            className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl text-sm font-semibold transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+            className={`pb-3 text-xs uppercase tracking-[0.2em] transition-all whitespace-nowrap cursor-pointer shrink-0 relative flex items-center gap-1.5 ${
               selectedCategoryId === 'all'
-                ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 scale-102 font-bold'
-                : 'bg-slate-900/90 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-800'
+                ? 'text-white font-medium'
+                : 'text-stone-400 hover:text-stone-200 font-normal'
             }`}
           >
-            <Layers size={18} />
-            <span>Todos</span>
-            <span
-              className={`text-xs px-2 py-0.5 rounded-full ${
-                selectedCategoryId === 'all'
-                  ? 'bg-slate-950/20 text-slate-950'
-                  : 'bg-slate-800 text-slate-400'
-              }`}
-            >
-              {totalProductsCount}
+            <span>Todas</span>
+            <span className="text-[10px] text-stone-500 font-mono tabular-nums">
+              ({totalProductsCount})
             </span>
+            {selectedCategoryId === 'all' && (
+              <span className="absolute bottom-0 inset-x-0 h-[1.5px] bg-[#c5a059]" />
+            )}
           </button>
 
-          {/* Dynamic categories from database schema */}
+          {/* Dynamic Categories */}
           {categories.map((cat) => {
             const isSelected = selectedCategoryId === cat.id;
             const count = productCountMap[cat.id] || 0;
@@ -82,23 +61,19 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
               <button
                 key={cat.id}
                 onClick={() => onSelectCategory(cat.id)}
-                className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl text-sm font-medium transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                className={`pb-3 text-xs uppercase tracking-[0.2em] transition-all whitespace-nowrap cursor-pointer shrink-0 relative flex items-center gap-1.5 ${
                   isSelected
-                    ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 scale-102 font-bold'
-                    : 'bg-slate-900/90 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-800'
+                    ? 'text-white font-medium'
+                    : 'text-stone-400 hover:text-stone-200 font-normal'
                 }`}
               >
-                {getCategoryIcon(cat)}
                 <span>{cat.nombre}</span>
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full ${
-                    isSelected
-                      ? 'bg-slate-950/20 text-slate-950 font-bold'
-                      : 'bg-slate-800 text-slate-400'
-                  }`}
-                >
-                  {count}
+                <span className="text-[10px] text-stone-500 font-mono tabular-nums">
+                  ({count})
                 </span>
+                {isSelected && (
+                  <span className="absolute bottom-0 inset-x-0 h-[1.5px] bg-[#c5a059]" />
+                )}
               </button>
             );
           })}

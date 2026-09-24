@@ -138,12 +138,12 @@ CREATE TABLE IF NOT EXISTS public.configuracion (
   id integer PRIMARY KEY DEFAULT 1,
   nombre_tienda text NOT NULL DEFAULT 'Luxury Store',
   descripcion text DEFAULT 'Exclusividad y elegancia en cada detalle',
-  logo_url text DEFAULT '',
-  hero_video_url text DEFAULT 'https://assets.mixkit.co/videos/preview/mixkit-set-of-plateaus-seen-from-above-41551-large.mp4',
-  telefono text DEFAULT '+1 (555) 019-2834',
-  whatsapp text DEFAULT '+1 (555) 019-2834',
-  email text DEFAULT 'contacto@luxurystore.com',
-  direccion text DEFAULT 'Av. Las Palmas 1200, Suite 400',
+  logo_url text DEFAULT '/images/logo/logotipo.jpeg',
+  hero_video_url text DEFAULT '/videos/WhatsApp Video 2026-09-23 at 23.53.18.mp4',
+  telefono text DEFAULT '+507 6890-1234',
+  whatsapp text DEFAULT '+507 6890-1234',
+  email text DEFAULT 'contacto@aura.com',
+  direccion text DEFAULT 'Boulevard Costa del Este, Torre Financial Park, Nivel 14',
   instagram text DEFAULT 'https://instagram.com',
   facebook text DEFAULT 'https://facebook.com',
   twitter text DEFAULT 'https://twitter.com',
@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS public.configuracion (
 
 -- Asegurar registro inicial de configuración
 INSERT INTO public.configuracion (id, nombre_tienda) 
-VALUES (1, 'Luxury Store')
+VALUES (1, 'AURA')
 ON CONFLICT (id) DO NOTHING;
 
 GRANT ALL ON TABLE public.configuracion TO postgres, anon, authenticated, service_role;
@@ -164,53 +164,6 @@ CREATE POLICY "Configuracion Public Select" ON public.configuracion
 DROP POLICY IF EXISTS "Configuracion Admin All" ON public.configuracion;
 CREATE POLICY "Configuracion Admin All" ON public.configuracion 
   FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
--- 11. POLÍTICAS DE SUPABASE STORAGE (product-images y site-assets)
--- Visitantes públicos pueden LEER los archivos de la tienda (SELECT)
--- Solo administradores autenticados (auth.role() = 'authenticated') pueden SUBIR, ACTUALIZAR y ELIMINAR
--- NO se utiliza GRANT ALL TO anon en Storage.
-
-DROP POLICY IF EXISTS "Public Read Product Images" ON storage.objects;
-CREATE POLICY "Public Read Product Images" ON storage.objects
-  FOR SELECT TO public
-  USING (bucket_id = 'product-images');
-
-DROP POLICY IF EXISTS "Admin Upload Product Images" ON storage.objects;
-CREATE POLICY "Admin Upload Product Images" ON storage.objects
-  FOR INSERT TO authenticated
-  WITH CHECK (bucket_id = 'product-images');
-
-DROP POLICY IF EXISTS "Admin Update Product Images" ON storage.objects;
-CREATE POLICY "Admin Update Product Images" ON storage.objects
-  FOR UPDATE TO authenticated
-  USING (bucket_id = 'product-images')
-  WITH CHECK (bucket_id = 'product-images');
-
-DROP POLICY IF EXISTS "Admin Delete Product Images" ON storage.objects;
-CREATE POLICY "Admin Delete Product Images" ON storage.objects
-  FOR DELETE TO authenticated
-  USING (bucket_id = 'product-images');
-
-DROP POLICY IF EXISTS "Public Read Site Assets" ON storage.objects;
-CREATE POLICY "Public Read Site Assets" ON storage.objects
-  FOR SELECT TO public
-  USING (bucket_id = 'site-assets');
-
-DROP POLICY IF EXISTS "Admin Upload Site Assets" ON storage.objects;
-CREATE POLICY "Admin Upload Site Assets" ON storage.objects
-  FOR INSERT TO authenticated
-  WITH CHECK (bucket_id = 'site-assets');
-
-DROP POLICY IF EXISTS "Admin Update Site Assets" ON storage.objects;
-CREATE POLICY "Admin Update Site Assets" ON storage.objects
-  FOR UPDATE TO authenticated
-  USING (bucket_id = 'site-assets')
-  WITH CHECK (bucket_id = 'site-assets');
-
-DROP POLICY IF EXISTS "Admin Delete Site Assets" ON storage.objects;
-CREATE POLICY "Admin Delete Site Assets" ON storage.objects
-  FOR DELETE TO authenticated
-  USING (bucket_id = 'site-assets');
 `;
 
 export function isPermissionError(errMessage?: string | null): boolean {

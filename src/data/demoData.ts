@@ -5,30 +5,35 @@ export const DEMO_CATEGORIAS: Categoria[] = [
     id: 'cat-perfumes',
     nombre: 'Perfumes',
     descripcion: 'Fragancias exclusivas de alta concentración y notas aromáticas refinadas.',
+    imagen_url: '/images/categories/perfumes.jpg',
     activa: true,
   },
   {
     id: 'cat-relojes',
     nombre: 'Relojes',
     descripcion: 'Piezas de relojería de precisión con acabados en acero y cristal de zafiro.',
+    imagen_url: '/images/categories/relojes.jpg',
     activa: true,
   },
   {
     id: 'cat-carteras',
     nombre: 'Carteras',
     descripcion: 'Bolsos y billeteras confeccionados en cuero genuino y herrajes pulidos.',
+    imagen_url: '/images/categories/carteras.jpg',
     activa: true,
   },
   {
     id: 'cat-gorras',
     nombre: 'Gorras',
     descripcion: 'Diseños urbanos y deportivos con materiales premium y calce ergonómico.',
+    imagen_url: '/images/categories/gorras.jpg',
     activa: true,
   },
   {
     id: 'cat-correas',
     nombre: 'Correas',
     descripcion: 'Cinturones y correas elegantes de piel curtida con hebillas de diseño.',
+    imagen_url: '/images/categories/correas.jpg',
     activa: true,
   },
 ];
@@ -42,7 +47,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 135.0,
     costo: 65.0,
     stock: 9,
-    imagen_url: 'https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?auto=format&fit=crop&w=800&q=80',
+    imagen_url: '/images/products/perfume-1.jpg',
     activo: true,
   },
   {
@@ -53,7 +58,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 285.0,
     costo: 140.0,
     stock: 5,
-    imagen_url: 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=800&q=80',
+    imagen_url: '/images/products/reloj-1.jpg',
     activo: true,
   },
   {
@@ -64,7 +69,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 195.0,
     costo: 85.0,
     stock: 4,
-    imagen_url: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=800&q=80',
+    imagen_url: '/images/products/cartera-1.png',
     activo: true,
   },
   {
@@ -75,7 +80,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 48.0,
     costo: 18.0,
     stock: 14,
-    imagen_url: 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&w=800&q=80',
+    imagen_url: '/images/products/gorra-1.webp',
     activo: true,
   },
   {
@@ -86,7 +91,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 65.0,
     costo: 26.0,
     stock: 7,
-    imagen_url: 'https://images.unsplash.com/photo-1624222247344-550fb60583dc?auto=format&fit=crop&w=800&q=80',
+    imagen_url: '/images/products/correa-1.jpg',
     activo: true,
   },
   {
@@ -97,7 +102,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 110.0,
     costo: 50.0,
     stock: 2, // Pocas unidades
-    imagen_url: 'https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&w=800&q=80',
+    imagen_url: '/images/products/perfume-2.jpg',
     activo: true,
   },
   {
@@ -108,7 +113,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 180.0,
     costo: 80.0,
     stock: 0, // Agotado para probar validaciones
-    imagen_url: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=800&q=80',
+    imagen_url: '/images/products/reloj-2.jpg',
     activo: true,
   },
   {
@@ -119,7 +124,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 55.0,
     costo: 22.0,
     stock: 18,
-    imagen_url: 'https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=800&q=80',
+    imagen_url: '/images/products/cartera-2.jpg',
     activo: true,
   },
   {
@@ -130,7 +135,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 42.0,
     costo: 16.0,
     stock: 8,
-    imagen_url: 'https://images.unsplash.com/photo-1576871337632-b9aef4c17ab9?auto=format&fit=crop&w=800&q=80',
+    imagen_url: '/images/products/gorra-2.jpg',
     activo: true,
   },
   {
@@ -141,7 +146,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 72.0,
     costo: 30.0,
     stock: 6,
-    imagen_url: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=80',
+    imagen_url: '/images/products/correa-2.jpg',
     activo: true,
   },
   {
@@ -152,7 +157,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 145.0,
     costo: 70.0,
     stock: 11,
-    imagen_url: 'https://images.unsplash.com/photo-1587017539504-67cfbddac569?auto=format&fit=crop&w=800&q=80',
+    imagen_url: '/images/products/perfume-1.jpg',
     activo: true,
   },
   {

@@ -13,7 +13,16 @@ interface StoreConfigContextType {
 const StoreConfigContext = createContext<StoreConfigContextType | undefined>(undefined);
 
 export const StoreConfigProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [config, setConfig] = useState<StoreConfig>(() => getLocalStoreConfig());
+  const [config, setConfig] = useState<StoreConfig>(() => {
+    const local = getLocalStoreConfig();
+    if (!local.nombre_tienda || local.nombre_tienda === 'AURA') {
+      local.nombre_tienda = 'Pretty-Store';
+    }
+    if (!local.hero_video_url || local.hero_video_url.includes('mixkit')) {
+      local.hero_video_url = '/videos/hero.mp4';
+    }
+    return local;
+  });
   const [isLoading, setIsLoading] = useState(false);
 
   // Sync with Supabase on mount
@@ -32,6 +41,16 @@ export const StoreConfigProvider: React.FC<{ children: React.ReactNode }> = ({ c
             ...DEFAULT_STORE_CONFIG,
             ...data,
           };
+          if (!merged.hero_video_url || merged.hero_video_url.includes('mixkit')) {
+            merged.hero_video_url = '/videos/hero.mp4';
+          }
+          if (!merged.logo_url || merged.logo_url === '/images/logo/logo.png') {
+            merged.logo_url = '/images/logo/logotipo.jpeg';
+          }
+          if (!merged.nombre_tienda || merged.nombre_tienda === 'AURA') {
+            merged.nombre_tienda = 'Pretty-Store';
+          }
+          merged.hero_poster_url = '';
           setConfig(merged);
           saveLocalStoreConfig(merged);
         }

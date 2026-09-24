@@ -4,26 +4,50 @@
   html {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     scroll-behavior: smooth;
+    background-color: #09090b;
+    color: #f4f4f6;
   }
 }
 
 .font-serif-luxury {
-  font-family: 'Cinzel', serif;
+  font-family: 'Cormorant Garamond', 'Cinzel', Georgia, serif;
+  letter-spacing: 0.02em;
 }
 
-/* Custom subtle scrollbar */
+.font-sans-clean {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+/* Subtle luxury gold accents inspired by haute horlogerie */
+.text-gold-accent {
+  color: #c5a059;
+}
+
+.text-gold-muted {
+  color: #a88a4d;
+}
+
+.border-gold-subtle {
+  border-color: rgba(197, 160, 89, 0.18);
+}
+
+.border-hairline {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Custom luxury scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: #09090b;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 4px;
+  background: #27272a;
+  border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #c5a059;
 }
 

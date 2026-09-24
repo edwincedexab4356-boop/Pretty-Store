@@ -2,32 +2,32 @@ import React from 'react';
 
 export const ProductGridSkeleton: React.FC = () => {
   return (
-    <div className="py-12">
-      <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-800 animate-pulse">
-        <div className="h-8 w-48 bg-slate-800/80 rounded-xl" />
-        <div className="h-10 w-64 bg-slate-800/80 rounded-xl" />
+    <div className="py-20 sm:py-28">
+      <div className="flex items-center justify-between mb-12 pb-6 border-b border-white/[0.08] animate-pulse">
+        <div className="h-6 w-48 bg-stone-900" />
+        <div className="h-8 w-60 bg-stone-900" />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8">
         {Array.from({ length: 8 }).map((_, index) => (
           <div
             key={index}
-            className="flex flex-col bg-slate-900/50 rounded-2xl border border-slate-800/80 overflow-hidden animate-pulse"
+            className="flex flex-col bg-[#0e0e11] border border-white/[0.07] overflow-hidden animate-pulse"
           >
             {/* Image Placeholder */}
-            <div className="aspect-square w-full bg-slate-800/60" />
+            <div className="aspect-[4/5] w-full bg-stone-900" />
 
             {/* Content Placeholders */}
-            <div className="p-4 flex-1 flex flex-col justify-between space-y-4">
-              <div className="space-y-2">
-                <div className="h-3 w-20 bg-slate-800 rounded" />
-                <div className="h-4 w-3/4 bg-slate-800 rounded" />
-                <div className="h-3 w-full bg-slate-800/60 rounded" />
+            <div className="p-5 sm:p-6 flex-1 flex flex-col justify-between space-y-4">
+              <div className="space-y-2.5">
+                <div className="h-2.5 w-16 bg-stone-900" />
+                <div className="h-4 w-3/4 bg-stone-900" />
+                <div className="h-3 w-full bg-stone-900/60" />
               </div>
 
-              <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between">
-                <div className="h-5 w-16 bg-slate-800 rounded" />
-                <div className="h-8 w-24 bg-slate-800 rounded-xl" />
+              <div className="pt-3 border-t border-white/[0.07] flex items-center justify-between">
+                <div className="h-5 w-14 bg-stone-900" />
+                <div className="h-7 w-20 bg-stone-900" />
               </div>
             </div>
           </div>

@@ -15,14 +15,14 @@ export const Hero: React.FC<HeroProps> = ({
   onCategoriesClick,
 }) => {
   return (
-    <section className="relative w-full overflow-hidden bg-slate-950 flex flex-col justify-center">
+    <section className="relative w-full min-h-[85vh] sm:min-h-[90vh] overflow-hidden bg-black flex flex-col justify-center">
       {/* Background Video */}
       <BackgroundVideo videoUrl={videoUrl} />
 
-      {/* Video Overlay */}
+      {/* Subtle Video Overlay */}
       <VideoOverlay />
 
-      {/* Hero Content */}
+      {/* Cinematic Minimal Hero Content */}
       <HeroContent
         onExploreClick={onExploreClick}
         onCategoriesClick={onCategoriesClick}

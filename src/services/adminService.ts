@@ -14,15 +14,15 @@ import {
 
 // Default configuration fallback
 export const DEFAULT_STORE_CONFIG: StoreConfig = {
-  nombre_tienda: 'AURA',
-  descripcion: 'Exclusiva selección de moda y accesorios premium.',
-  logo_url: '',
-  hero_video_url: 'https://assets.mixkit.co/videos/preview/mixkit-hands-of-a-man-adjusting-a-luxury-wristwatch-42999-large.mp4',
+  nombre_tienda: 'Pretty-Store',
+  descripcion: 'Boutique exclusiva de alta relojería, perfumería selecta y accesorios de distinción.',
+  logo_url: '/images/logo/logotipo.jpeg',
+  hero_video_url: '/videos/hero.mp4',
   hero_poster_url: '',
-  catalog_video_url: 'https://assets.mixkit.co/videos/preview/mixkit-fashion-model-in-black-dress-41618-large.mp4',
+  catalog_video_url: '',
   telefono: '+507 6890-1234',
   whatsapp: '+507 6890-1234',
-  email: 'contacto@aura.com',
+  email: 'contacto@pretty-store.com',
   direccion: 'Boulevard Costa del Este, Torre Financial Park, Nivel 14',
   instagram: 'https://instagram.com',
   facebook: 'https://facebook.com',
@@ -885,8 +885,14 @@ export function getLocalStoreConfig(): StoreConfig {
     if (raw) {
       const parsed = JSON.parse(raw);
       // Ensure the watch photo is permanently eliminated
-      if (parsed.hero_poster_url && parsed.hero_poster_url.includes('1524805444758-089113d48a6d')) {
+      if (parsed.hero_poster_url) {
         parsed.hero_poster_url = '';
+      }
+      if (!parsed.hero_video_url || parsed.hero_video_url.includes('mixkit')) {
+        parsed.hero_video_url = '/videos/WhatsApp Video 2026-09-23 at 23.53.18.mp4';
+      }
+      if (!parsed.logo_url || parsed.logo_url === '/images/logo/logo.png') {
+        parsed.logo_url = '/images/logo/logotipo.jpeg';
       }
       return { ...DEFAULT_STORE_CONFIG, ...parsed, hero_poster_url: '' };
     }
@@ -900,85 +906,42 @@ export function saveLocalStoreConfig(config: StoreConfig) {
   } catch (e) {}
 }
 
-export async function uploadMediaFile(
-  bucketName: 'product-images' | 'site-assets',
-  file: File
-): Promise<string> {
-  // 1. Validaciones estrictas por bucket
-  if (bucketName === 'product-images') {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    const maxSizeBytes = 5 * 1024 * 1024; // 5 MB
-
-    if (!allowedTypes.includes(file.type.toLowerCase())) {
-      throw new Error(
-        `Formato no válido para imagen de producto. Solo se admiten JPG, PNG y WEBP (recibido: ${file.type || file.name}).`
-      );
-    }
-
-    if (file.size > maxSizeBytes) {
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-      throw new Error(
-        `La imagen supera el límite de 5 MB (tamaño actual: ${sizeMB} MB). Por favor comprime o elige otra imagen.`
-      );
-    }
-  } else if (bucketName === 'site-assets') {
-    const allowedTypes = [
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-      'image/svg+xml',
-      'video/mp4',
-      'video/webm',
-    ];
-    const maxSizeBytes = 50 * 1024 * 1024; // 50 MB
-
-    const isSvg = file.name.toLowerCase().endsWith('.svg');
-    const isAllowed = allowedTypes.includes(file.type.toLowerCase()) || isSvg;
-
-    if (!isAllowed) {
-      throw new Error(
-        `Formato no válido para site-assets. Formatos permitidos: JPG, PNG, WEBP, SVG, MP4, WEBM (recibido: ${file.type || file.name}).`
-      );
-    }
-
-    if (file.size > maxSizeBytes) {
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-      throw new Error(
-        `El archivo supera el límite permitido de 50 MB (tamaño actual: ${sizeMB} MB).`
-      );
-    }
-  }
-
-  const supabase = getSupabaseClient();
-  const fileExt = file.name.split('.').pop()?.toLowerCase() || 'bin';
-  const cleanBaseName = file.name
-    .replace(/\.[^/.]+$/, '')
-    .replace(/[^a-zA-Z0-9_-]/g, '_')
-    .slice(0, 30);
-  const fileName = `${Date.now()}_${cleanBaseName}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
-  const filePath = `${fileName}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from(bucketName)
-    .upload(filePath, file, {
-      cacheControl: '3600',
-      upsert: true,
-      contentType: file.type || undefined,
-    });
-
-  if (uploadError) {
-    throw new Error(
-      `Error al subir a Supabase Storage (bucket '${bucketName}'): ${uploadError.message}. Verifica que el usuario administrador tenga sesión iniciada o que las políticas de Storage permitan escritura a 'authenticated'.`
-    );
-  }
-
-  const { data: publicUrlData } = supabase.storage
-    .from(bucketName)
-    .getPublicUrl(filePath);
-
-  if (!publicUrlData || !publicUrlData.publicUrl) {
-    throw new Error('No se pudo obtener la URL pública del archivo en Supabase Storage.');
-  }
-
-  return publicUrlData.publicUrl;
+export interface ProjectMediaOption {
+  label: string;
+  value: string;
 }
+
+export const PROJECT_MEDIA_OPTIONS = {
+  products: [
+    { label: 'Perfume 1 (/images/products/perfume-1.jpg)', value: '/images/products/perfume-1.jpg' },
+    { label: 'Perfume 2 (/images/products/perfume-2.jpg)', value: '/images/products/perfume-2.jpg' },
+    { label: 'Perfume 3 (/images/products/perfume-3.jpg)', value: '/images/products/perfume-3.jpg' },
+    { label: 'Gorra 1 (/images/products/gorra-1.webp)', value: '/images/products/gorra-1.webp' },
+    { label: 'Gorra 2 (/images/products/gorra-2.jpg)', value: '/images/products/gorra-2.jpg' },
+    { label: 'Cartera 1 (/images/products/cartera-1.png)', value: '/images/products/cartera-1.png' },
+    { label: 'Cartera 2 (/images/products/cartera-2.jpg)', value: '/images/products/cartera-2.jpg' },
+    { label: 'Reloj 1 (/images/products/reloj-1.jpg)', value: '/images/products/reloj-1.jpg' },
+    { label: 'Reloj 2 (/images/products/reloj-2.jpg)', value: '/images/products/reloj-2.jpg' },
+    { label: 'Correa 1 (/images/products/correa-1.jpg)', value: '/images/products/correa-1.jpg' },
+    { label: 'Correa 2 (/images/products/correa-2.jpg)', value: '/images/products/correa-2.jpg' },
+  ],
+  categories: [
+    { label: 'Perfumes (/images/categories/perfumes.jpg)', value: '/images/categories/perfumes.jpg' },
+    { label: 'Gorras (/images/categories/gorras.jpg)', value: '/images/categories/gorras.jpg' },
+    { label: 'Relojes (/images/categories/relojes.jpg)', value: '/images/categories/relojes.jpg' },
+    { label: 'Carteras (/images/categories/carteras.jpg)', value: '/images/categories/carteras.jpg' },
+    { label: 'Correas (/images/categories/correas.jpg)', value: '/images/categories/correas.jpg' },
+  ],
+  logo: [
+    { label: 'Logotipo Oficial Aura (/images/logo/logotipo.jpeg)', value: '/images/logo/logotipo.jpeg' },
+    { label: 'Logo PNG Aura (/images/logo/logo.png)', value: '/images/logo/logo.png' },
+  ],
+  banners: [
+    { label: 'Banner 1 (/images/banners/banner-1.jpg)', value: '/images/banners/banner-1.jpg' },
+    { label: 'Banner 2 (/images/banners/banner-2.jpg)', value: '/images/banners/banner-2.jpg' },
+  ],
+  videos: [
+    { label: 'Video Hero Oficial (/videos/WhatsApp Video 2026-09-23 at 23.53.18.mp4)', value: '/videos/WhatsApp Video 2026-09-23 at 23.53.18.mp4' },
+    { label: 'Video Hero Alias (/videos/hero.mp4)', value: '/videos/hero.mp4' },
+  ],
+};
