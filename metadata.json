@@ -1,0 +1,6 @@
+{
+  "name": "AURA | Tienda Exclusiva & E-Commerce",
+  "description": "Tienda online profesional de moda y accesorios de lujo con catálogo interactivo, carrito dinámico en tiempo real y arquitectura preparada para Supabase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
