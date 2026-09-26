@@ -134,28 +134,31 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenSqlFix }) =>
       ) : null}
 
       {/* Header and Summary Cards */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-white font-serif-luxury">
-            Inventario & Existencias
+          <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block mb-1">
+            Control de Stock
+          </span>
+          <h2 className="text-xl sm:text-2xl font-serif-luxury font-semibold text-white tracking-wide">
+            Existencias & Inventario
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Cuando el stock llega a 0, la tienda desactiva automáticamente "Agregar al carrito" y muestra "AGOTADO".
+          <p className="text-xs text-stone-400 mt-1 font-light">
+            Monitoreo en vivo de inventario crítico. Al alcanzar stock 0, el carrito desactiva automáticamente la venta.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="px-4 py-2.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
-            <span className="font-bold text-base block font-mono">{outOfStockCount}</span>
-            <span>Agotados (0)</span>
+          <div className="px-4 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
+            <span className="font-semibold text-base block font-mono">{outOfStockCount}</span>
+            <span className="text-[10px] text-rose-400 uppercase">Agotados</span>
           </div>
-          <div className="px-4 py-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
-            <span className="font-bold text-base block font-mono">{lowStockCount}</span>
-            <span>Stock Bajo</span>
+          <div className="px-4 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">
+            <span className="font-semibold text-base block font-mono">{lowStockCount}</span>
+            <span className="text-[10px] text-amber-400 uppercase">Stock Bajo</span>
           </div>
-          <div className="px-4 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-300 text-xs">
-            <span className="font-bold text-base block font-mono text-white">{items.length}</span>
-            <span>Total Artículos</span>
+          <div className="px-4 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-stone-300 text-xs">
+            <span className="font-semibold text-base block text-white font-mono">{items.length}</span>
+            <span className="text-[10px] text-stone-400 uppercase">Total Items</span>
           </div>
         </div>
       </div>
@@ -163,13 +166,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenSqlFix }) =>
       {/* Filter and Search Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="relative sm:col-span-2">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
           <input
             type="text"
             placeholder="Buscar por producto o categoría..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-[#c5a059] transition-colors"
           />
         </div>
 
@@ -177,32 +180,32 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenSqlFix }) =>
           <select
             value={filterState}
             onChange={(e) => setFilterState(e.target.value as any)}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-[#0e0e12] border border-white/10 text-xs text-stone-200 focus:outline-none focus:border-[#c5a059] cursor-pointer transition-colors"
           >
-            <option value="all">Todas las existencias</option>
-            <option value="out_of_stock">🔴 Solo Agotados (Stock 0)</option>
-            <option value="low_stock">🟡 Solo Stock Bajo (≤ Mínimo)</option>
-            <option value="in_stock">🟢 Solo Disponibles (&gt; Mínimo)</option>
+            <option value="all">Todas las Existencias</option>
+            <option value="out_of_stock">Solo Agotados (Stock 0)</option>
+            <option value="low_stock">Solo Stock Bajo (≤ Mínimo)</option>
+            <option value="in_stock">Solo Disponibles (&gt; Mínimo)</option>
           </select>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl shadow-xl overflow-hidden">
+      <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl shadow-xl overflow-hidden">
         {isLoading ? (
-          <div className="p-12 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-            <RefreshCw size={16} className="animate-spin text-amber-400" />
-            <span>Cargando inventario de Supabase...</span>
+          <div className="p-12 text-center text-xs text-[#c5a059] flex items-center justify-center gap-2">
+            <RefreshCw size={16} className="animate-spin text-[#c5a059]" />
+            <span>Sincronizando inventario con Supabase...</span>
           </div>
         ) : filteredItems.length === 0 ? (
-          <div className="p-12 text-center text-xs text-slate-400 space-y-2">
-            <Boxes size={36} className="mx-auto text-slate-600 mb-2" />
-            <p className="font-semibold text-white">No hay productos en esta vista de inventario.</p>
+          <div className="p-12 text-center text-xs text-stone-400 space-y-2">
+            <Boxes size={36} className="mx-auto text-stone-600 mb-2" />
+            <p className="font-semibold text-white text-sm">No hay productos con este criterio</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-bold border-b border-slate-800">
+              <thead className="bg-white/[0.02] text-stone-400 uppercase text-[10px] font-medium border-b border-white/[0.06]">
                 <tr>
                   <th className="py-3.5 px-4">Producto</th>
                   <th className="py-3.5 px-4">Categoría</th>

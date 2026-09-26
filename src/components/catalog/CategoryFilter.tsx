@@ -18,7 +18,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
 }) => {
   return (
     <section id="categorias" className="pt-20 pb-8 bg-[#09090b] text-stone-100 border-b border-white/[0.06]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12">
         {/* Minimal Editorial Header */}
         <div className="text-center max-w-xl mx-auto mb-10">
           <span className="text-[10px] sm:text-[11px] uppercase tracking-[0.35em] text-[#c5a059] font-medium block mb-2">

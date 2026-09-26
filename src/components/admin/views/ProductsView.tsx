@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Package,
   Plus,
@@ -17,6 +17,12 @@ import {
   Boxes,
   Eye,
   EyeOff,
+  Image as ImageIcon,
+  Star,
+  FileSpreadsheet,
+  HelpCircle,
+  Video,
+  Play,
 } from 'lucide-react';
 import {
   getAdminProducts,
@@ -26,9 +32,11 @@ import {
   toggleProductActive,
   updateProductStock,
   getAdminCategories,
+  uploadProductImageToSupabase,
   PROJECT_MEDIA_OPTIONS,
 } from '../../../services/adminService';
 import { Producto, Categoria } from '../../../types/database';
+import { getProductImages, isVideoMedia } from '../../../utils/productImages';
 import { isPermissionError } from '../../../utils/supabaseSqlFix';
 import { PermissionErrorBanner } from '../PermissionErrorBanner';
 
@@ -52,6 +60,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
   const [isDeleting, setIsDeleting] = useState<Producto | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showBulkGuide, setShowBulkGuide] = useState(false);
 
   // Form fields
   const [formName, setFormName] = useState('');
@@ -61,7 +70,13 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
   const [formStock, setFormStock] = useState<number | string>(10);
   const [formCategory, setFormCategory] = useState('');
   const [formImageUrl, setFormImageUrl] = useState('');
+  const [formImages, setFormImages] = useState<string[]>([]);
   const [formActive, setFormActive] = useState(true);
+
+  // File upload state
+  const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+  const [uploadProgressText, setUploadProgressText] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Inline stock editing
   const [editingStockId, setEditingStockId] = useState<string | null>(null);
@@ -96,6 +111,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
     setFormStock(10);
     setFormCategory(categories[0]?.id || '');
     setFormImageUrl('');
+    setFormImages([]);
     setFormActive(true);
     setIsModalOpen(true);
     setActionMessage(null);
@@ -109,10 +125,99 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
     setFormCost(prod.costo || 0);
     setFormStock(prod.stock);
     setFormCategory(prod.categoria_id);
-    setFormImageUrl(prod.imagen_url || '');
+    const parsedImages = getProductImages(prod);
+    setFormImages(parsedImages);
+    setFormImageUrl(parsedImages[0] || prod.imagen_url || '');
     setFormActive(prod.activo);
     setIsModalOpen(true);
     setActionMessage(null);
+  };
+
+  const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const rawFiles = Array.from(files);
+    const validFiles: File[] = [];
+    const oversizedVideos: File[] = [];
+
+    for (const f of rawFiles) {
+      const isVid = f.type.startsWith('video/') || f.name.match(/\.(mp4|webm|mov|m4v|mkv|avi)$/i);
+      if (isVid && f.size > 10 * 1024 * 1024) {
+        oversizedVideos.push(f);
+      } else {
+        validFiles.push(f);
+      }
+    }
+
+    if (oversizedVideos.length > 0) {
+      const names = oversizedVideos
+        .map((f) => `"${f.name}" (${(f.size / (1024 * 1024)).toFixed(1)}MB)`)
+        .join(', ');
+      setActionMessage({
+        type: 'error',
+        text: `No se permite agregar videos mayores de 10MB: ${names}. Para mantener la tienda rápida y evitar lentitud al guardar, solo se aceptan videos de hasta 10MB.`,
+      });
+
+      if (validFiles.length === 0) {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+    }
+
+    setIsUploadingFiles(true);
+    setUploadProgressText(`Preparando ${validFiles.length} archivo(s)...`);
+
+    const newUrls: string[] = [];
+    try {
+      for (let i = 0; i < validFiles.length; i++) {
+        const file = validFiles[i];
+        const url = await uploadProductImageToSupabase(file, (status) => {
+          setUploadProgressText(`(${i + 1}/${validFiles.length}): ${status}`);
+        });
+        newUrls.push(url);
+      }
+
+      setFormImages((prev) => [...prev, ...newUrls]);
+      if (!formImageUrl && newUrls.length > 0) {
+        setFormImageUrl(newUrls[0]);
+      }
+
+      setActionMessage({
+        type: 'success',
+        text: `¡${newUrls.length} archivo(s) guardados exitosamente en Supabase Storage!`,
+      });
+    } catch (err: any) {
+      setActionMessage({
+        type: 'error',
+        text: `Error al procesar archivos: ${err?.message || 'Verifica los permisos en Supabase'}`,
+      });
+    } finally {
+      setIsUploadingFiles(false);
+      setUploadProgressText('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSetPrimaryImage = (index: number) => {
+    setFormImages((prev) => {
+      const copy = [...prev];
+      const [item] = copy.splice(index, 1);
+      copy.unshift(item);
+      return copy;
+    });
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setFormImages((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleAddManualImageUrl = () => {
+    if (!formImageUrl.trim()) return;
+    if (!formImages.includes(formImageUrl.trim())) {
+      setFormImages((prev) => [...prev, formImageUrl.trim()]);
+    }
+    setFormImageUrl('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -122,36 +227,73 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
       return;
     }
 
+    const finalImages = [...formImages];
+    if (formImageUrl.trim() && !finalImages.includes(formImageUrl.trim())) {
+      finalImages.push(formImageUrl.trim());
+    }
+
     setIsSubmitting(true);
     try {
       if (editingProduct) {
-        await updateAdminProduct(editingProduct.id, {
+        const updated = await updateAdminProduct(editingProduct.id, {
           nombre: formName,
           descripcion: formDescription,
           precio: Number(formPrice),
           costo: Number(formCost) || 0,
           stock: Number(formStock) || 0,
           categoria_id: formCategory,
-          imagen_url: formImageUrl,
+          imagen_url: finalImages[0] || '',
+          imagenes: finalImages,
           activo: formActive,
         });
-        setActionMessage({ type: 'success', text: 'Producto actualizado correctamente.' });
+
+        // Actualización optimista inmediata en interfaz (sin congelar modal)
+        setProducts((prev) =>
+          prev.map((p) =>
+            p.id === editingProduct.id
+              ? {
+                  ...p,
+                  ...updated,
+                  imagen_url: finalImages[0] || '',
+                  imagenes: finalImages,
+                  categoria: categories.find((c) => c.id === formCategory) || p.categoria,
+                }
+              : p
+          )
+        );
+
+        setActionMessage({ type: 'success', text: '¡Producto actualizado al instante en Supabase!' });
       } else {
-        await createAdminProduct({
+        const created = await createAdminProduct({
           nombre: formName,
           descripcion: formDescription,
           precio: Number(formPrice),
           costo: Number(formCost) || 0,
           stock: Number(formStock) || 0,
           categoria_id: formCategory,
-          imagen_url: formImageUrl,
+          imagen_url: finalImages[0] || '',
+          imagenes: finalImages,
           activo: formActive,
         });
-        setActionMessage({ type: 'success', text: 'Producto creado y disponible en la tienda.' });
+
+        // Inserción optimista inmediata
+        const cat = categories.find((c) => c.id === formCategory);
+        setProducts((prev) => [
+          {
+            ...created,
+            categoria: cat,
+            imagen_url: finalImages[0] || '',
+            imagenes: finalImages,
+          },
+          ...prev,
+        ]);
+
+        setActionMessage({ type: 'success', text: '¡Producto creado y guardado en Supabase a máxima velocidad!' });
       }
 
       setIsModalOpen(false);
-      await loadData();
+      // Sincronización en segundo plano sin bloquear al usuario
+      loadData();
     } catch (err: any) {
       setActionMessage({ type: 'error', text: err?.message || 'Error al guardar producto.' });
     } finally {
@@ -260,36 +402,50 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
       ) : null}
 
       {/* Header and Controls */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-white font-serif-luxury">
-            Productos ({filteredProducts.length})
+          <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block mb-1">
+            Inventario Maestro
+          </span>
+          <h2 className="text-xl sm:text-2xl font-serif-luxury font-semibold text-white tracking-wide">
+            Catálogo de Productos ({filteredProducts.length})
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Crea, edita y gestiona existencias directamente sincronizadas con la tienda pública.
+          <p className="text-xs text-stone-400 mt-1 font-light">
+            Gestión de catálogo, activos multimedia (fotos y videos) y existencias en tiempo real.
           </p>
         </div>
 
-        <button
-          onClick={openCreateModal}
-          className="px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all self-start md:self-auto"
-        >
-          <Plus size={16} />
-          <span>+ Agregar Producto</span>
-        </button>
+        <div className="flex items-center gap-2.5 self-start md:self-auto flex-wrap">
+          <button
+            onClick={() => setShowBulkGuide(true)}
+            className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 font-medium text-xs border border-white/[0.08] flex items-center justify-center gap-2 cursor-pointer transition-colors"
+            title="Cómo cargar tus 500 productos"
+          >
+            <HelpCircle size={15} />
+            <span>Guía 500 Productos</span>
+          </button>
+
+          <button
+            onClick={openCreateModal}
+            className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors"
+          >
+            <Plus size={16} />
+            <span>Nuevo Producto</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* Search */}
         <div className="relative">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
           <input
             type="text"
-            placeholder="Buscar por nombre..."
+            placeholder="Buscar por nombre, SKU..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-[#c5a059] transition-colors"
           />
         </div>
 
@@ -298,9 +454,9 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-[#0e0e12] border border-white/10 text-xs text-stone-200 focus:outline-none focus:border-[#c5a059] cursor-pointer transition-colors"
           >
-            <option value="all">Todas las categorías</option>
+            <option value="all">Todas las Categorías</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.nombre}
@@ -314,9 +470,9 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-[#0e0e12] border border-white/10 text-xs text-stone-200 focus:outline-none focus:border-[#c5a059] cursor-pointer transition-colors"
           >
-            <option value="all">Todos los estados</option>
+            <option value="all">Todos los Estados</option>
             <option value="active">Solo Activos (En Tienda)</option>
             <option value="inactive">Solo Inactivos (Ocultos)</option>
             <option value="out_of_stock">Solo Agotados (Stock 0)</option>
@@ -325,31 +481,31 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl shadow-xl overflow-hidden">
+      <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl shadow-xl overflow-hidden">
         {isLoading ? (
-          <div className="p-12 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-            <RefreshCw size={16} className="animate-spin text-amber-400" />
-            <span>Cargando productos de Supabase...</span>
+          <div className="p-12 text-center text-xs text-[#c5a059] flex items-center justify-center gap-2">
+            <RefreshCw size={16} className="animate-spin text-[#c5a059]" />
+            <span>Sincronizando con Supabase...</span>
           </div>
         ) : filteredProducts.length === 0 ? (
-          <div className="p-12 text-center text-xs text-slate-400 space-y-3">
-            <Package size={36} className="mx-auto text-slate-600 mb-2" />
-            <p className="font-semibold text-white">No se encontraron productos.</p>
-            <p className="text-slate-500 max-w-sm mx-auto">
-              Haz clic en "+ Agregar Producto" para crear el primero y que aparezca de inmediato en la tienda pública.
+          <div className="p-12 text-center text-xs text-stone-400 space-y-3">
+            <Package size={36} className="mx-auto text-stone-600 mb-2" />
+            <p className="font-semibold text-white text-sm">No hay productos que coincidan</p>
+            <p className="text-stone-500 max-w-sm mx-auto font-light">
+              Haz clic en "Nuevo Producto" para registrar tu primer artículo con fotos y precio.
             </p>
             <button
               onClick={openCreateModal}
-              className="mt-2 px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer"
+              className="mt-2 px-4 py-2 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
             >
               <Plus size={14} />
-              <span>Crear Producto</span>
+              <span>Registrar Producto</span>
             </button>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-bold border-b border-slate-800">
+              <thead className="bg-white/[0.02] text-stone-400 uppercase text-[10px] font-medium border-b border-white/[0.06]">
                 <tr>
                   <th className="py-3.5 px-4">Producto</th>
                   <th className="py-3.5 px-4">Categoría</th>
@@ -359,7 +515,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                   <th className="py-3.5 px-4 text-right">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-white/[0.04]">
                 {filteredProducts.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
                     {/* Image & Name */}
@@ -504,14 +660,14 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
 
       {/* CREATE / EDIT MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 sm:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-3xl lg:max-w-4xl p-6 sm:p-8 shadow-2xl relative max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
               <div>
                 <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400 block">
                   {editingProduct ? 'Modificar Producto' : 'Nuevo Registro'}
                 </span>
-                <h3 className="text-xl font-bold text-white font-serif-luxury">
+                <h3 className="text-xl sm:text-2xl font-bold text-white font-serif-luxury">
                   {editingProduct ? 'Editar Producto' : 'Agregar Producto a la Tienda'}
                 </h3>
               </div>
@@ -524,30 +680,30 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Nombre del Producto *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej. Baccarat Rouge 540 Extrait"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500"
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-slate-300 font-semibold mb-1">Nombre del Producto *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ej. Gorra Edición Limitada New Era / Reloj Cronógrafo"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Descripción</label>
-                <textarea
-                  rows={2}
-                  placeholder="Notas olfativas, características y detalles del producto..."
-                  value={formDescription}
-                  onChange={(e) => setFormDescription(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 resize-none"
-                />
-              </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-slate-300 font-semibold mb-1">Descripción & Detalles</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Materiales, detalles de costura, características y observaciones..."
+                    value={formDescription}
+                    onChange={(e) => setFormDescription(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 resize-none"
+                  />
+                </div>
 
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Precio de Venta ($) *</label>
                   <input
@@ -555,7 +711,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                     step="0.01"
                     min="0"
                     required
-                    placeholder="350.00"
+                    placeholder="35.00"
                     value={formPrice}
                     onChange={(e) => setFormPrice(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono focus:outline-none focus:border-amber-500"
@@ -567,15 +723,13 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                     type="number"
                     step="0.01"
                     min="0"
-                    placeholder="210.00"
+                    placeholder="15.00"
                     value={formCost}
                     onChange={(e) => setFormCost(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono focus:outline-none focus:border-amber-500"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Categoría *</label>
                   <select
@@ -605,68 +759,182 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                 </div>
               </div>
 
-              {/* Image Path Selection & Input (public/images/products/) */}
-              <div className="space-y-2">
+              {/* Carrusel de Imágenes y Videos: Subida desde Archivos y Supabase Storage */}
+              <div className="space-y-3 p-4 rounded-2xl bg-slate-950 border border-slate-800">
                 <div className="flex items-center justify-between">
-                  <label className="block text-slate-300 font-semibold text-xs">
-                    Ruta de Imagen del Producto
-                  </label>
-                  <span className="text-[10px] text-amber-400 font-mono">
-                    public/images/products/
-                  </span>
-                </div>
-
-                <input
-                  type="text"
-                  placeholder="/images/products/perfume-1.jpg"
-                  value={formImageUrl}
-                  onChange={(e) => setFormImageUrl(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-xs placeholder-slate-600 focus:outline-none focus:border-amber-500"
-                />
-
-                {/* Seleccionar archivo existente del proyecto */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-slate-400 whitespace-nowrap">
-                    Archivo existente:
-                  </span>
-                  <select
-                    value={formImageUrl}
-                    onChange={(e) => setFormImageUrl(e.target.value)}
-                    className="flex-1 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-xs focus:outline-none focus:border-amber-500 font-mono cursor-pointer"
-                  >
-                    <option value="">-- Seleccionar imagen en public/images/products/ --</option>
-                    {PROJECT_MEDIA_OPTIONS.products.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 space-y-1">
-                  <p className="text-amber-400 font-medium">
-                    📁 Archivos locales del proyecto (sin Supabase Storage):
-                  </p>
-                  <p>
-                    Para agregar nuevas fotos, cópialas a <code className="text-amber-300">public/images/products/</code> e introduce su ruta aquí (ej: <code className="text-amber-300">/images/products/gorra-1.webp</code>).
-                  </p>
-                </div>
-
-                {formImageUrl && (
-                  <div className="flex items-center gap-3 p-2 bg-slate-950 rounded-xl border border-slate-800">
-                    <img
-                      src={formImageUrl}
-                      alt="Preview"
-                      className="w-12 h-12 object-cover rounded-lg bg-black border border-slate-800"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <span className="text-[10px] text-slate-500 block">Ruta asignada:</span>
-                      <span className="text-[11px] text-amber-400 font-mono truncate block">
-                        {formImageUrl}
+                  <div>
+                    <label className="block text-slate-200 font-semibold text-xs flex items-center gap-1.5">
+                      <span>Galería / Carrusel ({formImages.length} fotos y videos)</span>
+                      <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-normal">
+                        Fotos + Videos permitidos
                       </span>
+                    </label>
+                    <span className="text-[10px] text-slate-400">
+                      Puedes subir fotos (.jpg, .png) y videos (.mp4, .webm, máx. 10MB) desde tus archivos.
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-amber-400 font-mono">
+                    Supabase Storage
+                  </span>
+                </div>
+
+                {/* Botón de Carga de Archivos */}
+                <div className="flex items-center gap-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,video/*,.mp4,.webm,.mov,.m4v"
+                    onChange={handleFilesSelected}
+                    className="hidden"
+                    id="product-images-input"
+                  />
+                  <label
+                    htmlFor="product-images-input"
+                    className={`flex-1 py-3 px-4 rounded-xl border border-dashed text-center cursor-pointer transition-all flex items-center justify-center gap-2 ${
+                      isUploadingFiles
+                        ? 'border-amber-500 bg-amber-500/10 text-amber-300'
+                        : 'border-slate-700 hover:border-amber-500/60 bg-slate-900/60 text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    {isUploadingFiles ? (
+                      <>
+                        <RefreshCw size={15} className="animate-spin text-amber-400" />
+                        <span className="text-xs font-medium">{uploadProgressText}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={15} className="text-amber-400" />
+                        <span className="text-xs font-medium">
+                          + Seleccionar Fotos o Videos desde tus Archivos
+                        </span>
+                      </>
+                    )}
+                  </label>
+                </div>
+
+                {/* Galería de imágenes y videos cargados */}
+                {formImages.length > 0 && (
+                  <div className="space-y-2 pt-2">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
+                      Elementos en el Carrusel (La primera será la portada de tienda):
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                      {formImages.map((mediaUrl, idx) => {
+                        const isVid = isVideoMedia(mediaUrl);
+                        return (
+                          <div
+                            key={idx}
+                            className={`relative rounded-xl overflow-hidden border p-1.5 flex flex-col justify-between group ${
+                              idx === 0
+                                ? 'border-amber-500/80 bg-amber-500/5'
+                                : 'border-slate-800 bg-slate-900'
+                            }`}
+                          >
+                            <div className="relative aspect-square w-full rounded-lg overflow-hidden bg-black mb-1.5 flex items-center justify-center">
+                              {isVid ? (
+                                <video
+                                  src={mediaUrl}
+                                  className="w-full h-full object-cover"
+                                  muted
+                                  playsInline
+                                />
+                              ) : (
+                                <img
+                                  src={mediaUrl}
+                                  alt={`Media ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+                              )}
+
+                              {/* Badges */}
+                              <div className="absolute top-1 left-1 flex items-center gap-1">
+                                {idx === 0 && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500 text-slate-950 flex items-center gap-0.5 shadow">
+                                    <Star size={10} fill="currentColor" />
+                                    <span>Portada</span>
+                                  </span>
+                                )}
+                                {isVid && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-black/80 text-amber-400 flex items-center gap-0.5 border border-white/20">
+                                    <Video size={10} />
+                                    <span>Video</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-1 text-[10px]">
+                              {idx !== 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSetPrimaryImage(idx)}
+                                  className="text-amber-400 hover:underline cursor-pointer"
+                                >
+                                  Hacer Portada
+                                </button>
+                              ) : (
+                                <span className="text-slate-500 font-mono">#1 Portada</span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveImage(idx)}
+                                className="p-1 rounded text-rose-400 hover:bg-rose-500/20 cursor-pointer"
+                                title="Quitar elemento"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
+
+                {/* Opción alternativa: URL directa o seleccionar archivo del proyecto */}
+                <div className="pt-2 border-t border-slate-800/80 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="O pega una URL de imagen o video (.mp4, YouTube, etc.)..."
+                      value={formImageUrl}
+                      onChange={(e) => setFormImageUrl(e.target.value)}
+                      className="flex-1 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-[11px] placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddManualImageUrl}
+                      disabled={!formImageUrl.trim()}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-medium cursor-pointer disabled:opacity-40"
+                    >
+                      Añadir
+                    </button>
+                  </div>
+
+                  {PROJECT_MEDIA_OPTIONS.products.length > 0 && (
+                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                      <span>Del proyecto:</span>
+                      <select
+                        value={formImageUrl}
+                        onChange={(e) => {
+                          if (e.target.value && !formImages.includes(e.target.value)) {
+                            setFormImages((prev) => [...prev, e.target.value]);
+                          }
+                          setFormImageUrl('');
+                        }}
+                        className="flex-1 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 text-[11px] focus:outline-none cursor-pointer"
+                      >
+                        <option value="">-- Añadir foto local a la lista --</option>
+                        {PROJECT_MEDIA_OPTIONS.products.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Estado Activo */}
@@ -709,6 +977,93 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL GUÍA PARA 500 PRODUCTOS */}
+      {showBulkGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 sm:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <FileSpreadsheet size={18} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white font-serif-luxury">
+                    Guía para tus ~500 Productos
+                  </h3>
+                  <span className="text-[10px] text-slate-400">
+                    Tu tienda está lista y vacía, esperando únicamente tus productos reales.
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowBulkGuide(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs text-slate-300 leading-relaxed">
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <CheckCircle2 size={14} />
+                  <span>Catálogo Limpio (0 productos de prueba)</span>
+                </p>
+                <p className="text-[11px] text-emerald-400/90">
+                  Cumpliendo tu indicación, no se agregaron productos ficticios. Todo lo que cargues será tuyo.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-bold text-white uppercase text-[11px] tracking-wider text-amber-400">
+                  Opción 1: Carga desde este Panel (Recomendado)
+                </h4>
+                <p className="text-slate-400">
+                  Haz clic en <strong>"+ Agregar Producto"</strong>. Podrás seleccionar múltiples fotos y videos (.mp4, .webm, .mov) desde tus archivos. Las fotos y videos se guardan automáticamente en el Storage de Supabase y crean el carrusel interactivo multimedia con reproductor de video en la tienda.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-bold text-white uppercase text-[11px] tracking-wider text-amber-400">
+                  Opción 2: Carga Masiva (CSV / Excel)
+                </h4>
+                <p className="text-slate-400">
+                  Si ya tienes los 500 productos en un archivo Excel o CSV, puedes importarlos de un solo clic desde tu panel de <strong>Supabase &gt; Table Editor &gt; productos &gt; Insert &gt; Import data from CSV</strong>.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2 font-mono text-[11px]">
+                <span className="text-slate-400 block font-bold text-white font-sans">
+                  Columnas que usa la tabla 'productos':
+                </span>
+                <code className="text-amber-400 block break-all">
+                  nombre, descripcion, precio, costo, stock, categoria_id, imagen_url, activo
+                </code>
+                <p className="text-[10px] text-slate-500 font-sans mt-1">
+                  Nota: En <code className="text-slate-400">imagen_url</code> puedes poner una URL o un arreglo JSON con varias fotos y videos (ej: <code className="text-slate-400">["https://...foto1.jpg", "https://...video.mp4"]</code>) para activar el carrusel con fotos y video integrado.
+                </p>
+              </div>
+
+              <div className="space-y-1 text-slate-400 text-[11px]">
+                <p className="font-semibold text-white">📦 Supabase Storage:</p>
+                <p>
+                  Asegúrate de que en tu proyecto Supabase tengas creado el bucket público llamado <code className="text-amber-300">productos</code> para alojar las fotos de tus 500 artículos con acceso público de lectura.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setShowBulkGuide(false)}
+                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer shadow-lg shadow-amber-500/20"
+              >
+                Entendido
+              </button>
+            </div>
           </div>
         </div>
       )}

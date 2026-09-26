@@ -20,7 +20,7 @@ export const EditorialSection: React.FC<EditorialSectionProps> = ({
 
   return (
     <section id="editoriales" className="py-24 sm:py-32 bg-[#09090b] text-stone-100 overflow-hidden">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-28 sm:space-y-40">
+      <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12 space-y-28 sm:space-y-40">
         {/* Editorial Block 1: Image Left + Text Right */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
           {/* Large Image Frame */}
@@ -30,10 +30,7 @@ export const EditorialSection: React.FC<EditorialSectionProps> = ({
                 src="/images/banners/banner-1.jpg"
                 alt="Colección de Cronógrafos y Accesorios de Lujo"
                 onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  if (!target.src.includes('relojes.jpg')) {
-                    target.src = '/images/categories/relojes.jpg';
-                  }
+                  (e.target as HTMLElement).style.display = 'none';
                 }}
                 className="w-full h-full object-cover object-center grayscale-[15%] group-hover:scale-103 transition-transform duration-700 ease-out"
                 loading="lazy"
@@ -96,10 +93,7 @@ export const EditorialSection: React.FC<EditorialSectionProps> = ({
                 src="/images/banners/banner-2.jpg"
                 alt="Alta Perfumería y Marroquinería de Lujo"
                 onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  if (!target.src.includes('perfumes.jpg')) {
-                    target.src = '/images/categories/perfumes.jpg';
-                  }
+                  (e.target as HTMLElement).style.display = 'none';
                 }}
                 className="w-full h-full object-cover object-center grayscale-[15%] group-hover:scale-103 transition-transform duration-700 ease-out"
                 loading="lazy"

@@ -1,16 +1,13 @@
 import React, { useState } from 'react';
 import {
-  ShieldCheck,
   Lock,
   Mail,
-  User,
   ArrowRight,
   RefreshCw,
   AlertCircle,
   CheckCircle2,
   Store,
   KeyRound,
-  ExternalLink,
 } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 
@@ -19,12 +16,10 @@ interface AdminLoginProps {
 }
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
-  const { signIn, signUp, isLoading } = useAdminAuth();
+  const { signIn, isLoading } = useAdminAuth();
 
-  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [nombre, setNombre] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -45,18 +40,11 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
     }
 
     try {
-      if (mode === 'login') {
-        await signIn(cleanEmail, password);
-      } else {
-        await signUp(cleanEmail, password, nombre.trim());
-        setSuccessMessage('Administrador registrado correctamente. Iniciando sesión...');
-      }
+      await signIn(cleanEmail, password);
     } catch (err: any) {
       const msg = err?.message || 'Error en la autenticación con Supabase.';
       if (msg.includes('Invalid login credentials')) {
-        setErrorMessage('Credenciales inválidas. Verifica tu correo y contraseña, o regístrate si es tu primera vez.');
-      } else if (msg.includes('User already registered')) {
-        setErrorMessage('Este correo ya está registrado. Por favor selecciona "Iniciar sesión".');
+        setErrorMessage('Credenciales inválidas. Verifica tu correo y contraseña.');
       } else {
         setErrorMessage(msg);
       }
@@ -64,79 +52,55 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden selection:bg-amber-500 selection:text-slate-950">
-      {/* Background ambient glow */}
-      <div className="absolute top-1/4 -left-32 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 -right-32 w-96 h-96 bg-amber-600/10 rounded-full blur-3xl pointer-events-none" />
-
+    <div className="min-h-screen bg-[#09090b] flex flex-col justify-center items-center p-4 sm:p-6 relative selection:bg-[#c5a059] selection:text-black">
       {/* Top back button */}
       <div className="w-full max-w-md flex justify-between items-center mb-6">
         <button
           onClick={onBackToStore}
-          className="inline-flex items-center gap-2 text-xs text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 text-xs text-stone-400 hover:text-white transition-colors cursor-pointer"
         >
-          <Store size={15} />
-          <span>← Volver a la Tienda Pública</span>
+          <Store size={15} className="text-[#c5a059]" />
+          <span>Volver a la Tienda</span>
         </button>
 
-        <span className="text-[11px] font-mono text-slate-500 bg-slate-900 px-2.5 py-1 rounded-full border border-slate-800">
-          Supabase Auth
+        <span className="text-[11px] text-stone-500 font-mono flex items-center gap-1.5">
+          <Lock size={12} className="text-[#c5a059]" />
+          Acceso Seguro
         </span>
       </div>
 
       {/* Login Box */}
-      <div className="w-full max-w-md bg-[#0e0e12] border border-[#c5a059]/30 rounded-3xl p-8 sm:p-10 shadow-2xl backdrop-blur-xl relative z-10">
+      <div className="w-full max-w-md bg-[#0e0e12] border border-white/[0.08] rounded-2xl p-8 sm:p-10 shadow-2xl relative">
         <div className="text-center mb-8">
-          <div className="relative w-18 h-18 rounded-full p-[1.5px] bg-gradient-to-tr from-[#c5a059] via-[#f3e5ab] to-[#b5662c] shadow-[0_0_20px_rgba(197,160,89,0.35)] mx-auto mb-4">
-            <div className="w-full h-full rounded-full overflow-hidden bg-black flex items-center justify-center">
-              <img
-                src="/images/logo/logotipo.jpeg"
-                alt="Logo"
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  if (!target.src.endsWith('/images/logo/logo.png')) {
-                    target.src = '/images/logo/logo.png';
-                  }
-                }}
-              />
-            </div>
+          <div className="w-16 h-16 rounded-full overflow-hidden bg-black border border-white/15 flex items-center justify-center mx-auto mb-4">
+            <img
+              src="/images/logo/logotipo.jpeg"
+              alt="Logo"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                if (!target.src.endsWith('/images/logo/logo.png')) {
+                  target.src = '/images/logo/logo.png';
+                }
+              }}
+            />
           </div>
-          <span className="text-[10px] uppercase font-bold tracking-[0.25em] text-[#c5a059] block mb-1">
-            Acceso Administrativo
+          <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block mb-1">
+            Pretty-Store Atelier
           </span>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white font-serif-luxury">
-            Panel de Control
+          <h1 className="text-xl sm:text-2xl font-serif-luxury font-semibold text-white tracking-wide">
+            Panel de Administración
           </h1>
-          <p className="text-xs text-slate-400 mt-2 font-light">
-            {mode === 'login'
-              ? 'Ingresa tus credenciales de administrador para continuar'
-              : 'Registra la cuenta administradora de tu tienda en Supabase'}
+          <p className="text-xs text-stone-400 mt-2 font-light">
+            Ingresa tus credenciales autorizadas para gestionar la tienda
           </p>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === 'register' && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
-                <User size={13} className="text-amber-400" />
-                <span>Nombre Completo</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                placeholder="Ej. Edwin Cedeño"
-                className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
-              />
-            </div>
-          )}
-
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
-              <Mail size={13} className="text-amber-400" />
+            <label className="block text-xs font-medium text-stone-300 mb-1.5 flex items-center gap-1.5">
+              <Mail size={13} className="text-[#c5a059]" />
               <span>Correo Electrónico</span>
             </label>
             <input
@@ -145,13 +109,13 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@tuempresa.com"
-              className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+              className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 text-sm text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] focus:ring-1 focus:ring-[#c5a059]/40 transition-colors"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
-              <KeyRound size={13} className="text-amber-400" />
+            <label className="block text-xs font-medium text-stone-300 mb-1.5 flex items-center gap-1.5">
+              <KeyRound size={13} className="text-[#c5a059]" />
               <span>Contraseña</span>
             </label>
             <input
@@ -160,19 +124,19 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••••••"
-              className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 transition-colors font-mono"
+              className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 text-sm text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] focus:ring-1 focus:ring-[#c5a059]/40 transition-colors font-mono"
             />
           </div>
 
           {errorMessage && (
-            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-start gap-2">
               <AlertCircle size={15} className="shrink-0 text-rose-400 mt-0.5" />
               <span className="leading-relaxed">{errorMessage}</span>
             </div>
           )}
 
           {successMessage && (
-            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center gap-2">
               <CheckCircle2 size={15} className="shrink-0 text-emerald-400" />
               <span>{successMessage}</span>
             </div>
@@ -181,58 +145,28 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-sm shadow-xl shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50 mt-2"
+            className="w-full py-3.5 px-4 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
           >
             {isLoading ? (
               <>
-                <RefreshCw size={16} className="animate-spin" />
-                <span>Autenticando en Supabase...</span>
+                <RefreshCw size={16} className="animate-spin text-black" />
+                <span>Verificando credenciales...</span>
               </>
             ) : (
               <>
-                <span>{mode === 'login' ? 'Iniciar Sesión' : 'Registrar Administrador'}</span>
+                <span>Iniciar Sesión</span>
                 <ArrowRight size={16} />
               </>
             )}
           </button>
         </form>
 
-        {/* Switch mode */}
-        <div className="mt-6 pt-6 border-t border-slate-800 text-center">
-          {mode === 'login' ? (
-            <p className="text-xs text-slate-400">
-              ¿Aún no has creado tu usuario administrador?{' '}
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('register');
-                  setErrorMessage(null);
-                }}
-                className="text-amber-400 font-semibold hover:underline cursor-pointer ml-1"
-              >
-                Crear cuenta
-              </button>
-            </p>
-          ) : (
-            <p className="text-xs text-slate-400">
-              ¿Ya tienes cuenta de administrador?{' '}
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('login');
-                  setErrorMessage(null);
-                }}
-                className="text-amber-400 font-semibold hover:underline cursor-pointer ml-1"
-              >
-                Iniciar sesión
-              </button>
-            </p>
-          )}
-        </div>
-
-        <div className="mt-4 flex items-center justify-center gap-2 text-[11px] text-slate-500">
-          <ShieldCheck size={13} className="text-emerald-400" />
-          <span>Sesión segura gestionada con Supabase Auth & JWT</span>
+        {/* Security Access Notice */}
+        <div className="mt-6 pt-5 border-t border-white/[0.06] text-center">
+          <p className="text-[11px] text-stone-500 flex items-center justify-center gap-1.5">
+            <Lock size={12} className="text-stone-500" />
+            <span>Acceso privado exclusivo para administradores</span>
+          </p>
         </div>
       </div>
     </div>

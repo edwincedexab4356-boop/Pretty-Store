@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../lib/supabase';
-import { CartItem, MetodoPago } from '../types/database';
+import { CartItem, MetodoPago, TipoEntrega, CourierOption } from '../types/database';
 
 export interface CreateOrderParams {
   items: CartItem[];
@@ -8,9 +8,16 @@ export interface CreateOrderParams {
   total: number;
   nombre: string;
   telefono: string;
-  email: string;
-  direccion: string;
+  email?: string;
+  direccion?: string;
   metodoPago: MetodoPago;
+  tipoEntrega: TipoEntrega;
+  courier?: CourierOption;
+  comprobantePago?: string;
+  tarjetaInfo?: {
+    numeroEnmascarado: string;
+    titular: string;
+  };
   notas?: string;
 }
 
@@ -23,11 +30,15 @@ export interface CreatedOrderResult {
   telefono: string;
   direccion: string;
   metodoPago: MetodoPago;
+  tipoEntrega: TipoEntrega;
+  courier?: CourierOption;
+  comprobantePago?: string;
   subtotal: number;
   shipping: number;
   total: number;
   itemCount: number;
   notas?: string;
+  items?: CartItem[];
 }
 
 /**
@@ -43,9 +54,13 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     total,
     nombre,
     telefono,
-    email,
-    direccion,
+    email = '',
+    direccion = '',
     metodoPago,
+    tipoEntrega,
+    courier,
+    comprobantePago,
+    tarjetaInfo,
     notas,
   } = params;
 
@@ -88,13 +103,19 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     }
   }
 
+  const resolvedEmail = email.trim() || `${telefono.replace(/[^0-9]/g, '') || 'cliente'}@prettystore.com`;
+  const resolvedAddress =
+    tipoEntrega === 'retiro'
+      ? 'Retiro en el Local / Tienda física (Pretty-Store)'
+      : `${direccion.trim()} (Envío vía: ${courier || 'Uno Express'})`;
+
   // 2. Registrar o buscar cliente en public.clientes
   let clienteId: string | null = null;
   try {
     const { data: existingClient } = await supabase
       .from('clientes')
       .select('id')
-      .eq('email', email.trim().toLowerCase())
+      .eq('telefono', telefono.trim())
       .limit(1);
 
     if (existingClient && existingClient.length > 0) {
@@ -105,7 +126,7 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
         .update({
           nombre: nombre.trim(),
           telefono: telefono.trim(),
-          direccion: direccion.trim(),
+          direccion: resolvedAddress,
         })
         .eq('id', clienteId);
     } else {
@@ -114,9 +135,9 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
         .insert([
           {
             nombre: nombre.trim(),
-            email: email.trim().toLowerCase(),
+            email: resolvedEmail,
             telefono: telefono.trim(),
-            direccion: direccion.trim(),
+            direccion: resolvedAddress,
           },
         ])
         .select('id')
@@ -130,14 +151,26 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     console.warn('Advertencia al registrar cliente:', err);
   }
 
+  // Build structured notes
+  const notesParts = [
+    tipoEntrega === 'retiro'
+      ? '[RETIRO EN EL LOCAL]'
+      : `[DELIVERY VÍA ${courier ? courier.toUpperCase() : 'UNO EXPRESS'}]`,
+    comprobantePago ? `Comprobante/Ref (${metodoPago}): ${comprobantePago}` : null,
+    tarjetaInfo ? `Tarjeta: ${tarjetaInfo.numeroEnmascarado} (${tarjetaInfo.titular})` : null,
+    notas ? `Instrucciones: ${notas}` : null,
+  ].filter(Boolean);
+
+  const finalNotes = notesParts.join(' | ');
+
   // 3. Crear pedido en public.pedidos
   const orderInsertPayload: any = {
-    direccion: direccion.trim(),
+    direccion: resolvedAddress,
     subtotal: Number(subtotal),
     total: Number(total),
     estado: 'pendiente',
     metodo_pago: metodoPago,
-    notas: notas?.trim() || null,
+    notas: finalNotes,
   };
 
   if (clienteId) {
@@ -239,7 +272,7 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     // Silently continue if ventas table is protected
   }
 
-  const orderNumber = `PED-${orderId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+  const orderNumber = `PED-${String(orderId || '').replace(/-/g, '').slice(0, 6).toUpperCase()}`;
 
   return {
     orderId,
@@ -252,14 +285,18 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
       minute: '2-digit',
     }),
     nombre,
-    email,
+    email: resolvedEmail,
     telefono,
-    direccion,
+    direccion: resolvedAddress,
     metodoPago,
+    tipoEntrega,
+    courier,
+    comprobantePago,
     subtotal,
     shipping,
     total,
     itemCount: items.reduce((acc, i) => acc + i.quantity, 0),
-    notas: notas?.trim() || undefined,
+    notas: finalNotes,
+    items,
   };
 }

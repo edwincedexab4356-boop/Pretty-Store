@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Menu, X, Search, Shield, User } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ShoppingBag, Menu, X, Search, ChevronDown, Layers } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useStoreConfig } from '../../context/StoreConfigContext';
+import { Categoria } from '../../types/database';
 
 interface HeaderProps {
+  categories?: Categoria[];
+  onSelectCategory?: (id: string) => void;
   onSearchChange?: (query: string) => void;
   onNavigateSection?: (sectionId: string) => void;
   onOpenSupabaseConfig?: () => void;
@@ -12,6 +15,8 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  categories = [],
+  onSelectCategory,
   onNavigateSection,
   onOpenAdmin,
 }) => {
@@ -19,6 +24,9 @@ export const Header: React.FC<HeaderProps> = ({
   const { config } = useStoreConfig();
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(false);
+  const [desktopDropdownOpen, setDesktopDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -28,14 +36,37 @@ export const Header: React.FC<HeaderProps> = ({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDesktopDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleNavClick = (sectionId: string) => {
     setMobileMenuOpen(false);
+    setMobileCategoriesOpen(false);
+    setDesktopDropdownOpen(false);
     if (onNavigateSection) {
       onNavigateSection(sectionId);
     } else {
       const el = document.getElementById(sectionId);
       if (el) el.scrollIntoView({ behavior: 'smooth' });
     }
+  };
+
+  const handlePickCategory = (categoryId: string) => {
+    setMobileMenuOpen(false);
+    setMobileCategoriesOpen(false);
+    setDesktopDropdownOpen(false);
+    if (onSelectCategory) {
+      onSelectCategory(categoryId);
+    }
+    const el = document.getElementById('catalogo');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
 
   return (
@@ -46,7 +77,7 @@ export const Header: React.FC<HeaderProps> = ({
           : 'bg-gradient-to-b from-black/80 via-black/30 to-transparent py-5 sm:py-6'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12">
         <div className="flex items-center justify-between h-9">
           {/* Left Zone: Brand Logo & Wordmark */}
           <div className="flex items-center">
@@ -78,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          {/* Center Zone: Clean Desktop Navigation (Rolex/Chanel luxury style) */}
+          {/* Center Zone: Clean Desktop Navigation with Categories Dropdown */}
           <nav className="hidden md:flex items-center gap-8 text-[11px] uppercase tracking-[0.22em] font-medium text-stone-300">
             <button
               onClick={() => handleNavClick('hero')}
@@ -87,6 +118,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Inicio</span>
               <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#c5a059] group-hover:w-full transition-all duration-300" />
             </button>
+
             <button
               onClick={() => handleNavClick('catalogo')}
               className="hover:text-white transition-colors cursor-pointer py-1 relative group"
@@ -94,13 +126,54 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Tienda</span>
               <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#c5a059] group-hover:w-full transition-all duration-300" />
             </button>
-            <button
-              onClick={() => handleNavClick('categorias')}
-              className="hover:text-white transition-colors cursor-pointer py-1 relative group"
+
+            {/* Desktop Categories with Dropdown */}
+            <div
+              ref={dropdownRef}
+              className="relative py-1"
+              onMouseEnter={() => setDesktopDropdownOpen(true)}
+              onMouseLeave={() => setDesktopDropdownOpen(false)}
             >
-              <span>Categorías</span>
-              <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#c5a059] group-hover:w-full transition-all duration-300" />
-            </button>
+              <button
+                onClick={() => setDesktopDropdownOpen(!desktopDropdownOpen)}
+                className="hover:text-white transition-colors cursor-pointer py-1 relative group flex items-center gap-1.5"
+              >
+                <span>Categorías</span>
+                <ChevronDown
+                  size={12}
+                  className={`transition-transform duration-200 ${
+                    desktopDropdownOpen ? 'rotate-180 text-[#c5a059]' : ''
+                  }`}
+                />
+                <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#c5a059] group-hover:w-full transition-all duration-300" />
+              </button>
+
+              {desktopDropdownOpen && (
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-56 bg-[#09090b]/98 backdrop-blur-2xl border border-white/10 shadow-2xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="px-4 py-2 border-b border-white/10 text-[9px] uppercase tracking-[0.25em] text-[#c5a059]">
+                    Colecciones Disponibles
+                  </div>
+                  <button
+                    onClick={() => handlePickCategory('all')}
+                    className="w-full text-left px-4 py-2.5 text-xs text-stone-300 hover:text-white hover:bg-white/5 transition-colors flex items-center justify-between"
+                  >
+                    <span>Todo el Catálogo</span>
+                    <span className="text-[10px] text-stone-500 font-mono">Ver Todo</span>
+                  </button>
+                  {categories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => handlePickCategory(cat.id)}
+                      className="w-full text-left px-4 py-2 text-xs text-stone-300 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2"
+                    >
+                      <span className="w-1 h-1 rounded-full bg-[#c5a059]" />
+                      <span className="capitalize text-stone-200">{cat.nombre}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <button
               onClick={() => handleNavClick('editoriales')}
               className="hover:text-white transition-colors cursor-pointer py-1 relative group"
@@ -134,19 +207,7 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </button>
 
-            {/* Admin / Account Access */}
-            {onOpenAdmin && (
-              <button
-                onClick={onOpenAdmin}
-                className="p-2 text-stone-400 hover:text-white transition-colors cursor-pointer hidden sm:flex items-center justify-center"
-                title="Panel de Administración"
-                aria-label="Panel de Administración"
-              >
-                <User size={18} className="stroke-[1.5]" />
-              </button>
-            )}
-
-            {/* Mobile Menu Toggle Button */}
+            {/* Mobile Menu Toggle Button (Tres rayitas) */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 text-stone-300 hover:text-white md:hidden transition-colors cursor-pointer"
@@ -157,50 +218,89 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Mobile Dropdown Menu */}
+        {/* Mobile Dropdown Menu (Tres rayitas desplegadas) */}
         {mobileMenuOpen && (
-          <div className="md:hidden mt-3 pt-4 pb-4 border-t border-white/10 bg-[#09090b]/98 backdrop-blur-2xl px-2 flex flex-col gap-1 text-xs uppercase tracking-[0.2em] animate-in fade-in duration-200">
+          <div className="md:hidden mt-3 pt-4 pb-5 border-t border-white/10 bg-[#09090b]/98 backdrop-blur-2xl px-3 flex flex-col gap-1 text-xs uppercase tracking-[0.2em] animate-in fade-in duration-200">
             <button
               onClick={() => handleNavClick('hero')}
               className="text-left py-2.5 px-3 text-stone-300 hover:text-white hover:bg-white/5 rounded transition-colors"
             >
               Inicio
             </button>
+
             <button
               onClick={() => handleNavClick('catalogo')}
               className="text-left py-2.5 px-3 text-stone-300 hover:text-white hover:bg-white/5 rounded transition-colors"
             >
               Tienda
             </button>
-            <button
-              onClick={() => handleNavClick('categorias')}
-              className="text-left py-2.5 px-3 text-stone-300 hover:text-white hover:bg-white/5 rounded transition-colors"
-            >
-              Categorías
-            </button>
+
+            {/* Accordion Deslizante de Categorías */}
+            <div className="border border-white/10 rounded-lg overflow-hidden my-1 bg-black/40">
+              <button
+                onClick={() => setMobileCategoriesOpen(!mobileCategoriesOpen)}
+                className="w-full text-left py-3 px-3 text-stone-200 hover:text-white flex items-center justify-between transition-colors bg-white/[0.02]"
+              >
+                <div className="flex items-center gap-2">
+                  <Layers size={14} className="text-[#c5a059]" />
+                  <span>Categorías</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-[#c5a059] font-mono lowercase">
+                    {categories.length} categorías
+                  </span>
+                  <ChevronDown
+                    size={15}
+                    className={`text-stone-400 transition-transform duration-300 ${
+                      mobileCategoriesOpen ? 'rotate-180 text-[#c5a059]' : ''
+                    }`}
+                  />
+                </div>
+              </button>
+
+              {/* Sub-menu deslizante con todas las categorías */}
+              {mobileCategoriesOpen && (
+                <div className="px-2 py-2 border-t border-white/10 bg-black/60 flex flex-col gap-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <button
+                    onClick={() => handlePickCategory('all')}
+                    className="text-left py-2 px-3 text-xs text-[#c5a059] font-medium hover:bg-white/5 rounded transition-colors flex items-center justify-between"
+                  >
+                    <span>Ver Todo el Catálogo</span>
+                    <span className="text-[9px] text-stone-400 font-mono tracking-normal">
+                      Mostrar Todo
+                    </span>
+                  </button>
+
+                  {categories.length === 0 ? (
+                    <div className="py-2 px-3 text-[11px] text-stone-500 font-light lowercase">
+                      No hay categorías registradas aún
+                    </div>
+                  ) : (
+                    categories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => handlePickCategory(cat.id)}
+                        className="text-left py-2.5 px-3 text-xs text-stone-300 hover:text-white hover:bg-white/5 rounded transition-colors flex items-center gap-2.5"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#c5a059] shrink-0" />
+                        <span className="capitalize text-stone-200 font-light">{cat.nombre}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
             <button
               onClick={() => handleNavClick('editoriales')}
               className="text-left py-2.5 px-3 text-stone-300 hover:text-white hover:bg-white/5 rounded transition-colors"
             >
               Sobre Nosotros
             </button>
-            {onOpenAdmin && (
-              <div className="pt-2 mt-2 border-t border-white/10 flex">
-                <button
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    onOpenAdmin();
-                  }}
-                  className="py-2.5 px-3 text-stone-400 hover:text-[#c5a059] flex items-center gap-2 text-xs w-full text-left"
-                >
-                  <User size={15} />
-                  <span>Área de Administración</span>
-                </button>
-              </div>
-            )}
           </div>
         )}
       </div>
     </header>
   );
 };
+

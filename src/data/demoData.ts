@@ -5,35 +5,35 @@ export const DEMO_CATEGORIAS: Categoria[] = [
     id: 'cat-perfumes',
     nombre: 'Perfumes',
     descripcion: 'Fragancias exclusivas de alta concentración y notas aromáticas refinadas.',
-    imagen_url: '/images/categories/perfumes.jpg',
+    imagen_url: null,
     activa: true,
   },
   {
     id: 'cat-relojes',
     nombre: 'Relojes',
     descripcion: 'Piezas de relojería de precisión con acabados en acero y cristal de zafiro.',
-    imagen_url: '/images/categories/relojes.jpg',
+    imagen_url: null,
     activa: true,
   },
   {
     id: 'cat-carteras',
     nombre: 'Carteras',
     descripcion: 'Bolsos y billeteras confeccionados en cuero genuino y herrajes pulidos.',
-    imagen_url: '/images/categories/carteras.jpg',
+    imagen_url: null,
     activa: true,
   },
   {
     id: 'cat-gorras',
     nombre: 'Gorras',
     descripcion: 'Diseños urbanos y deportivos con materiales premium y calce ergonómico.',
-    imagen_url: '/images/categories/gorras.jpg',
+    imagen_url: null,
     activa: true,
   },
   {
     id: 'cat-correas',
     nombre: 'Correas',
     descripcion: 'Cinturones y correas elegantes de piel curtida con hebillas de diseño.',
-    imagen_url: '/images/categories/correas.jpg',
+    imagen_url: null,
     activa: true,
   },
 ];
@@ -47,7 +47,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 135.0,
     costo: 65.0,
     stock: 9,
-    imagen_url: '/images/products/perfume-1.jpg',
+    imagen_url: null,
     activo: true,
   },
   {
@@ -58,7 +58,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 285.0,
     costo: 140.0,
     stock: 5,
-    imagen_url: '/images/products/reloj-1.jpg',
+    imagen_url: null,
     activo: true,
   },
   {
@@ -69,7 +69,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 195.0,
     costo: 85.0,
     stock: 4,
-    imagen_url: '/images/products/cartera-1.png',
+    imagen_url: null,
     activo: true,
   },
   {
@@ -80,7 +80,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 48.0,
     costo: 18.0,
     stock: 14,
-    imagen_url: '/images/products/gorra-1.webp',
+    imagen_url: null,
     activo: true,
   },
   {
@@ -91,7 +91,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 65.0,
     costo: 26.0,
     stock: 7,
-    imagen_url: '/images/products/correa-1.jpg',
+    imagen_url: null,
     activo: true,
   },
   {
@@ -101,8 +101,8 @@ export const DEMO_PRODUCTOS: Producto[] = [
     descripcion: 'Bouquet floral moderno con sándalo cremoso, vainilla de Madagascar y acordes cítricos.',
     precio: 110.0,
     costo: 50.0,
-    stock: 2, // Pocas unidades
-    imagen_url: '/images/products/perfume-2.jpg',
+    stock: 2,
+    imagen_url: null,
     activo: true,
   },
   {
@@ -112,8 +112,8 @@ export const DEMO_PRODUCTOS: Producto[] = [
     descripcion: 'Perfil ultradelgado de 7mm con correa de malla milanesa ajustable y cristal anti-reflejo.',
     precio: 180.0,
     costo: 80.0,
-    stock: 0, // Agotado para probar validaciones
-    imagen_url: '/images/products/reloj-2.jpg',
+    stock: 0,
+    imagen_url: null,
     activo: true,
   },
   {
@@ -124,7 +124,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 55.0,
     costo: 22.0,
     stock: 18,
-    imagen_url: '/images/products/cartera-2.jpg',
+    imagen_url: null,
     activo: true,
   },
   {
@@ -135,7 +135,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 42.0,
     costo: 16.0,
     stock: 8,
-    imagen_url: '/images/products/gorra-2.jpg',
+    imagen_url: null,
     activo: true,
   },
   {
@@ -146,7 +146,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 72.0,
     costo: 30.0,
     stock: 6,
-    imagen_url: '/images/products/correa-2.jpg',
+    imagen_url: null,
     activo: true,
   },
   {
@@ -157,7 +157,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 145.0,
     costo: 70.0,
     stock: 11,
-    imagen_url: '/images/products/perfume-1.jpg',
+    imagen_url: null,
     activo: true,
   },
   {
@@ -168,7 +168,7 @@ export const DEMO_PRODUCTOS: Producto[] = [
     precio: 125.0,
     costo: 55.0,
     stock: 3,
-    imagen_url: null, // Producto sin imagen para probar el fallback visual
+    imagen_url: null,
     activo: true,
   },
 ];

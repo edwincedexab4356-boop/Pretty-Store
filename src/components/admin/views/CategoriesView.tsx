@@ -187,54 +187,57 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
       ) : null}
 
       {/* Header */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-white font-serif-luxury">
+          <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block mb-1">
+            Organización
+          </span>
+          <h2 className="text-xl sm:text-2xl font-serif-luxury font-semibold text-white tracking-wide">
             Categorías ({categories.length})
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Organiza las secciones del menú y los filtros del catálogo de la tienda.
+          <p className="text-xs text-stone-400 mt-1 font-light">
+            Gestión de secciones del menú desplegable y colecciones en el catálogo de la tienda.
           </p>
         </div>
 
         <button
           onClick={openCreateModal}
-          className="px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all self-start md:self-auto"
+          className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors self-start md:self-auto"
         >
           <Plus size={16} />
-          <span>+ Nueva Categoría</span>
+          <span>Nueva Categoría</span>
         </button>
       </div>
 
       {/* Search */}
       <div className="relative max-w-md">
-        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
         <input
           type="text"
-          placeholder="Buscar categorías..."
+          placeholder="Buscar categoría..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+          className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-[#c5a059] transition-colors"
         />
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl shadow-xl overflow-hidden">
+      <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl shadow-xl overflow-hidden">
         {isLoading ? (
-          <div className="p-12 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-            <RefreshCw size={16} className="animate-spin text-amber-400" />
-            <span>Cargando categorías de Supabase...</span>
+          <div className="p-12 text-center text-xs text-[#c5a059] flex items-center justify-center gap-2">
+            <RefreshCw size={16} className="animate-spin text-[#c5a059]" />
+            <span>Sincronizando categorías con Supabase...</span>
           </div>
         ) : filteredCategories.length === 0 ? (
-          <div className="p-12 text-center text-xs text-slate-400 space-y-3">
-            <Layers size={36} className="mx-auto text-slate-600 mb-2" />
-            <p className="font-semibold text-white">No hay categorías registradas.</p>
-            <p className="text-slate-500 max-w-sm mx-auto">
+          <div className="p-12 text-center text-xs text-stone-400 space-y-3">
+            <Layers size={36} className="mx-auto text-stone-600 mb-2" />
+            <p className="font-semibold text-white text-sm">No se encontraron categorías</p>
+            <p className="text-stone-500 max-w-sm mx-auto font-light">
               Crea tu primera categoría para organizar los productos de la tienda.
             </p>
             <button
               onClick={openCreateModal}
-              className="mt-2 px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer"
+              className="mt-2 px-4 py-2 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
             >
               <Plus size={14} />
               <span>Crear Categoría</span>
@@ -243,16 +246,16 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-bold border-b border-slate-800">
+              <thead className="bg-white/[0.02] text-stone-400 uppercase text-[10px] font-medium border-b border-white/[0.06]">
                 <tr>
-                  <th className="py-3.5 px-4">Nombre</th>
+                  <th className="py-3.5 px-4">Categoría</th>
                   <th className="py-3.5 px-4">Descripción</th>
-                  <th className="py-3.5 px-4">Productos Asociados</th>
+                  <th className="py-3.5 px-4">Productos</th>
                   <th className="py-3.5 px-4">Estado</th>
                   <th className="py-3.5 px-4 text-right">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-white/[0.04]">
                 {filteredCategories.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-white">

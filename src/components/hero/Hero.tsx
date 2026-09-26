@@ -15,7 +15,7 @@ export const Hero: React.FC<HeroProps> = ({
   onCategoriesClick,
 }) => {
   return (
-    <section className="relative w-full min-h-[85vh] sm:min-h-[90vh] overflow-hidden bg-black flex flex-col justify-center">
+    <section className="relative w-full min-h-[85vh] sm:min-h-[90vh] lg:min-h-screen overflow-hidden bg-black flex flex-col justify-center">
       {/* Background Video */}
       <BackgroundVideo videoUrl={videoUrl} />
 

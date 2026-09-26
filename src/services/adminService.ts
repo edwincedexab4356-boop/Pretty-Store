@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../lib/supabase';
+import { compressImageFile } from '../utils/imageOptimizer';
 import {
   Categoria,
   Producto,
@@ -10,6 +11,9 @@ import {
   StoreConfig,
   DashboardStats,
   EstadoPedido,
+  MetodoPago,
+  TipoEntrega,
+  CourierOption,
 } from '../types/database';
 
 // Default configuration fallback
@@ -27,6 +31,10 @@ export const DEFAULT_STORE_CONFIG: StoreConfig = {
   instagram: 'https://instagram.com',
   facebook: 'https://facebook.com',
   twitter: 'https://twitter.com',
+  yappy_numero: '+507 6890-1234',
+  banco_datos: 'Banco General - Cuenta Corriente #03-01-01-123456-7 a nombre de Pretty-Store Inc.',
+  pasarela_tarjeta: 'PagueloFacil',
+  link_pago_tarjeta: '',
 };
 
 // ==========================================
@@ -291,7 +299,7 @@ export async function fetchTopProducts(): Promise<TopProductItem[]> {
       const p = prodMap.get(prodId);
       return {
         id: prodId,
-        nombre: p?.nombre || 'Producto #' + prodId.slice(0, 6),
+        nombre: p?.nombre || 'Producto #' + String(prodId).slice(0, 6),
         cantidad: counts[prodId].cantidad,
         total_ventas: counts[prodId].total_ventas,
         imagen_url: p?.imagen_url || null,
@@ -304,6 +312,230 @@ export async function fetchTopProducts(): Promise<TopProductItem[]> {
     console.warn('Error obteniendo top productos:', e);
     return [];
   }
+}
+
+// ==========================================
+// STORAGE UPLOAD (SUPABASE STORAGE OPTIMIZADO)
+// ==========================================
+
+// Cache for working bucket and status to eliminate redundant slow network attempts
+let cachedWorkingBucket: string | null = null;
+let storageDisabledForSession = false;
+
+export async function uploadProductImageToSupabase(
+  file: File,
+  onStatusUpdate?: (statusText: string) => void
+): Promise<string> {
+  const supabase = getSupabaseClient();
+  const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name);
+  const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|mkv|avi)$/i.test(file.name);
+
+  // 1. RESTRICCIÓN ESTRICTA DE 10MB PARA VIDEOS
+  if (isVideo && file.size > 10 * 1024 * 1024) {
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+    throw new Error(
+      `El video "${file.name}" pesa ${sizeMB}MB y supera el límite máximo permitido de 10MB. No se permite agregar videos mayores de 10MB para mantener la tienda ultra rápida y evitar saturación en la base de datos.`
+    );
+  }
+
+  let fileToUpload: File = file;
+  let fallbackDataUrl = '';
+
+  // 2. Compresión instantánea en el navegador para imágenes (reduce 5MB a ~120KB)
+  if (isImage) {
+    onStatusUpdate?.('Optimizando y reduciendo imagen con alta fidelidad...');
+    try {
+      const optimized = await compressImageFile(file, {
+        maxWidth: 1300,
+        maxHeight: 1300,
+        quality: 0.82,
+        mimeType: 'image/jpeg',
+      });
+      fileToUpload = optimized.file;
+      fallbackDataUrl = optimized.dataUrl;
+    } catch (e) {
+      console.warn('Compresión en canvas no disponible, usando original:', e);
+    }
+  }
+
+  // Si para imágenes ya se sabe que el storage no tiene RLS público, devolvemos la imagen comprimida (100KB)
+  if (isImage && storageDisabledForSession && fallbackDataUrl) {
+    onStatusUpdate?.('Guardando imagen ultraligera optimizada...');
+    return fallbackDataUrl;
+  }
+
+  // 3. Subida a Supabase Storage CDN
+  const ext = isImage
+    ? 'jpg'
+    : (file.name.split('.').pop()?.toLowerCase() || 'mp4');
+  const cleanName = file.name
+    .substring(0, file.name.lastIndexOf('.'))
+    .replace(/[^a-zA-Z0-9]/g, '_')
+    .slice(0, 25);
+  const filePath = `${Date.now()}_${cleanName}.${ext}`;
+
+  const candidateBuckets = cachedWorkingBucket
+    ? [cachedWorkingBucket]
+    : isVideo
+    ? ['product-images', 'videos', 'assets']
+    : ['product-images', 'productos', 'products'];
+
+  onStatusUpdate?.(
+    isVideo
+      ? `Subiendo video (${(file.size / (1024 * 1024)).toFixed(1)}MB) a Supabase Storage...`
+      : 'Enviando imagen a Supabase Storage CDN...'
+  );
+
+  let lastError: any = null;
+  // Para videos de hasta 10MB usamos 60s; para imágenes ultraligeras 5s
+  const timeoutMs = isVideo ? 60000 : 5000;
+
+  for (const bucket of candidateBuckets) {
+    try {
+      const mimeType = isVideo
+        ? (file.type || 'video/mp4')
+        : (fileToUpload.type || 'image/jpeg');
+
+      const uploadPromise = supabase.storage.from(bucket).upload(filePath, fileToUpload, {
+        cacheControl: '3600',
+        upsert: true,
+        contentType: mimeType,
+      });
+
+      const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                isVideo
+                  ? 'Tiempo de espera agotado al subir el video a Supabase Storage (verifica tu conexión).'
+                  : 'Timeout en Supabase Storage'
+              )
+            ),
+          timeoutMs
+        )
+      );
+
+      const { data, error } = (await Promise.race([uploadPromise, timeoutPromise])) as any;
+
+      if (!error && data) {
+        cachedWorkingBucket = bucket;
+        const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(data.path);
+        return publicData.publicUrl;
+      }
+      lastError = error;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+
+  // 4. MANEJO DE ERRORES:
+  // Para imágenes: si falla el bucket, usamos la dataURL comprimida ultraligera (~100KB)
+  if (isImage && fallbackDataUrl) {
+    storageDisabledForSession = true;
+    console.warn('[Supabase Storage no disponible para imágenes, usando versión comprimida]', lastError);
+    return fallbackDataUrl;
+  }
+
+  // Para VIDEOS: NUNCA convertir a Base64 gigantesco de 15MB que satura y congela la base de datos!
+  // Lanzamos un error descriptivo con instrucciones claras
+  const errorMsg = lastError?.message || 'Error de permisos o RLS en Supabase Storage';
+  throw new Error(
+    `No se pudo guardar el video en Supabase Storage (${errorMsg}). Para guardar videos directamente en Supabase, asegúrate de aplicar el script de permisos SQL en el panel de Supabase.`
+  );
+}
+
+/**
+ * Diagnóstico de rendimiento de la base de datos Supabase
+ */
+export async function checkDatabaseHealth(): Promise<{
+  latencyMs: number;
+  totalProducts: number;
+  heavyProducts: { id: string | number; nombre: string; payloadSizeKB: number; hasLargeBase64: boolean }[];
+  totalPayloadKB: number;
+}> {
+  const supabase = getSupabaseClient();
+  const t0 = performance.now();
+
+  const { data: prods, error } = await supabase.from('productos').select('id, nombre, imagen_url');
+  const latencyMs = Math.round(performance.now() - t0);
+
+  if (error || !prods) {
+    return { latencyMs, totalProducts: 0, heavyProducts: [], totalPayloadKB: 0 };
+  }
+
+  let totalChars = 0;
+  const heavyProducts: { id: string | number; nombre: string; payloadSizeKB: number; hasLargeBase64: boolean }[] = [];
+
+  prods.forEach((p) => {
+    const imgStr = p.imagen_url || '';
+    const chars = imgStr.length;
+    totalChars += chars;
+    const kb = Math.round(chars / 1024);
+
+    if (kb > 300) {
+      heavyProducts.push({
+        id: p.id,
+        nombre: p.nombre,
+        payloadSizeKB: kb,
+        hasLargeBase64: imgStr.includes('data:'),
+      });
+    }
+  });
+
+  return {
+    latencyMs,
+    totalProducts: prods.length,
+    heavyProducts,
+    totalPayloadKB: Math.round(totalChars / 1024),
+  };
+}
+
+/**
+ * Limpia y optimiza productos que tienen imágenes/videos pesados en Base64 en la base de datos
+ */
+export async function optimizeHeavyProduct(productId: string | number): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  const { data: prod, error } = await supabase
+    .from('productos')
+    .select('id, nombre, imagen_url')
+    .eq('id', productId)
+    .single();
+
+  if (error || !prod || !prod.imagen_url) return false;
+
+  let imgUrl = prod.imagen_url.trim();
+
+  // Si es un array JSON
+  if (imgUrl.startsWith('[') && imgUrl.endsWith(']')) {
+    try {
+      const arr = JSON.parse(imgUrl);
+      if (Array.isArray(arr)) {
+        // Filtrar elementos que son base64 gigantes > 500KB si ya hay una imagen URL válida
+        const cleanedArr = arr.filter((item: string) => {
+          if (typeof item === 'string' && item.startsWith('data:') && item.length > 500000) {
+            return false;
+          }
+          return true;
+        });
+
+        const newPayload = cleanedArr.length > 1
+          ? JSON.stringify(cleanedArr)
+          : (cleanedArr[0] || '');
+
+        await supabase
+          .from('productos')
+          .update({ imagen_url: newPayload, updated_at: new Date().toISOString() })
+          .eq('id', productId);
+
+        return true;
+      }
+    } catch (e) {
+      console.warn('Error parsing product images during cleanup:', e);
+    }
+  }
+
+  return false;
 }
 
 // ==========================================
@@ -331,9 +563,35 @@ export async function getAdminProducts(): Promise<Producto[]> {
   return (prods || []).map((p) => {
     const inv = invMap.get(p.id);
     const stockResolved = inv && typeof inv.stock_actual === 'number' ? inv.stock_actual : p.stock;
+
+    let imagenes: string[] = [];
+    let primaryImageUrl = p.imagen_url;
+
+    if (p.imagen_url && typeof p.imagen_url === 'string') {
+      const trimmed = p.imagen_url.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            imagenes = parsed;
+            primaryImageUrl = parsed[0];
+          }
+        } catch {
+          imagenes = [trimmed];
+        }
+      } else if (trimmed.includes('|||')) {
+        imagenes = trimmed.split('|||').map((s: string) => s.trim()).filter(Boolean);
+        primaryImageUrl = imagenes[0] || trimmed;
+      } else if (trimmed.length > 0) {
+        imagenes = [trimmed];
+      }
+    }
+
     return {
       ...p,
       stock: stockResolved,
+      imagen_url: primaryImageUrl,
+      imagenes,
       categoria: catMap.get(p.categoria_id),
     };
   });
@@ -347,9 +605,20 @@ export async function createAdminProduct(productData: {
   costo: number;
   stock: number;
   imagen_url: string;
+  imagenes?: string[];
   activo: boolean;
 }): Promise<Producto> {
   const supabase = getSupabaseClient();
+
+  // If multiple images are provided, serialize to JSON in imagen_url
+  let imagePayload = productData.imagen_url?.trim() || null;
+  if (productData.imagenes && productData.imagenes.length > 0) {
+    if (productData.imagenes.length > 1) {
+      imagePayload = JSON.stringify(productData.imagenes);
+    } else {
+      imagePayload = productData.imagenes[0];
+    }
+  }
 
   const insertPayload = {
     categoria_id: productData.categoria_id,
@@ -358,7 +627,7 @@ export async function createAdminProduct(productData: {
     precio: Number(productData.precio) || 0,
     costo: Number(productData.costo) || 0,
     stock: Number(productData.stock) || 0,
-    imagen_url: productData.imagen_url.trim() || null,
+    imagen_url: imagePayload,
     activo: Boolean(productData.activo),
   };
 
@@ -396,10 +665,21 @@ export async function updateAdminProduct(
     costo: number;
     stock: number;
     imagen_url: string;
+    imagenes?: string[];
     activo: boolean;
   }
 ): Promise<Producto> {
   const supabase = getSupabaseClient();
+
+  // If multiple images are provided, serialize to JSON in imagen_url
+  let imagePayload = productData.imagen_url?.trim() || null;
+  if (productData.imagenes && productData.imagenes.length > 0) {
+    if (productData.imagenes.length > 1) {
+      imagePayload = JSON.stringify(productData.imagenes);
+    } else {
+      imagePayload = productData.imagenes[0];
+    }
+  }
 
   const updatePayload = {
     categoria_id: productData.categoria_id,
@@ -408,7 +688,7 @@ export async function updateAdminProduct(
     precio: Number(productData.precio) || 0,
     costo: Number(productData.costo) || 0,
     stock: Number(productData.stock) || 0,
-    imagen_url: productData.imagen_url.trim() || null,
+    imagen_url: imagePayload,
     activo: Boolean(productData.activo),
     updated_at: new Date().toISOString(),
   };
@@ -819,32 +1099,238 @@ export async function getAdminClients(): Promise<Cliente[]> {
   const statsByClient: Record<string, { count: number; total: number; latest: string }> = {};
   if (orders) {
     orders.forEach((o) => {
-      if (o.cliente_id) {
-        if (!statsByClient[o.cliente_id]) {
-          statsByClient[o.cliente_id] = { count: 0, total: 0, latest: o.created_at || '' };
+      if (o.cliente_id !== null && o.cliente_id !== undefined) {
+        const cKey = String(o.cliente_id);
+        if (!statsByClient[cKey]) {
+          statsByClient[cKey] = { count: 0, total: 0, latest: o.created_at || '' };
         }
-        statsByClient[o.cliente_id].count += 1;
+        statsByClient[cKey].count += 1;
         if (o.estado !== 'cancelado') {
-          statsByClient[o.cliente_id].total += Number(o.total) || 0;
+          statsByClient[cKey].total += Number(o.total) || 0;
         }
-        if ((o.created_at || '') > statsByClient[o.cliente_id].latest) {
-          statsByClient[o.cliente_id].latest = o.created_at || '';
+        if ((o.created_at || '') > statsByClient[cKey].latest) {
+          statsByClient[cKey].latest = o.created_at || '';
         }
       }
     });
   }
 
-  return (clients || []).map((c) => ({
-    ...c,
-    pedidos_count: statsByClient[c.id]?.count || 0,
-    total_gastado: statsByClient[c.id]?.total || 0,
-    ultimo_pedido: statsByClient[c.id]?.latest || c.created_at,
-  }));
+  return (clients || []).map((c) => {
+    const cId = String(c.id);
+    return {
+      ...c,
+      id: cId,
+      nombre: c.nombre || 'Cliente sin nombre',
+      email: c.email || '',
+      telefono: c.telefono || '',
+      pedidos_count: statsByClient[cId]?.count || 0,
+      total_gastado: statsByClient[cId]?.total || 0,
+      ultimo_pedido: statsByClient[cId]?.latest || c.created_at,
+    };
+  });
+}
+
+export async function deleteAdminClient(clientId: string): Promise<void> {
+  const supabase = getSupabaseClient();
+  const cId = String(clientId);
+
+  // Desvincular pedidos del cliente primero para evitar restricción de clave foránea
+  try {
+    await supabase
+      .from('pedidos')
+      .update({ cliente_id: null })
+      .eq('cliente_id', cId);
+  } catch (unlinkErr) {
+    console.warn('Advertencia desvinculando pedidos del cliente:', unlinkErr);
+  }
+
+  const { error } = await supabase
+    .from('clientes')
+    .delete()
+    .eq('id', cId);
+
+  if (error) {
+    throw new Error(`Error al eliminar cliente: ${error.message}`);
+  }
 }
 
 // ==========================================
 // VENTAS / SALES
 // ==========================================
+
+export interface ManualSaleItem {
+  producto_id?: string;
+  nombre: string;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal: number;
+}
+
+export interface CreateManualSalePayload {
+  cliente_id?: string | null;
+  cliente_nombre?: string;
+  cliente_email?: string;
+  cliente_telefono?: string;
+  cliente_direccion?: string;
+  items: ManualSaleItem[];
+  subtotal: number;
+  total: number;
+  metodo_pago: MetodoPago;
+  tipo_entrega?: TipoEntrega;
+  courier?: CourierOption;
+  notas?: string;
+  fecha?: string;
+  estado?: EstadoPedido;
+}
+
+export async function createManualSale(payload: CreateManualSalePayload): Promise<{ orderId: string }> {
+  const supabase = getSupabaseClient();
+
+  let resolvedClientId: string | null = payload.cliente_id ? String(payload.cliente_id) : null;
+
+  // Si no se seleccionó un cliente existente pero se ingresó información, buscar o crear cliente
+  if (!resolvedClientId && (payload.cliente_nombre || payload.cliente_email || payload.cliente_telefono)) {
+    try {
+      const emailTrimmed = (payload.cliente_email || '').trim().toLowerCase();
+      if (emailTrimmed) {
+        const { data: existing } = await supabase
+          .from('clientes')
+          .select('id')
+          .eq('email', emailTrimmed)
+          .limit(1);
+        if (existing && existing.length > 0) {
+          resolvedClientId = String(existing[0].id);
+        }
+      }
+
+      if (!resolvedClientId) {
+        const { data: newClient, error: clientErr } = await supabase
+          .from('clientes')
+          .insert([
+            {
+              nombre: (payload.cliente_nombre || 'Cliente Venta Directa').trim(),
+              email: emailTrimmed || `cliente-${Date.now()}@aura.local`,
+              telefono: (payload.cliente_telefono || '').trim(),
+              direccion: (payload.cliente_direccion || 'Venta en tienda').trim(),
+            },
+          ])
+          .select('id')
+          .single();
+
+        if (!clientErr && newClient) {
+          resolvedClientId = String(newClient.id);
+        }
+      }
+    } catch (cErr) {
+      console.warn('Error gestionando cliente para venta manual:', cErr);
+    }
+  }
+
+  const saleDate = payload.fecha ? new Date(payload.fecha).toISOString() : new Date().toISOString();
+
+  // 1. Crear el pedido
+  const { data: orderData, error: orderErr } = await supabase
+    .from('pedidos')
+    .insert([
+      {
+        cliente_id: resolvedClientId,
+        subtotal: Number(payload.subtotal) || 0,
+        total: Number(payload.total) || 0,
+        estado: payload.estado || 'entregado',
+        metodo_pago: payload.metodo_pago || 'efectivo',
+        tipo_entrega: payload.tipo_entrega || 'retiro',
+        courier: payload.courier || null,
+        notas: payload.notas ? `[Venta Manual] ${payload.notas}` : '[Venta Manual]',
+        direccion: payload.cliente_direccion || 'Venta directa en tienda',
+        created_at: saleDate,
+        updated_at: saleDate,
+      },
+    ])
+    .select()
+    .single();
+
+  if (orderErr) {
+    throw new Error(`Error al registrar venta en pedidos: ${orderErr.message}`);
+  }
+
+  const orderId = orderData.id;
+
+  // 2. Crear registros de detalle si hay productos
+  if (payload.items && payload.items.length > 0) {
+    const details = payload.items
+      .filter((it) => it.producto_id)
+      .map((it) => ({
+        pedido_id: orderId,
+        producto_id: it.producto_id,
+        cantidad: Number(it.cantidad) || 1,
+        precio_unitario: Number(it.precio_unitario) || 0,
+        subtotal: Number(it.subtotal) || (Number(it.cantidad) * Number(it.precio_unitario)),
+      }));
+
+    if (details.length > 0) {
+      const { error: detailsErr } = await supabase.from('detalle_pedidos').insert(details);
+      if (detailsErr) {
+        console.warn('Error al registrar detalle_pedidos en venta manual:', detailsErr.message);
+      }
+    }
+
+    // 3. Descontar stock
+    for (const it of payload.items) {
+      if (!it.producto_id) continue;
+      const qty = Number(it.cantidad) || 1;
+      try {
+        const { data: curInv } = await supabase
+          .from('inventario')
+          .select('id, stock_actual')
+          .eq('producto_id', it.producto_id)
+          .limit(1);
+
+        if (curInv && curInv.length > 0) {
+          const newStock = Math.max(0, (curInv[0].stock_actual || 0) - qty);
+          await supabase
+            .from('inventario')
+            .update({ stock_actual: newStock, updated_at: new Date().toISOString() })
+            .eq('producto_id', it.producto_id);
+          await supabase
+            .from('productos')
+            .update({ stock: newStock, updated_at: new Date().toISOString() })
+            .eq('id', it.producto_id);
+        } else {
+          const { data: curProd } = await supabase
+            .from('productos')
+            .select('stock')
+            .eq('id', it.producto_id)
+            .single();
+          if (curProd) {
+            const newStock = Math.max(0, (curProd.stock || 0) - qty);
+            await supabase
+              .from('productos')
+              .update({ stock: newStock, updated_at: new Date().toISOString() })
+              .eq('id', it.producto_id);
+          }
+        }
+      } catch (stkErr) {
+        console.warn('Error actualizando stock en venta manual:', stkErr);
+      }
+    }
+  }
+
+  // 4. Registrar en la tabla ventas si está disponible
+  try {
+    await supabase.from('ventas').insert([
+      {
+        pedido_id: orderId,
+        total: Number(payload.total) || 0,
+        fecha: saleDate,
+        created_at: saleDate,
+      },
+    ]);
+  } catch (vErr) {
+    console.warn('Tabla ventas no disponible o restringida:', vErr);
+  }
+
+  return { orderId };
+}
 
 export async function getAdminSales() {
   const supabase = getSupabaseClient();
@@ -888,8 +1374,8 @@ export function getLocalStoreConfig(): StoreConfig {
       if (parsed.hero_poster_url) {
         parsed.hero_poster_url = '';
       }
-      if (!parsed.hero_video_url || parsed.hero_video_url.includes('mixkit')) {
-        parsed.hero_video_url = '/videos/WhatsApp Video 2026-09-23 at 23.53.18.mp4';
+      if (!parsed.hero_video_url || parsed.hero_video_url.includes('mixkit') || parsed.hero_video_url.includes('2026-09-23')) {
+        parsed.hero_video_url = '/videos/WhatsApp Video 2026-09-26 at 15.05.22.mp4';
       }
       if (!parsed.logo_url || parsed.logo_url === '/images/logo/logo.png') {
         parsed.logo_url = '/images/logo/logotipo.jpeg';
@@ -912,26 +1398,8 @@ export interface ProjectMediaOption {
 }
 
 export const PROJECT_MEDIA_OPTIONS = {
-  products: [
-    { label: 'Perfume 1 (/images/products/perfume-1.jpg)', value: '/images/products/perfume-1.jpg' },
-    { label: 'Perfume 2 (/images/products/perfume-2.jpg)', value: '/images/products/perfume-2.jpg' },
-    { label: 'Perfume 3 (/images/products/perfume-3.jpg)', value: '/images/products/perfume-3.jpg' },
-    { label: 'Gorra 1 (/images/products/gorra-1.webp)', value: '/images/products/gorra-1.webp' },
-    { label: 'Gorra 2 (/images/products/gorra-2.jpg)', value: '/images/products/gorra-2.jpg' },
-    { label: 'Cartera 1 (/images/products/cartera-1.png)', value: '/images/products/cartera-1.png' },
-    { label: 'Cartera 2 (/images/products/cartera-2.jpg)', value: '/images/products/cartera-2.jpg' },
-    { label: 'Reloj 1 (/images/products/reloj-1.jpg)', value: '/images/products/reloj-1.jpg' },
-    { label: 'Reloj 2 (/images/products/reloj-2.jpg)', value: '/images/products/reloj-2.jpg' },
-    { label: 'Correa 1 (/images/products/correa-1.jpg)', value: '/images/products/correa-1.jpg' },
-    { label: 'Correa 2 (/images/products/correa-2.jpg)', value: '/images/products/correa-2.jpg' },
-  ],
-  categories: [
-    { label: 'Perfumes (/images/categories/perfumes.jpg)', value: '/images/categories/perfumes.jpg' },
-    { label: 'Gorras (/images/categories/gorras.jpg)', value: '/images/categories/gorras.jpg' },
-    { label: 'Relojes (/images/categories/relojes.jpg)', value: '/images/categories/relojes.jpg' },
-    { label: 'Carteras (/images/categories/carteras.jpg)', value: '/images/categories/carteras.jpg' },
-    { label: 'Correas (/images/categories/correas.jpg)', value: '/images/categories/correas.jpg' },
-  ],
+  products: [] as ProjectMediaOption[],
+  categories: [] as ProjectMediaOption[],
   logo: [
     { label: 'Logotipo Oficial Aura (/images/logo/logotipo.jpeg)', value: '/images/logo/logotipo.jpeg' },
     { label: 'Logo PNG Aura (/images/logo/logo.png)', value: '/images/logo/logo.png' },
@@ -941,7 +1409,7 @@ export const PROJECT_MEDIA_OPTIONS = {
     { label: 'Banner 2 (/images/banners/banner-2.jpg)', value: '/images/banners/banner-2.jpg' },
   ],
   videos: [
-    { label: 'Video Hero Oficial (/videos/WhatsApp Video 2026-09-23 at 23.53.18.mp4)', value: '/videos/WhatsApp Video 2026-09-23 at 23.53.18.mp4' },
+    { label: 'Video WhatsApp Oficial (/videos/WhatsApp Video 2026-09-26 at 15.05.22.mp4)', value: '/videos/WhatsApp Video 2026-09-26 at 15.05.22.mp4' },
     { label: 'Video Hero Alias (/videos/hero.mp4)', value: '/videos/hero.mp4' },
   ],
 };

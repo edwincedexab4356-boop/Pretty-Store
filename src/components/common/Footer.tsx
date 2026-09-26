@@ -18,7 +18,7 @@ export const Footer: React.FC<FooterProps> = ({ categories, onSelectCategory, on
 
   return (
     <footer className="bg-[#070709] border-t border-white/[0.08] text-stone-400 text-xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
+      <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12 py-16 sm:py-20">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-12">
           {/* Brand Info (4 cols) */}
           <div className="lg:col-span-4 space-y-4">
@@ -205,27 +205,28 @@ export const Footer: React.FC<FooterProps> = ({ categories, onSelectCategory, on
         </div>
 
         {/* Bottom Bar */}
-        <div className="mt-14 pt-8 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4 text-stone-400 font-light text-[11px]">
+        <div className="mt-14 pt-8 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4 text-stone-500 font-light text-[11px]">
           <p>© {new Date().getFullYear()} {config.nombre_tienda || 'Pretty-Store'}. Todos los derechos reservados.</p>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 text-stone-500">
             <span>Privacidad</span>
             <span>•</span>
             <span>Términos</span>
-            {onOpenAdmin && (
-              <>
-                <span>•</span>
-                <button
-                  onClick={onOpenAdmin}
-                  className="hover:text-white transition-colors cursor-pointer flex items-center gap-1"
-                  aria-label="Acceso Administrador"
-                >
-                  <Lock size={11} />
-                  <span>Administración</span>
-                </button>
-              </>
-            )}
           </div>
         </div>
+
+        {/* Botón de admin al final de todo, bien escondido por seguridad */}
+        {onOpenAdmin && (
+          <div className="mt-8 pt-2 flex justify-end items-center border-t border-white/[0.02]">
+            <button
+              onClick={onOpenAdmin}
+              className="opacity-10 hover:opacity-80 transition-opacity p-1.5 text-stone-600 hover:text-[#c5a059] cursor-pointer focus:outline-none"
+              aria-label="Acceso privado"
+              title=""
+            >
+              <Lock size={10} />
+            </button>
+          </div>
+        )}
       </div>
     </footer>
   );

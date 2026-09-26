@@ -11,8 +11,8 @@ import {
   LogOut,
   Store,
   X,
-  ShieldCheck,
-  ShieldAlert,
+  Shield,
+  Terminal,
 } from 'lucide-react';
 import { AdminTab } from '../../hooks/useAdminRoute';
 import { useAdminAuth } from '../../context/AdminAuthContext';
@@ -60,47 +60,46 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       {isOpenMobile && (
         <div
           onClick={onCloseMobile}
-          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 lg:hidden"
         />
       )}
 
       {/* Sidebar container */}
       <aside
-        className={`fixed top-0 left-0 bottom-0 z-50 w-64 bg-[#0e0e12] border-r border-[#c5a059]/20 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-0 left-0 bottom-0 z-50 w-64 bg-[#0d0d11] border-r border-white/[0.08] flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           isOpenMobile ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Header / Brand */}
-        <div className="p-6 border-b border-[#c5a059]/20 flex items-center justify-between bg-[#09090b]">
+        <div className="p-5 border-b border-white/[0.08] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="relative w-10 h-10 rounded-full p-[1px] bg-gradient-to-tr from-[#c5a059] via-[#f3e5ab] to-[#b5662c] shadow-[0_0_12px_rgba(197,160,89,0.3)] shrink-0">
-              <div className="w-full h-full rounded-full overflow-hidden bg-black flex items-center justify-center">
-                <img
-                  src={config.logo_url || '/images/logo/logotipo.jpeg'}
-                  alt={config.nombre_tienda || 'Logo'}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    if (!target.src.endsWith('/images/logo/logo.png')) {
-                      target.src = '/images/logo/logo.png';
-                    }
-                  }}
-                />
-              </div>
+            <div className="w-9 h-9 rounded-full overflow-hidden bg-black border border-white/15 flex items-center justify-center shrink-0">
+              <img
+                src={config.logo_url || '/images/logo/logotipo.jpeg'}
+                alt={config.nombre_tienda || 'Logo'}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  if (!target.src.endsWith('/images/logo/logo.png')) {
+                    target.src = '/images/logo/logo.png';
+                  }
+                }}
+              />
             </div>
-            <div>
-              <h2 className="text-sm font-bold text-white tracking-wide truncate max-w-[130px] font-serif-luxury">
-                {config.nombre_tienda || 'AURA'}
+
+            <div className="overflow-hidden">
+              <h2 className="text-sm font-serif-luxury font-semibold text-white tracking-[0.12em] uppercase truncate">
+                {config.nombre_tienda || 'Pretty-Store'}
               </h2>
-              <span className="text-[9px] text-[#c5a059] font-semibold uppercase tracking-wider block">
-                Panel Administrativo
+              <span className="text-[10px] uppercase tracking-[0.2em] text-[#c5a059] block mt-0.5">
+                Administración
               </span>
             </div>
           </div>
 
           <button
             onClick={onCloseMobile}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 lg:hidden cursor-pointer"
+            className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/5 transition-colors lg:hidden cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -108,51 +107,52 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
         {/* Navigation list */}
         <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Navegación
+          <div className="px-3 pb-2 pt-1 text-[10px] uppercase tracking-[0.25em] text-stone-500 font-medium">
+            Gestión
           </div>
+
           {navItems.map((item) => {
             const isActive = currentTab === item.id;
             return (
               <button
                 key={item.id}
                 onClick={() => handleSelect(item.id)}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-gold-gradient text-slate-950 font-bold shadow-lg shadow-[#c5a059]/20'
-                    : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    ? 'bg-[#c5a059]/15 text-[#c5a059] border-l-2 border-[#c5a059] font-semibold'
+                    : 'text-stone-400 hover:text-white hover:bg-white/5'
                 }`}
               >
-                <span className={isActive ? 'text-slate-950' : 'text-[#c5a059]'}>
+                <span className={isActive ? 'text-[#c5a059]' : 'text-stone-400'}>
                   {item.icon}
                 </span>
-                <span>{item.label}</span>
+                <span className="tracking-wide">{item.label}</span>
               </button>
             );
           })}
         </div>
 
         {/* User profile & actions */}
-        <div className="p-4 border-t border-slate-800/80 space-y-2">
+        <div className="p-4 border-t border-white/[0.08] bg-[#09090c] space-y-2">
           {/* User info */}
-          <div className="px-3 py-2 rounded-xl bg-slate-950/60 border border-slate-800/80">
-            <div className="flex items-center gap-2 mb-1">
-              <ShieldCheck size={14} className="text-emerald-400" />
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Admin Autenticado
+          <div className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <Shield size={12} className="text-[#c5a059]" />
+              <span className="text-[10px] uppercase tracking-wider text-stone-400 font-medium">
+                Admin
               </span>
             </div>
-            <p className="text-xs text-white truncate font-medium">
-              {user?.email || 'Administrador'}
+            <p className="text-xs text-stone-300 truncate">
+              {user?.email || 'admin@pretty-store.com'}
             </p>
           </div>
 
           {/* Go to store button */}
           <button
             onClick={onGoToStore}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs text-slate-300 hover:text-amber-400 hover:bg-slate-800 transition-colors cursor-pointer"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-stone-300 hover:text-white hover:bg-white/5 border border-white/[0.08] transition-colors cursor-pointer"
           >
-            <Store size={15} />
+            <Store size={14} className="text-[#c5a059]" />
             <span>Ver Tienda Pública</span>
           </button>
 
@@ -163,19 +163,21 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 onOpenSqlFix();
                 onCloseMobile();
               }}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs text-amber-400 hover:bg-amber-500/10 border border-amber-500/20 transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs text-amber-300/90 hover:text-amber-200 hover:bg-amber-500/10 border border-amber-500/20 transition-colors cursor-pointer"
             >
-              <ShieldAlert size={15} className="text-amber-400" />
-              <span>Permisos SQL (RLS)</span>
+              <div className="flex items-center gap-2">
+                <Terminal size={14} className="text-amber-400" />
+                <span>Consola SQL (RLS)</span>
+              </div>
             </button>
           )}
 
           {/* Logout button */}
           <button
             onClick={signOut}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 transition-colors cursor-pointer"
           >
-            <LogOut size={15} />
+            <LogOut size={14} />
             <span>Cerrar Sesión</span>
           </button>
         </div>

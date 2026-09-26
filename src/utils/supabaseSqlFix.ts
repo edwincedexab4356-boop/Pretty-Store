@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS public.configuracion (
   nombre_tienda text NOT NULL DEFAULT 'Luxury Store',
   descripcion text DEFAULT 'Exclusividad y elegancia en cada detalle',
   logo_url text DEFAULT '/images/logo/logotipo.jpeg',
-  hero_video_url text DEFAULT '/videos/WhatsApp Video 2026-09-23 at 23.53.18.mp4',
+  hero_video_url text DEFAULT '/videos/WhatsApp Video 2026-09-26 at 15.05.22.mp4',
   telefono text DEFAULT '+507 6890-1234',
   whatsapp text DEFAULT '+507 6890-1234',
   email text DEFAULT 'contacto@aura.com',
@@ -164,6 +164,56 @@ CREATE POLICY "Configuracion Public Select" ON public.configuracion
 DROP POLICY IF EXISTS "Configuracion Admin All" ON public.configuracion;
 CREATE POLICY "Configuracion Admin All" ON public.configuracion 
   FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- 10. ALMACENAMIENTO DE IMÁGENES Y MULTIMEDIA RÁPIDO (SUPABASE STORAGE)
+-- Habilita los buckets 'product-images' y 'videos' para que fotos y videos se guarden como URLs en el CDN
+-- en lugar de saturar la base de datos con texto pesado. ¡Acelera el guardado 100x!
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'product-images',
+  'product-images',
+  true,
+  52428800,
+  ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml', 'video/mp4', 'video/webm', 'video/quicktime']
+)
+ON CONFLICT (id) DO UPDATE SET 
+  public = true,
+  file_size_limit = 52428800,
+  allowed_mime_types = ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml', 'video/mp4', 'video/webm', 'video/quicktime'];
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'videos',
+  'videos',
+  true,
+  52428800,
+  ARRAY['video/mp4', 'video/webm', 'video/quicktime']
+)
+ON CONFLICT (id) DO UPDATE SET 
+  public = true,
+  file_size_limit = 52428800,
+  allowed_mime_types = ARRAY['video/mp4', 'video/webm', 'video/quicktime'];
+
+-- Políticas de acceso para los buckets de almacenamiento
+DROP POLICY IF EXISTS "Storage Objects Public Select" ON storage.objects;
+CREATE POLICY "Storage Objects Public Select" ON storage.objects
+  FOR SELECT TO anon, authenticated
+  USING (bucket_id IN ('product-images', 'videos'));
+
+DROP POLICY IF EXISTS "Storage Objects Public Insert" ON storage.objects;
+CREATE POLICY "Storage Objects Public Insert" ON storage.objects
+  FOR INSERT TO anon, authenticated
+  WITH CHECK (bucket_id IN ('product-images', 'videos'));
+
+DROP POLICY IF EXISTS "Storage Objects Public Update" ON storage.objects;
+CREATE POLICY "Storage Objects Public Update" ON storage.objects
+  FOR UPDATE TO anon, authenticated
+  USING (bucket_id IN ('product-images', 'videos'));
+
+DROP POLICY IF EXISTS "Storage Objects Public Delete" ON storage.objects;
+CREATE POLICY "Storage Objects Public Delete" ON storage.objects
+  FOR DELETE TO anon, authenticated
+  USING (bucket_id IN ('product-images', 'videos'));
 `;
 
 export function isPermissionError(errMessage?: string | null): boolean {

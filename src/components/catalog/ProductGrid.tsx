@@ -64,7 +64,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
 
   return (
     <section id="catalogo" className="py-20 sm:py-28 bg-[#09090b] text-stone-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12">
         {/* Editorial Collection Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12 pb-6 border-b border-white/[0.08]">
           <div className="space-y-1">
@@ -127,13 +127,14 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
 
         {/* Product Cards Grid */}
         {filteredProducts.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8">
-            {filteredProducts.map((product) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-6 sm:gap-8">
+            {filteredProducts.map((product, idx) => (
               <ProductCard
                 key={product.id}
                 product={product}
                 categoryName={categoryMap.get(product.categoria_id)}
                 onQuickView={(p) => setSelectedProductForModal(p)}
+                priority={product.categoria_id === 'cat-gorras' || selectedCategoryId === 'cat-gorras' || idx < 4}
               />
             ))}
           </div>

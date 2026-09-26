@@ -120,11 +120,36 @@ export async function fetchCatalogData(): Promise<CatalogLoadResult> {
       ? inv.stock_actual
       : (typeof prod.stock === 'number' ? prod.stock : 0);
 
+    let imagenes: string[] = [];
+    let primaryImageUrl = prod.imagen_url;
+
+    if (prod.imagen_url && typeof prod.imagen_url === 'string') {
+      const trimmed = prod.imagen_url.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            imagenes = parsed;
+            primaryImageUrl = parsed[0];
+          }
+        } catch {
+          imagenes = [trimmed];
+        }
+      } else if (trimmed.includes('|||')) {
+        imagenes = trimmed.split('|||').map((s: string) => s.trim()).filter(Boolean);
+        primaryImageUrl = imagenes[0] || trimmed;
+      } else if (trimmed.length > 0) {
+        imagenes = [trimmed];
+      }
+    }
+
     return {
       ...prod,
       id: stringProdId,
       categoria_id: stringCatId,
       stock: resolvedStock,
+      imagen_url: primaryImageUrl,
+      imagenes,
       categoria: categoryMap.get(stringCatId),
     };
   });

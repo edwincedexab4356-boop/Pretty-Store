@@ -145,6 +145,12 @@ function StoreApp({ onOpenAdmin }: StoreAppProps) {
     <div className="min-h-screen bg-[#09090b] text-stone-100 flex flex-col font-sans-clean antialiased selection:bg-[#c5a059] selection:text-black">
       {/* 1. Header / Navbar */}
       <Header
+        categories={categories}
+        onSelectCategory={(id) => {
+          setSelectedCategoryId(id);
+          const el = document.getElementById('catalogo');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }}
         onNavigateSection={handleNavigateSection}
         onOpenAdmin={onOpenAdmin}
       />
@@ -186,7 +192,7 @@ function StoreApp({ onOpenAdmin }: StoreAppProps) {
       {/* 5. Main Catalog Section */}
       <main className="flex-1">
         {status === 'loading' ? (
-          <section id="catalogo" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <section id="catalogo" className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12">
             <ProductGridSkeleton />
           </section>
         ) : status === 'error' ? (

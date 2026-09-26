@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Check } from 'lucide-react';
+import { ShoppingBag, Check, ChevronLeft, ChevronRight, Play } from 'lucide-react';
 import { Producto } from '../../types/database';
 import { useCart } from '../../context/CartContext';
+import { getProductImages, isVideoMedia } from '../../utils/productImages';
 
 interface ProductCardProps {
   product: Producto;
   categoryName?: string;
   onQuickView?: (product: Producto) => void;
+  priority?: boolean;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
@@ -17,6 +19,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const { addItem, items } = useCart();
   const [isAdding, setIsAdding] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [currentImgIndex, setCurrentImgIndex] = useState(0);
+
+  const images = getProductImages(product);
+  const hasMultipleImages = images.length > 1;
+  const currentImage = images[currentImgIndex] || product.imagen_url;
+  const isCurrentVideo = isVideoMedia(currentImage);
 
   // Check how many of this product are already in cart
   const cartItem = items.find((item) => item.product.id === product.id);
@@ -37,21 +45,44 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     }, 600);
   };
 
+  const handlePrevImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentImgIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+  };
+
+  const handleNextImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentImgIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+  };
+
   return (
     <article
       onClick={() => onQuickView && onQuickView(product)}
-      className="group flex flex-col bg-[#0e0e11] border border-white/[0.07] hover:border-white/[0.2] transition-colors duration-300 cursor-pointer overflow-hidden"
+      className="group flex flex-col bg-[#0e0e11] border border-white/[0.07] hover:border-white/[0.2] transition-colors duration-300 cursor-pointer overflow-hidden rounded-sm"
     >
-      {/* 1. Protagonist Image Container (consistent 4:5 aspect ratio) */}
+      {/* 1. Protagonist Image Container (consistent 4:5 aspect ratio) with Carousel */}
       <div className="relative aspect-[4/5] w-full overflow-hidden bg-[#141418] flex items-center justify-center">
-        {product.imagen_url && !imgError ? (
-          <img
-            src={product.imagen_url}
-            alt={product.nombre}
-            onError={() => setImgError(true)}
-            className="h-full w-full object-cover object-center group-hover:scale-103 transition-transform duration-500 ease-out"
-            loading="lazy"
-          />
+        {currentImage && !imgError ? (
+          isCurrentVideo ? (
+            <video
+              key={currentImage}
+              src={currentImage}
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="h-full w-full object-cover object-center group-hover:scale-103 transition-transform duration-500 ease-out"
+            />
+          ) : (
+            <img
+              key={currentImage}
+              src={currentImage}
+              alt={product.nombre}
+              onError={() => setImgError(true)}
+              className="h-full w-full object-cover object-center group-hover:scale-103 transition-transform duration-500 ease-out"
+              loading="lazy"
+            />
+          )
         ) : (
           /* Clean Luxury Fallback */
           <div className="flex flex-col items-center justify-center text-center p-6 bg-[#121215] w-full h-full">
@@ -74,6 +105,48 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
         )}
 
+        {/* Video Badge */}
+        {isCurrentVideo && (
+          <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-black/80 backdrop-blur-md text-[10px] text-white flex items-center gap-1 border border-white/15 z-10 shadow">
+            <Play size={10} className="fill-amber-400 text-amber-400" />
+            <span className="tracking-wider uppercase text-[9px] font-medium">Video</span>
+          </span>
+        )}
+
+        {/* Carousel Arrow Controls */}
+        {hasMultipleImages && (
+          <>
+            <button
+              onClick={handlePrevImage}
+              aria-label="Foto anterior"
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/70 hover:bg-black/90 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity border border-white/10 cursor-pointer z-10"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              onClick={handleNextImage}
+              aria-label="Siguiente foto"
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/70 hover:bg-black/90 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity border border-white/10 cursor-pointer z-10"
+            >
+              <ChevronRight size={16} />
+            </button>
+
+            {/* Carousel Dot Indicators */}
+            <div className="absolute bottom-2.5 inset-x-0 flex items-center justify-center gap-1.5 z-10 pointer-events-none">
+              {images.map((_, idx) => (
+                <span
+                  key={idx}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    idx === currentImgIndex
+                      ? 'w-4 bg-[#c5a059]'
+                      : 'w-1.5 bg-white/40 group-hover:bg-white/60'
+                  }`}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
         {/* Quiet Stock Marker Overlay (if out of stock) */}
         {isOutOfStock && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
@@ -83,12 +156,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
         )}
 
-        {/* Subtle Quick View Text on Hover */}
-        <div className="absolute bottom-3 inset-x-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 hidden sm:flex justify-center pointer-events-none">
-          <span className="text-[10px] uppercase tracking-[0.2em] font-medium text-stone-300 bg-black/80 backdrop-blur-sm px-3 py-1.5 border border-white/10">
-            Vista Rápida
-          </span>
-        </div>
+        {/* Subtle Quick View Text on Hover (only if not clicking arrows) */}
+        {!hasMultipleImages && (
+          <div className="absolute bottom-3 inset-x-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 hidden sm:flex justify-center pointer-events-none">
+            <span className="text-[10px] uppercase tracking-[0.2em] font-medium text-stone-300 bg-black/80 backdrop-blur-sm px-3 py-1.5 border border-white/10">
+              Vista Rápida
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 2. Content & Details */}

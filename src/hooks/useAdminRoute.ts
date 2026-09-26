@@ -72,6 +72,18 @@ export function useAdminNavigation() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
+  // Secret shortcut for admin: Ctrl+Alt+A or Cmd+Alt+A
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        navigateToAdmin('dashboard');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigateToAdmin]);
+
   const navigateToStore = useCallback(() => {
     try {
       window.history.pushState({}, '', '/');

@@ -27,7 +27,7 @@ export const FeaturesSection: React.FC = () => {
 
   return (
     <section id="ventajas" className="py-24 sm:py-32 bg-[#09090b] text-stone-100 border-t border-white/[0.06]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12">
         <div className="text-center max-w-xl mx-auto mb-16 sm:mb-20">
           <span className="text-[10px] sm:text-xs uppercase tracking-[0.35em] text-[#c5a059] font-medium block mb-2">
             El Compromiso Pretty-Store

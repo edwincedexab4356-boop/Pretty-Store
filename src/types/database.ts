@@ -32,6 +32,7 @@ export interface Producto {
   costo: number;
   stock: number;
   imagen_url: string | null;
+  imagenes?: string[];
   activo: boolean;
   created_at?: string;
   updated_at?: string;
@@ -55,6 +56,8 @@ export interface Inventario {
 }
 
 export type MetodoPago = 'efectivo' | 'tarjeta' | 'yappy' | 'transferencia';
+export type TipoEntrega = 'delivery' | 'retiro';
+export type CourierOption = 'Uno Express' | 'Ferguson' | 'Servientrega';
 
 export type EstadoPedido = 
   | 'pendiente'
@@ -73,6 +76,8 @@ export interface Pedido {
   estado: EstadoPedido;
   metodo_pago: MetodoPago;
   notas: string | null;
+  tipo_entrega?: TipoEntrega;
+  courier?: CourierOption;
   created_at?: string;
   updated_at?: string;
   // Relaciones
@@ -143,6 +148,10 @@ export interface StoreConfig {
   instagram: string;
   facebook: string;
   twitter: string;
+  yappy_numero?: string;
+  banco_datos?: string;
+  pasarela_tarjeta?: string;
+  link_pago_tarjeta?: string;
 }
 
 export interface DashboardStats {

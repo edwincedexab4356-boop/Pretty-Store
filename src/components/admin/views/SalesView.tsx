@@ -8,10 +8,14 @@ import {
   ShoppingBag,
   CreditCard,
   Download,
+  Plus,
+  CheckCircle2,
+  X,
 } from 'lucide-react';
 import { getAdminSales } from '../../../services/adminService';
 import { isPermissionError } from '../../../utils/supabaseSqlFix';
 import { PermissionErrorBanner } from '../PermissionErrorBanner';
+import { ManualSaleModal } from '../ManualSaleModal';
 
 interface SalesViewProps {
   onOpenSqlFix?: (desc?: string) => void;
@@ -22,6 +26,8 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'week' | 'month'>('month');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isManualSaleOpen, setIsManualSaleOpen] = useState(false);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -78,6 +84,22 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
 
   return (
     <div className="space-y-6">
+      {/* Success notification banner */}
+      {successMsg && (
+        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-between text-xs animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} />
+            <span>{successMsg}</span>
+          </div>
+          <button
+            onClick={() => setSuccessMsg(null)}
+            className="text-stone-400 hover:text-white p-1 rounded cursor-pointer"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Permission Warning Banner if any error */}
       {loadError && isPermissionError(loadError) && (
         <PermissionErrorBanner
@@ -88,114 +110,143 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
       )}
 
       {/* Header */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-white font-serif-luxury">
-            Reporte de Ventas
+          <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block mb-1">
+            Métricas Comerciales
+          </span>
+          <h2 className="text-xl sm:text-2xl font-serif-luxury font-semibold text-white tracking-wide">
+            Reporte de Ventas & Facturación
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Supervisa el flujo de caja, ingresos netos y métodos de pago registrados en tus pedidos.
+          <p className="text-xs text-stone-400 mt-1 font-light">
+            Seguimiento de ingresos, volumen transaccional y registro manual de ventas.
           </p>
         </div>
 
-        <button
-          onClick={loadData}
-          disabled={isLoading}
-          className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 cursor-pointer transition-colors self-start md:self-auto"
-        >
-          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-          <span>Actualizar Ventas</span>
-        </button>
+        <div className="flex items-center gap-2.5 self-start md:self-auto flex-wrap">
+          <button
+            onClick={() => setIsManualSaleOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d4af37] hover:opacity-95 text-black font-semibold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#c5a059]/20"
+          >
+            <Plus size={15} />
+            <span>Registrar Venta Manual</span>
+          </button>
+
+          <button
+            onClick={loadData}
+            disabled={isLoading}
+            className="px-3.5 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-200 hover:text-white text-xs font-medium border border-white/[0.08] flex items-center gap-2 cursor-pointer transition-all"
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin text-[#c5a059]' : 'text-stone-400'} />
+            <span>Actualizar</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl">
-          <span className="text-xs font-semibold text-slate-400 block mb-1">Ventas de Hoy</span>
-          <div className="text-2xl font-bold text-white font-mono">{formatMoney(totalSalesToday)}</div>
+        <div className="p-5 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-xl">
+          <span className="text-[10px] text-stone-400 uppercase tracking-wider block mb-1 font-medium">
+            Ventas Hoy
+          </span>
+          <div className="text-2xl font-semibold text-white font-mono">{formatMoney(totalSalesToday)}</div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl">
-          <span className="text-xs font-semibold text-slate-400 block mb-1">Últimos 7 Días</span>
-          <div className="text-2xl font-bold text-amber-400 font-mono">{formatMoney(totalSalesWeek)}</div>
+        <div className="p-5 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-xl">
+          <span className="text-[10px] text-[#c5a059] uppercase tracking-wider block mb-1 font-medium">
+            Últimos 7 Días
+          </span>
+          <div className="text-2xl font-semibold text-[#c5a059] font-mono">{formatMoney(totalSalesWeek)}</div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl">
-          <span className="text-xs font-semibold text-slate-400 block mb-1">Este Mes</span>
-          <div className="text-2xl font-bold text-emerald-400 font-mono">{formatMoney(totalSalesMonth)}</div>
+        <div className="p-5 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-xl">
+          <span className="text-[10px] text-emerald-400 uppercase tracking-wider block mb-1 font-medium">
+            Este Mes
+          </span>
+          <div className="text-2xl font-semibold text-emerald-400 font-mono">{formatMoney(totalSalesMonth)}</div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl">
-          <span className="text-xs font-semibold text-slate-400 block mb-1">Total Histórico</span>
-          <div className="text-2xl font-bold text-white font-mono">{formatMoney(totalSalesAll)}</div>
+        <div className="p-5 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-xl">
+          <span className="text-[10px] text-stone-400 uppercase tracking-wider block mb-1 font-medium">
+            Total Histórico
+          </span>
+          <div className="text-2xl font-semibold text-stone-200 font-mono">{formatMoney(totalSalesAll)}</div>
         </div>
       </div>
 
       {/* Time Filter Switcher */}
-      <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-2xl border border-slate-800 w-fit text-xs">
+      <div className="flex items-center gap-1.5 bg-black/40 p-1.5 rounded-xl border border-white/[0.08] w-fit text-xs">
         <button
           onClick={() => setTimeFilter('today')}
-          className={`px-3 py-1.5 rounded-xl transition-colors cursor-pointer ${
-            timeFilter === 'today' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+          className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer font-medium ${
+            timeFilter === 'today'
+              ? 'bg-[#c5a059] text-black font-semibold'
+              : 'text-stone-400 hover:text-white'
           }`}
         >
           Hoy
         </button>
         <button
           onClick={() => setTimeFilter('week')}
-          className={`px-3 py-1.5 rounded-xl transition-colors cursor-pointer ${
-            timeFilter === 'week' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+          className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer font-medium ${
+            timeFilter === 'week'
+              ? 'bg-[#c5a059] text-black font-semibold'
+              : 'text-stone-400 hover:text-white'
           }`}
         >
           Esta Semana
         </button>
         <button
           onClick={() => setTimeFilter('month')}
-          className={`px-3 py-1.5 rounded-xl transition-colors cursor-pointer ${
-            timeFilter === 'month' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+          className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer font-medium ${
+            timeFilter === 'month'
+              ? 'bg-[#c5a059] text-black font-semibold'
+              : 'text-stone-400 hover:text-white'
           }`}
         >
           Este Mes
         </button>
         <button
           onClick={() => setTimeFilter('all')}
-          className={`px-3 py-1.5 rounded-xl transition-colors cursor-pointer ${
-            timeFilter === 'all' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+          className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer font-medium ${
+            timeFilter === 'all'
+              ? 'bg-[#c5a059] text-black font-semibold'
+              : 'text-stone-400 hover:text-white'
           }`}
         >
-          Histórico Total
+          Histórico Completo
         </button>
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl shadow-xl overflow-hidden">
+      <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl shadow-xl overflow-hidden">
         {isLoading ? (
-          <div className="p-12 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-            <RefreshCw size={16} className="animate-spin text-amber-400" />
-            <span>Cargando transacciones de venta...</span>
+          <div className="p-12 text-center text-xs text-stone-400 flex items-center justify-center gap-2">
+            <RefreshCw size={16} className="animate-spin text-[#c5a059]" />
+            <span>Calculando métricas de ventas...</span>
           </div>
         ) : filteredSales.length === 0 ? (
-          <div className="p-12 text-center text-xs text-slate-400 space-y-2">
-            <TrendingUp size={36} className="mx-auto text-slate-600 mb-2" />
-            <p className="font-semibold text-white">No hay transacciones registradas en este periodo.</p>
+          <div className="p-12 text-center text-xs text-stone-400 space-y-2">
+            <TrendingUp size={36} className="mx-auto text-stone-600 mb-2" />
+            <p className="font-serif-luxury font-semibold text-white text-base">No hay ventas en este período</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-bold border-b border-slate-800">
+              <thead className="bg-white/[0.02] text-stone-400 uppercase text-[10px] font-medium tracking-wider border-b border-white/[0.08]">
                 <tr>
-                  <th className="py-3.5 px-4">Fecha y Hora</th>
-                  <th className="py-3.5 px-4">Pedido</th>
+                  <th className="py-3.5 px-4">Fecha</th>
+                  <th className="py-3.5 px-4">Nº Pedido</th>
                   <th className="py-3.5 px-4">Cliente</th>
-                  <th className="py-3.5 px-4">Método de Pago</th>
+                  <th className="py-3.5 px-4">Método</th>
                   <th className="py-3.5 px-4">Estado</th>
-                  <th className="py-3.5 px-4 text-right">Monto Total</th>
+                  <th className="py-3.5 px-4 text-right">Monto</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-white/[0.04]">
                 {filteredSales.map((s) => (
-                  <tr key={s.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-4 text-slate-400 font-mono">
+                  <tr key={s.id} className="hover:bg-white/[0.02] transition-colors">
+                    <td className="py-3.5 px-4 text-stone-400 font-light">
                       {s.fecha
                         ? new Date(s.fecha).toLocaleDateString('es-ES', {
                             day: 'numeric',
@@ -206,21 +257,21 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
                           })
                         : '—'}
                     </td>
-                    <td className="py-3.5 px-4 font-mono font-bold text-amber-400">
-                      #PED-{s.pedido_id.replace(/-/g, '').slice(0, 6).toUpperCase()}
+                    <td className="py-3.5 px-4 font-mono font-medium text-[#c5a059]">
+                      #PED-{String(s.pedido_id || s.id || '').replace(/-/g, '').slice(0, 6).toUpperCase()}
                     </td>
-                    <td className="py-3.5 px-4 text-white font-semibold">
+                    <td className="py-3.5 px-4 text-white font-medium">
                       {s.cliente?.nombre || 'Cliente General'}
                     </td>
-                    <td className="py-3.5 px-4 uppercase font-mono text-[11px] text-slate-300">
+                    <td className="py-3.5 px-4 uppercase font-mono text-[11px] text-stone-300">
                       {s.metodo_pago}
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 capitalize">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 capitalize">
                         {s.estado}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono font-bold text-base text-white">
+                    <td className="py-3.5 px-4 text-right font-mono font-semibold text-base text-white">
                       {formatMoney(s.total)}
                     </td>
                   </tr>
@@ -230,6 +281,16 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
           </div>
         )}
       </div>
+
+      {/* Manual Sale Creation Modal */}
+      <ManualSaleModal
+        isOpen={isManualSaleOpen}
+        onClose={() => setIsManualSaleOpen(false)}
+        onSuccess={() => {
+          setSuccessMsg('¡Venta manual registrada exitosamente en el sistema!');
+          loadData();
+        }}
+      />
     </div>
   );
 };

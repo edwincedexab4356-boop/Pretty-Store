@@ -18,8 +18,8 @@ export const StoreConfigProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!local.nombre_tienda || local.nombre_tienda === 'AURA') {
       local.nombre_tienda = 'Pretty-Store';
     }
-    if (!local.hero_video_url || local.hero_video_url.includes('mixkit')) {
-      local.hero_video_url = '/videos/hero.mp4';
+    if (!local.hero_video_url || local.hero_video_url.includes('mixkit') || local.hero_video_url.includes('2026-09-23')) {
+      local.hero_video_url = '/videos/WhatsApp Video 2026-09-26 at 15.05.22.mp4';
     }
     return local;
   });
@@ -41,8 +41,8 @@ export const StoreConfigProvider: React.FC<{ children: React.ReactNode }> = ({ c
             ...DEFAULT_STORE_CONFIG,
             ...data,
           };
-          if (!merged.hero_video_url || merged.hero_video_url.includes('mixkit')) {
-            merged.hero_video_url = '/videos/hero.mp4';
+          if (!merged.hero_video_url || merged.hero_video_url.includes('mixkit') || merged.hero_video_url.includes('2026-09-23')) {
+            merged.hero_video_url = '/videos/WhatsApp Video 2026-09-26 at 15.05.22.mp4';
           }
           if (!merged.logo_url || merged.logo_url === '/images/logo/logo.png') {
             merged.logo_url = '/images/logo/logotipo.jpeg';
