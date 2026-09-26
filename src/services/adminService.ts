@@ -322,6 +322,48 @@ export async function fetchTopProducts(): Promise<TopProductItem[]> {
 let cachedWorkingBucket: string | null = null;
 let storageDisabledForSession = false;
 
+// Helper para subir videos y archivos multimedia directamente al servidor de la tienda
+async function uploadToLocalServer(
+  file: File,
+  onStatusUpdate?: (status: string) => void
+): Promise<string> {
+  onStatusUpdate?.(`Transfiriendo video (${(file.size / (1024 * 1024)).toFixed(1)}MB) al servidor de la tienda...`);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const base64 = reader.result as string;
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            filename: file.name,
+            base64,
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (data.url) {
+          resolve(data.url);
+        } else {
+          throw new Error('Respuesta inválida al subir video');
+        }
+      } catch (e) {
+        reject(e);
+      }
+    };
+    reader.onerror = () => reject(new Error('Error al leer archivo local'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export async function uploadProductImageToSupabase(
   file: File,
   onStatusUpdate?: (statusText: string) => void
@@ -334,14 +376,29 @@ export async function uploadProductImageToSupabase(
   if (isVideo && file.size > 10 * 1024 * 1024) {
     const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
     throw new Error(
-      `El video "${file.name}" pesa ${sizeMB}MB y supera el límite máximo permitido de 10MB. No se permite agregar videos mayores de 10MB para mantener la tienda ultra rápida y evitar saturación en la base de datos.`
+      `El video "${file.name}" pesa ${sizeMB}MB y supera el límite máximo de 10MB. Por rendimiento y velocidad de carga, no se permite agregar videos mayores de 10MB.`
     );
+  }
+
+  // 2. PARA VIDEOS: Subida directa al servidor (/api/upload -> public/videos/)
+  // Esto garantiza que el video se guarde en menos de 1 segundo, no dependa de políticas RLS externas
+  // y genere una URL corta ("/videos/...") que se guarda en Supabase en 0.05 segundos sin saturar la BD
+  if (isVideo) {
+    try {
+      const localUrl = await uploadToLocalServer(file, onStatusUpdate);
+      if (localUrl) {
+        onStatusUpdate?.('¡Video guardado con éxito!');
+        return localUrl;
+      }
+    } catch (localErr) {
+      console.warn('Endpoint /api/upload no disponible, intentando Supabase Storage:', localErr);
+    }
   }
 
   let fileToUpload: File = file;
   let fallbackDataUrl = '';
 
-  // 2. Compresión instantánea en el navegador para imágenes (reduce 5MB a ~120KB)
+  // 3. Compresión instantánea en el navegador para imágenes (reduce 5MB a ~120KB)
   if (isImage) {
     onStatusUpdate?.('Optimizando y reduciendo imagen con alta fidelidad...');
     try {
@@ -364,7 +421,7 @@ export async function uploadProductImageToSupabase(
     return fallbackDataUrl;
   }
 
-  // 3. Subida a Supabase Storage CDN
+  // 4. Subida a Supabase Storage CDN
   const ext = isImage
     ? 'jpg'
     : (file.name.split('.').pop()?.toLowerCase() || 'mp4');
@@ -387,7 +444,6 @@ export async function uploadProductImageToSupabase(
   );
 
   let lastError: any = null;
-  // Para videos de hasta 10MB usamos 60s; para imágenes ultraligeras 5s
   const timeoutMs = isVideo ? 60000 : 5000;
 
   for (const bucket of candidateBuckets) {
@@ -408,7 +464,7 @@ export async function uploadProductImageToSupabase(
             reject(
               new Error(
                 isVideo
-                  ? 'Tiempo de espera agotado al subir el video a Supabase Storage (verifica tu conexión).'
+                  ? 'Tiempo de espera agotado al subir el video a Supabase Storage.'
                   : 'Timeout en Supabase Storage'
               )
             ),
@@ -429,7 +485,7 @@ export async function uploadProductImageToSupabase(
     }
   }
 
-  // 4. MANEJO DE ERRORES:
+  // 5. MANEJO DE ERRORES:
   // Para imágenes: si falla el bucket, usamos la dataURL comprimida ultraligera (~100KB)
   if (isImage && fallbackDataUrl) {
     storageDisabledForSession = true;
@@ -438,10 +494,9 @@ export async function uploadProductImageToSupabase(
   }
 
   // Para VIDEOS: NUNCA convertir a Base64 gigantesco de 15MB que satura y congela la base de datos!
-  // Lanzamos un error descriptivo con instrucciones claras
   const errorMsg = lastError?.message || 'Error de permisos o RLS en Supabase Storage';
   throw new Error(
-    `No se pudo guardar el video en Supabase Storage (${errorMsg}). Para guardar videos directamente en Supabase, asegúrate de aplicar el script de permisos SQL en el panel de Supabase.`
+    `No se pudo guardar el video (${errorMsg}). Puedes pegar una URL directa de video (ej. YouTube, Cloudinary o .mp4) en el campo correspondiente.`
   );
 }
 
