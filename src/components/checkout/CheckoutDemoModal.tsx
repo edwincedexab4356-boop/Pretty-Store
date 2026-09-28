@@ -348,7 +348,14 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
               ) : (
                 <div className="pt-2 border-t border-white/10 text-xs">
                   <span className="text-stone-400 font-light block">Punto de Retiro:</span>
-                  <span className="text-emerald-400 font-medium">Atelier Pretty-Store (Costa del Este)</span>
+                  <a
+                    href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[#c5a059] font-medium hover:underline inline-flex items-center gap-1 mt-0.5"
+                  >
+                    <span>Boutique Pretty-Store (Ver en Google Maps)</span>
+                  </a>
                 </div>
               )}
 
@@ -582,7 +589,7 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
                         <span>Retiro directo en Tienda física</span>
                       </div>
                       <p className="text-[11px] text-stone-300 font-light">
-                        Atelier Pretty-Store: Boulevard Costa del Este, Torre Financial Park. Tu pedido se apartará de inmediato a tu nombre y teléfono.
+                        Boutique Pretty-Store (<a href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7" target="_blank" rel="noreferrer" className="text-[#c5a059] underline underline-offset-2">Ver ubicación en Google Maps</a>). Tu pedido se apartará de inmediato a tu nombre y teléfono.
                       </p>
                     </div>
                   )}

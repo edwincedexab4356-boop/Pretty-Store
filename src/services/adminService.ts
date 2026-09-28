@@ -28,10 +28,10 @@ export const DEFAULT_STORE_CONFIG: StoreConfig = {
   telefono: '+507 6890-1234',
   whatsapp: '+507 6890-1234',
   email: 'contacto@pretty-store.com',
-  direccion: 'Boulevard Costa del Este, Torre Financial Park, Nivel 14',
+  direccion: 'https://maps.app.goo.gl/PxA3suMXNZxuFF5X7',
   instagram: 'https://instagram.com',
-  facebook: 'https://facebook.com',
-  twitter: 'https://twitter.com',
+  facebook: '',
+  twitter: '',
   yappy_numero: '+507 6890-1234',
   banco_datos: 'Banco General - Cuenta Corriente #03-01-01-123456-7 a nombre de Pretty-Store Inc.',
   pasarela_tarjeta: 'PagueloFacil',
@@ -60,18 +60,121 @@ export async function fetchUserProfile(userId: string): Promise<Perfil | null> {
   return null;
 }
 
-export async function loginAdmin(email: string, password: string) {
+export async function createOrEnsureAdminProfile(
+  userId: string,
+  email: string,
+  name?: string
+): Promise<Perfil | null> {
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: email.trim(),
-    password,
-  });
+  const userName = name || email.split('@')[0];
 
-  if (error) {
-    throw new Error(error.message || 'Error al iniciar sesión.');
+  // Intento 1: insertar con rol 'administrador' (por restricción perfiles_rol_check en español)
+  try {
+    const { data, error } = await supabase
+      .from('perfiles')
+      .upsert(
+        {
+          id: userId,
+          nombre: userName,
+          rol: 'administrador',
+          activo: true,
+        },
+        { onConflict: 'id' }
+      )
+      .select('*')
+      .maybeSingle();
+
+    if (!error && data) {
+      return data as Perfil;
+    }
+  } catch (e) {
+    console.warn('Intento con administrador falló:', e);
   }
 
-  return data;
+  // Intento 2: si la restricción de la base de datos prefiere 'admin'
+  try {
+    const { data, error } = await supabase
+      .from('perfiles')
+      .upsert(
+        {
+          id: userId,
+          nombre: userName,
+          rol: 'admin',
+          activo: true,
+        },
+        { onConflict: 'id' }
+      )
+      .select('*')
+      .maybeSingle();
+
+    if (!error && data) {
+      return data as Perfil;
+    }
+  } catch (e) {
+    console.warn('Intento con admin falló:', e);
+  }
+
+  return null;
+}
+
+async function loginViaProxy(email: string, password: string) {
+  const supabase = getSupabaseClient();
+  const resp = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const json = await resp.json();
+  if (!resp.ok || json.error) {
+    throw new Error(json.error || 'Error al iniciar sesión.');
+  }
+  if (json.session) {
+    await supabase.auth.setSession(json.session);
+  }
+  return json;
+}
+
+export async function loginAdmin(email: string, password: string) {
+  const supabase = getSupabaseClient();
+  const cleanEmail = email.trim();
+
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password,
+    });
+
+    if (error) {
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+        return await loginViaProxy(cleanEmail, password);
+      }
+      throw new Error(error.message || 'Error al iniciar sesión.');
+    }
+
+    return data;
+  } catch (err: any) {
+    if (err?.message?.includes('Failed to fetch') || err?.message?.includes('NetworkError') || err?.name === 'TypeError') {
+      return await loginViaProxy(cleanEmail, password);
+    }
+    throw err;
+  }
+}
+
+async function registerViaProxy(email: string, password: string, nombre?: string) {
+  const supabase = getSupabaseClient();
+  const resp = await fetch('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, name: nombre }),
+  });
+  const json = await resp.json();
+  if (!resp.ok || json.error) {
+    throw new Error(json.error || 'Error al registrar usuario.');
+  }
+  if (json.session) {
+    await supabase.auth.setSession(json.session);
+  }
+  return json;
 }
 
 export async function registerAdmin(
@@ -83,36 +186,52 @@ export async function registerAdmin(
   const supabase = getSupabaseClient();
   const cleanEmail = email.trim().toLowerCase();
 
-  const { data, error } = await supabase.auth.signUp({
-    email: cleanEmail,
-    password,
-    options: {
-      data: {
-        nombre: nombre || 'Administrador',
-        rol,
-      },
-    },
-  });
+  let dataResult: any = null;
 
-  if (error) {
-    throw new Error(error.message || 'Error al registrar usuario.');
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password,
+      options: {
+        data: {
+          nombre: nombre || 'Administrador',
+          rol,
+        },
+      },
+    });
+
+    if (error) {
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+        dataResult = await registerViaProxy(cleanEmail, password, nombre);
+      } else {
+        throw new Error(error.message || 'Error al registrar usuario.');
+      }
+    } else {
+      dataResult = data;
+    }
+  } catch (err: any) {
+    if (err?.message?.includes('Failed to fetch') || err?.message?.includes('NetworkError') || err?.name === 'TypeError') {
+      dataResult = await registerViaProxy(cleanEmail, password, nombre);
+    } else {
+      throw err;
+    }
   }
 
   // Si existe tabla perfiles y el usuario fue creado, registrar o actualizar
-  if (data.user) {
+  if (dataResult?.user) {
     try {
       await supabase.from('perfiles').upsert({
-        id: data.user.id,
-        email: cleanEmail,
+        id: dataResult.user.id,
         nombre: nombre || cleanEmail.split('@')[0],
         rol,
+        activo: true,
       });
     } catch {
       // Ignorar si perfiles se maneja mediante el trigger on_auth_user_created
     }
   }
 
-  return data;
+  return dataResult;
 }
 
 export async function logoutAdmin() {
@@ -121,6 +240,37 @@ export async function logoutAdmin() {
   if (error) {
     console.warn('Error al cerrar sesión:', error.message);
   }
+}
+
+export async function sendMagicLink(email: string) {
+  const supabase = getSupabaseClient();
+  const cleanEmail = email.trim().toLowerCase();
+  const { data, error } = await supabase.auth.signInWithOtp({
+    email: cleanEmail,
+    options: {
+      emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/admin` : undefined,
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Error al enviar enlace de acceso.');
+  }
+
+  return data;
+}
+
+export async function resetAdminPassword(email: string) {
+  const supabase = getSupabaseClient();
+  const cleanEmail = email.trim().toLowerCase();
+  const { data, error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+    redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/admin` : undefined,
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Error al solicitar restablecimiento de contraseña.');
+  }
+
+  return data;
 }
 
 export async function getAdminSession() {

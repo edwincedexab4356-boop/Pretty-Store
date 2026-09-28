@@ -130,8 +130,11 @@ export interface Gasto {
 export interface Perfil {
   id: string;
   nombre: string | null;
-  rol: 'admin' | 'cajero' | 'cliente';
+  telefono?: string | null;
+  rol: 'admin' | 'administrador' | 'cajero' | 'cliente';
+  activo: boolean;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface StoreConfig {

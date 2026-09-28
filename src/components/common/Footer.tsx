@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Smartphone, Mail, MapPin, Instagram, Facebook, Twitter, Lock } from 'lucide-react';
+import { Smartphone, Mail, MapPin, Instagram, Lock } from 'lucide-react';
 import { Categoria } from '../../types/database';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 import { LegalModal, LegalTab } from './LegalModal';
@@ -70,28 +70,6 @@ export const Footer: React.FC<FooterProps> = ({ categories, onSelectCategory, on
                   aria-label="Instagram"
                 >
                   <Instagram size={14} />
-                </a>
-              )}
-              {config.facebook && (
-                <a
-                  href={config.facebook}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="p-2 border border-white/10 hover:border-white/30 hover:text-white transition-colors"
-                  aria-label="Facebook"
-                >
-                  <Facebook size={14} />
-                </a>
-              )}
-              {config.twitter && (
-                <a
-                  href={config.twitter}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="p-2 border border-white/10 hover:border-white/30 hover:text-white transition-colors"
-                  aria-label="Twitter / X"
-                >
-                  <Twitter size={14} />
                 </a>
               )}
             </div>
@@ -191,10 +169,16 @@ export const Footer: React.FC<FooterProps> = ({ categories, onSelectCategory, on
                 <Mail size={13} className="text-[#c5a059]" />
                 <span>{config.email || 'contacto@pretty-store.com'}</span>
               </p>
-              <p className="flex items-center gap-2 text-stone-400">
-                <MapPin size={13} className="text-stone-500 shrink-0" />
-                <span>{config.direccion || 'Costa del Este, Ciudad de Panamá'}</span>
-              </p>
+              <a
+                href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 text-stone-400 hover:text-white transition-colors group cursor-pointer"
+                title="Ver ubicación en Google Maps"
+              >
+                <MapPin size={13} className="text-[#c5a059] shrink-0 group-hover:scale-110 transition-transform" />
+                <span className="hover:underline underline-offset-4">Ver Ubicación en Google Maps</span>
+              </a>
             </div>
 
             {/* Payment methods list */}

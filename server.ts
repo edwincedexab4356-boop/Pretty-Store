@@ -3,9 +3,28 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { createClient } from '@supabase/supabase-js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const rawUrl = (process.env.VITE_SUPABASE_URL || '').trim();
+const rawKey = (process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+
+const isUsableUrl = (u: string) =>
+  Boolean(u && u.startsWith('https://') && !u.includes('placeholder') && !u.includes('your-project-id') && !u.includes('xypdbyccffztaxnvgvrl'));
+
+const isUsableKey = (k: string) =>
+  Boolean(k && k.startsWith('eyJ') && !k.includes('placeholder'));
+
+const SUPABASE_URL = isUsableUrl(rawUrl) ? rawUrl : 'https://jlxlbdyerlphrcjxhros.supabase.co';
+const SUPABASE_ANON_KEY = isUsableKey(rawKey)
+  ? rawKey
+  : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpseGxiZHllcmxwaHJjanhocm9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1Nzk1OTEsImV4cCI6MjEwNjE1NTU5MX0.7D8RwYfNs6U3E5wcA-diT8HRvZu6_C2n1CDPJSuyIvc';
+
+const serverSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false }
+});
 
 async function startServer() {
   const app = express();
@@ -14,6 +33,51 @@ async function startServer() {
   // Max body limit for uploads (up to 15MB base64 for 10MB video)
   app.use(express.json({ limit: '20mb' }));
   app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+
+  // Auth Proxy: Bypasses browser AdBlockers, Brave Shields, and iframe CORS
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Faltan credenciales requeridas.' });
+      }
+      const { data, error } = await serverSupabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+      if (error) {
+        return res.status(400).json({ error: error.message });
+      }
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || 'Error en el servidor de autenticación.' });
+    }
+  });
+
+  app.post('/api/auth/register', async (req, res) => {
+    try {
+      const { email, password, name } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Faltan credenciales requeridas.' });
+      }
+      const { data, error } = await serverSupabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: {
+          data: {
+            nombre: name || email.split('@')[0],
+            rol: 'admin',
+          },
+        },
+      });
+      if (error) {
+        return res.status(400).json({ error: error.message });
+      }
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || 'Error en el servidor de registro.' });
+    }
+  });
 
   // Ensure public/videos directory exists
   const videosDir = path.resolve(__dirname, 'public/videos');

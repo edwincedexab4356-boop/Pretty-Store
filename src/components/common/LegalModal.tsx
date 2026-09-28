@@ -251,10 +251,15 @@ export const LegalModal: React.FC<LegalModalProps> = ({
                     <MapPin size={14} className="text-[#c5a059]" />
                     <span>Ubicación de la Boutique</span>
                   </div>
-                  <p className="text-xs text-stone-300">
-                    {config.direccion || 'Boulevard Costa del Este, Torre Financial Park, Ciudad de Panamá'}
-                  </p>
-                  <p className="text-[11px] text-stone-500">Atención en tienda física previa coordinación</p>
+                  <a
+                    href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-[#c5a059] hover:underline underline-offset-4 cursor-pointer"
+                  >
+                    <span>Ver Ubicación en Google Maps (maps.app.goo.gl)</span>
+                  </a>
+                  <p className="text-[11px] text-stone-500">Atención en boutique física previa coordinación</p>
                 </div>
               </div>
             </div>

@@ -28,7 +28,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   onNavigateTab,
   onGoToStore,
 }) => {
-  const { session, isLoading, isStaff, role, signOut, user } = useAdminAuth();
+  const { session, isLoading, isStaff, role, profile, isActive, signOut, user } = useAdminAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedOrderForDetail, setSelectedOrderForDetail] = useState<Pedido | null>(null);
@@ -41,7 +41,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     setIsSqlFixOpen(true);
   };
 
-  // If loading session
+  // If loading session or determining role
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#09090b] flex flex-col items-center justify-center text-stone-300 gap-4">
@@ -63,8 +63,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     return <AdminLogin onBackToStore={onGoToStore} />;
   }
 
-  // If authenticated but not staff (role is 'cliente')
+  // If authenticated but account is inactive or not staff
   if (!isStaff) {
+    const isInactive = !isActive || profile?.activo === false;
     return (
       <div className="min-h-screen bg-[#09090b] flex flex-col items-center justify-center p-6 text-stone-100 selection:bg-[#c5a059] selection:text-black">
         <div className="w-full max-w-md bg-[#0e0e12] border border-rose-500/20 rounded-2xl p-8 sm:p-10 shadow-2xl text-center space-y-5">
@@ -80,10 +81,18 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               Acceso Restringido (403)
             </span>
             <h1 className="text-xl font-serif-luxury font-semibold text-white">
-              Cuenta no autorizada
+              {isInactive ? 'Cuenta Desactivada' : 'Cuenta no autorizada'}
             </h1>
             <p className="text-xs text-stone-400 mt-2 leading-relaxed">
-              La cuenta <strong className="text-white">{user?.email}</strong> está registrada con rol de <strong className="text-amber-300 capitalize">{role || 'Cliente'}</strong>. Este panel es privado y está reservado para el personal administrativo y cajeros de Pretty-Store.
+              {isInactive ? (
+                <>
+                  La cuenta <strong className="text-white">{user?.email}</strong> se encuentra actualmente desactivada. Contacta al administrador para reactivar tu acceso.
+                </>
+              ) : (
+                <>
+                  La cuenta <strong className="text-white">{user?.email}</strong> está registrada con rol de <strong className="text-amber-300 capitalize">{role || 'Cliente'}</strong>. Este panel es privado y está reservado para el personal administrativo y cajeros de Pretty-Store.
+                </>
+              )}
             </p>
           </div>
 

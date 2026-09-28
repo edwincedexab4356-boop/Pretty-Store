@@ -5,9 +5,10 @@ import {
   ArrowRight,
   RefreshCw,
   AlertCircle,
-  CheckCircle2,
   Store,
   KeyRound,
+  User,
+  CheckCircle2,
 } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 
@@ -16,10 +17,13 @@ interface AdminLoginProps {
 }
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
-  const { signIn, isLoading } = useAdminAuth();
+  const { signIn, signUp } = useAdminAuth();
 
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -28,7 +32,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    const cleanEmail = email.trim();
+    let cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !password) {
       setErrorMessage('Por favor completa todos los campos.');
       return;
@@ -39,15 +43,48 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
       return;
     }
 
+    setIsSubmitting(true);
+
     try {
-      await signIn(cleanEmail, password);
+      if (mode === 'register') {
+        if (!cleanEmail.includes('@')) {
+          setErrorMessage('Para registrarte debes ingresar un correo electrónico válido (ej. admin@pretty-store.com).');
+          setIsSubmitting(false);
+          return;
+        }
+
+        await signUp(cleanEmail, password, nombre.trim() || undefined);
+        setSuccessMessage('¡Cuenta creada con éxito! Ingresando al panel...');
+        return;
+      }
+
+      // Modo Inicio de Sesión
+      try {
+        await signIn(cleanEmail, password);
+        return;
+      } catch (firstErr: any) {
+        if (!cleanEmail.includes('@')) {
+          await signIn(`${cleanEmail}@gmail.com`, password);
+          return;
+        }
+        throw firstErr;
+      }
     } catch (err: any) {
+      console.error('Error de autenticación:', err);
       const msg = err?.message || 'Error en la autenticación con Supabase.';
-      if (msg.includes('Invalid login credentials')) {
-        setErrorMessage('Credenciales inválidas. Verifica tu correo y contraseña.');
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('fetch')) {
+        setErrorMessage('Error de conexión ("Failed to fetch"): El navegador no pudo conectar con Supabase. Esto ocurre si un bloqueador de anuncios (AdBlock / Brave Shields) está bloqueando supabase.co, o si la sesión anterior quedó guardada. Recarga la página (Ctrl+F5 o Cmd+Shift+R) e inténtalo de nuevo.');
+      } else if (msg.includes('Invalid login credentials')) {
+        setErrorMessage('Credenciales inválidas. Si aún no has creado tu usuario en este nuevo proyecto de Supabase, cámbiate a la pestaña "Crear Administrador".');
+      } else if (msg.includes('Email not confirmed')) {
+        setErrorMessage('El correo no ha sido confirmado en Supabase. En Supabase > Authentication > Users confirma el usuario o marca "Auto Confirm User".');
+      } else if (msg.includes('rate limit')) {
+        setErrorMessage('Límite de correos en Supabase. Ve a Supabase > Authentication > Users y pulsa "Add user" > "Create user" marcando "Auto Confirm User".');
       } else {
         setErrorMessage(msg);
       }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -70,9 +107,9 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
       </div>
 
       {/* Login Box */}
-      <div className="w-full max-w-md bg-[#0e0e12] border border-white/[0.08] rounded-2xl p-8 sm:p-10 shadow-2xl relative">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-full overflow-hidden bg-black border border-white/15 flex items-center justify-center mx-auto mb-4">
+      <div className="w-full max-w-md bg-[#0e0e12] border border-white/[0.08] rounded-2xl p-6 sm:p-8 shadow-2xl relative">
+        <div className="text-center mb-6">
+          <div className="w-14 h-14 rounded-full overflow-hidden bg-black border border-white/15 flex items-center justify-center mx-auto mb-3">
             <img
               src="/images/logo/logotipo.jpeg"
               alt="Logo"
@@ -91,24 +128,74 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
           <h1 className="text-xl sm:text-2xl font-serif-luxury font-semibold text-white tracking-wide">
             Panel de Administración
           </h1>
-          <p className="text-xs text-stone-400 mt-2 font-light">
-            Ingresa tus credenciales autorizadas para gestionar la tienda
+          <p className="text-xs text-stone-400 mt-1.5 font-light">
+            {mode === 'login'
+              ? 'Ingresa tus credenciales para gestionar la tienda'
+              : 'Registra el primer administrador para tu tienda'}
           </p>
+        </div>
+
+        {/* Mode Toggle Tabs */}
+        <div className="grid grid-cols-2 p-1 bg-white/[0.04] border border-white/10 rounded-xl mb-5">
+          <button
+            type="button"
+            onClick={() => {
+              setMode('login');
+              setErrorMessage(null);
+            }}
+            className={`py-2 text-xs font-medium rounded-lg transition-all cursor-pointer ${
+              mode === 'login'
+                ? 'bg-[#c5a059] text-black shadow-md font-semibold'
+                : 'text-stone-400 hover:text-white'
+            }`}
+          >
+            Iniciar Sesión
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode('register');
+              setErrorMessage(null);
+            }}
+            className={`py-2 text-xs font-medium rounded-lg transition-all cursor-pointer ${
+              mode === 'register'
+                ? 'bg-[#c5a059] text-black shadow-md font-semibold'
+                : 'text-stone-400 hover:text-white'
+            }`}
+          >
+            Crear Administrador
+          </button>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
+          {mode === 'register' && (
+            <div>
+              <label className="block text-xs font-medium text-stone-300 mb-1.5 flex items-center gap-1.5">
+                <User size={13} className="text-[#c5a059]" />
+                <span>Nombre Completo</span>
+              </label>
+              <input
+                type="text"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                placeholder="Ej. Edwin Administrador"
+                className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 text-sm text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] focus:ring-1 focus:ring-[#c5a059]/40 transition-colors"
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-medium text-stone-300 mb-1.5 flex items-center gap-1.5">
               <Mail size={13} className="text-[#c5a059]" />
-              <span>Correo Electrónico</span>
+              <span>{mode === 'login' ? 'Correo Electrónico o Usuario' : 'Correo Electrónico'}</span>
             </label>
             <input
-              type="email"
+              type="text"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@tuempresa.com"
+              placeholder={mode === 'login' ? 'admin@pretty-store.com o usuario' : 'admin@pretty-store.com'}
               className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 text-sm text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] focus:ring-1 focus:ring-[#c5a059]/40 transition-colors"
             />
           </div>
@@ -136,25 +223,25 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
           )}
 
           {successMessage && (
-            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center gap-2">
-              <CheckCircle2 size={15} className="shrink-0 text-emerald-400" />
-              <span>{successMessage}</span>
+            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-start gap-2">
+              <CheckCircle2 size={15} className="shrink-0 text-emerald-400 mt-0.5" />
+              <span className="leading-relaxed">{successMessage}</span>
             </div>
           )}
 
           <button
             type="submit"
-            disabled={isLoading}
-            className="w-full py-3.5 px-4 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+            disabled={isSubmitting}
+            className="w-full py-3.5 px-4 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-semibold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
           >
-            {isLoading ? (
+            {isSubmitting ? (
               <>
                 <RefreshCw size={16} className="animate-spin text-black" />
-                <span>Verificando credenciales...</span>
+                <span>{mode === 'login' ? 'Verificando credenciales...' : 'Creando administrador...'}</span>
               </>
             ) : (
               <>
-                <span>Iniciar Sesión</span>
+                <span>{mode === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta y Entrar'}</span>
                 <ArrowRight size={16} />
               </>
             )}
@@ -165,7 +252,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
         <div className="mt-6 pt-5 border-t border-white/[0.06] text-center">
           <p className="text-[11px] text-stone-500 flex items-center justify-center gap-1.5">
             <Lock size={12} className="text-stone-500" />
-            <span>Acceso privado exclusivo para administradores</span>
+            <span>Acceso privado exclusivo para la administración de Pretty-Store</span>
           </p>
         </div>
       </div>
