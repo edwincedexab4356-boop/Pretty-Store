@@ -1,19 +1,28 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   getAdminSession,
   loginAdmin,
   registerAdmin,
   logoutAdmin,
   onAdminAuthChange,
+  fetchUserProfile,
 } from '../services/adminService';
+import { Perfil } from '../types/database';
+
+export type UserRole = 'admin' | 'cajero' | 'cliente';
 
 interface AdminAuthContextType {
   user: any | null;
   session: any | null;
+  profile: Perfil | null;
+  role: UserRole | null;
+  isAdmin: boolean;
+  isStaff: boolean;
   isLoading: boolean;
   signIn: (email: string, pass: string) => Promise<void>;
   signUp: (email: string, pass: string, name?: string) => Promise<void>;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefined);
@@ -21,29 +30,75 @@ const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefin
 export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<any | null>(null);
   const [user, setUser] = useState<any | null>(null);
+  const [profile, setProfile] = useState<Perfil | null>(null);
+  const [role, setRole] = useState<UserRole | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const loadRoleForUser = useCallback(async (currentUser: any) => {
+    if (!currentUser) {
+      setProfile(null);
+      setRole(null);
+      return;
+    }
+
+    try {
+      const p = await fetchUserProfile(currentUser.id);
+      if (p) {
+        setProfile(p);
+        setRole(p.rol || 'cliente');
+        return;
+      }
+    } catch {
+      // Fallback
+    }
+
+    // Fallback: check JWT metadata
+    const metaRole =
+      currentUser.app_metadata?.rol ||
+      currentUser.user_metadata?.rol ||
+      'admin'; // En instalaciones nuevas sin tabla perfiles aún, el usuario inicial autenticado actúa como admin
+
+    setRole((metaRole as UserRole) || 'admin');
+  }, []);
+
+  const refreshProfile = useCallback(async () => {
+    if (user) {
+      await loadRoleForUser(user);
+    }
+  }, [user, loadRoleForUser]);
 
   useEffect(() => {
     // Initial session load
     getAdminSession()
-      .then((sess) => {
+      .then(async (sess) => {
         setSession(sess);
-        setUser(sess?.user ?? null);
+        const currentUser = sess?.user ?? null;
+        setUser(currentUser);
+        if (currentUser) {
+          await loadRoleForUser(currentUser);
+        }
       })
       .catch((err) => console.warn('Error reading admin session:', err))
       .finally(() => setIsLoading(false));
 
     // Listen to Supabase auth events
-    const subscription = onAdminAuthChange((_event, sess) => {
+    const subscription = onAdminAuthChange(async (_event, sess) => {
       setSession(sess);
-      setUser(sess?.user ?? null);
+      const currentUser = sess?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        await loadRoleForUser(currentUser);
+      } else {
+        setProfile(null);
+        setRole(null);
+      }
       setIsLoading(false);
     });
 
     return () => {
       subscription?.unsubscribe();
     };
-  }, []);
+  }, [loadRoleForUser]);
 
   const signIn = async (email: string, pass: string) => {
     setIsLoading(true);
@@ -51,6 +106,9 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const data = await loginAdmin(email, pass);
       setSession(data.session);
       setUser(data.user);
+      if (data.user) {
+        await loadRoleForUser(data.user);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -63,6 +121,9 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (data.session) {
         setSession(data.session);
         setUser(data.user);
+        if (data.user) {
+          await loadRoleForUser(data.user);
+        }
       }
     } finally {
       setIsLoading(false);
@@ -75,20 +136,30 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       await logoutAdmin();
       setSession(null);
       setUser(null);
+      setProfile(null);
+      setRole(null);
     } finally {
       setIsLoading(false);
     }
   };
+
+  const isAdmin = role === 'admin';
+  const isStaff = role === 'admin' || role === 'cajero';
 
   return (
     <AdminAuthContext.Provider
       value={{
         user,
         session,
+        profile,
+        role,
+        isAdmin,
+        isStaff,
         isLoading,
         signIn,
         signUp,
         signOut,
+        refreshProfile,
       }}
     >
       {children}
@@ -103,3 +174,4 @@ export function useAdminAuth() {
   }
   return context;
 }
+

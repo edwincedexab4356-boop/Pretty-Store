@@ -45,23 +45,55 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     }, 600);
   };
 
-  const handlePrevImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handlePrevImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setCurrentImgIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
   };
 
-  const handleNextImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleNextImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setCurrentImgIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+  };
+
+  // Touch Swipe tracking for phones & tablets
+  const touchStartX = React.useRef<number | null>(null);
+  const touchStartY = React.useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!hasMultipleImages) return;
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!hasMultipleImages || touchStartX.current === null) return;
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const diffX = touchStartX.current - endX;
+    const diffY = (touchStartY.current || 0) - endY;
+
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 30) {
+      if (diffX > 0) {
+        handleNextImage();
+      } else {
+        handlePrevImage();
+      }
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
   };
 
   return (
     <article
       onClick={() => onQuickView && onQuickView(product)}
-      className="group flex flex-col bg-[#0e0e11] border border-white/[0.07] hover:border-white/[0.2] transition-colors duration-300 cursor-pointer overflow-hidden rounded-sm"
+      className="group flex flex-col bg-[#0e0e11] border border-white/[0.07] hover:border-white/[0.2] transition-colors duration-300 cursor-pointer overflow-hidden rounded-sm select-none"
     >
       {/* 1. Protagonist Image Container (consistent 4:5 aspect ratio) with Carousel */}
-      <div className="relative aspect-[4/5] w-full overflow-hidden bg-[#141418] flex items-center justify-center">
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className="relative aspect-[4/5] w-full overflow-hidden bg-[#141418] flex items-center justify-center touch-pan-y"
+      >
         {currentImage && !imgError ? (
           isCurrentVideo ? (
             <video

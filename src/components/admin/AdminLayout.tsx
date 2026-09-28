@@ -13,6 +13,7 @@ import { ClientsView } from './views/ClientsView';
 import { SalesView } from './views/SalesView';
 import { SettingsView } from './views/SettingsView';
 import { SupabasePermissionsModal } from './SupabasePermissionsModal';
+import { SupabaseQuotaModal } from './SupabaseQuotaModal';
 import { Pedido } from '../../types/database';
 import { RefreshCw } from 'lucide-react';
 
@@ -27,11 +28,12 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   onNavigateTab,
   onGoToStore,
 }) => {
-  const { session, isLoading } = useAdminAuth();
+  const { session, isLoading, isStaff, role, signOut, user } = useAdminAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedOrderForDetail, setSelectedOrderForDetail] = useState<Pedido | null>(null);
   const [isSqlFixOpen, setIsSqlFixOpen] = useState(false);
+  const [isQuotaModalOpen, setIsQuotaModalOpen] = useState(false);
   const [failedActionDescription, setFailedActionDescription] = useState<string | undefined>(undefined);
 
   const handleOpenSqlFix = (desc?: string) => {
@@ -59,6 +61,49 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   // If not authenticated, show login page
   if (!session) {
     return <AdminLogin onBackToStore={onGoToStore} />;
+  }
+
+  // If authenticated but not staff (role is 'cliente')
+  if (!isStaff) {
+    return (
+      <div className="min-h-screen bg-[#09090b] flex flex-col items-center justify-center p-6 text-stone-100 selection:bg-[#c5a059] selection:text-black">
+        <div className="w-full max-w-md bg-[#0e0e12] border border-rose-500/20 rounded-2xl p-8 sm:p-10 shadow-2xl text-center space-y-5">
+          <div className="w-14 h-14 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mx-auto text-rose-400">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
+
+          <div>
+            <span className="text-[10px] uppercase tracking-[0.25em] text-rose-400 font-semibold block mb-1">
+              Acceso Restringido (403)
+            </span>
+            <h1 className="text-xl font-serif-luxury font-semibold text-white">
+              Cuenta no autorizada
+            </h1>
+            <p className="text-xs text-stone-400 mt-2 leading-relaxed">
+              La cuenta <strong className="text-white">{user?.email}</strong> está registrada con rol de <strong className="text-amber-300 capitalize">{role || 'Cliente'}</strong>. Este panel es privado y está reservado para el personal administrativo y cajeros de Pretty-Store.
+            </p>
+          </div>
+
+          <div className="pt-2 space-y-2">
+            <button
+              onClick={onGoToStore}
+              className="w-full py-3 px-4 rounded-xl bg-white hover:bg-stone-200 text-black font-medium text-xs uppercase tracking-wider transition-colors cursor-pointer"
+            >
+              Volver a la Tienda
+            </button>
+            <button
+              onClick={signOut}
+              className="w-full py-2.5 px-4 rounded-xl border border-white/10 hover:bg-white/5 text-stone-400 hover:text-white text-xs transition-colors cursor-pointer"
+            >
+              Cerrar Sesión e Ingresar con Otra Cuenta
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const handleRefresh = () => {
@@ -96,6 +141,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             isRefreshing={isRefreshing}
             onGoToStore={onGoToStore}
             onOpenSqlFix={() => handleOpenSqlFix()}
+            onOpenQuotaModal={() => setIsQuotaModalOpen(true)}
           />
 
           {/* Content body */}
@@ -108,7 +154,12 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               />
             )}
 
-            {currentTab === 'productos' && <ProductsView onOpenSqlFix={handleOpenSqlFix} />}
+            {currentTab === 'productos' && (
+              <ProductsView
+                onOpenSqlFix={handleOpenSqlFix}
+                onOpenQuotaModal={() => setIsQuotaModalOpen(true)}
+              />
+            )}
 
             {currentTab === 'categorias' && <CategoriesView onOpenSqlFix={handleOpenSqlFix} />}
 
@@ -125,7 +176,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
             {currentTab === 'ventas' && <SalesView onOpenSqlFix={handleOpenSqlFix} />}
 
-            {currentTab === 'configuracion' && <SettingsView />}
+            {currentTab === 'configuracion' && (
+              <SettingsView onOpenQuotaModal={() => setIsQuotaModalOpen(true)} />
+            )}
           </main>
         </div>
       </div>
@@ -136,6 +189,12 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
         onClose={() => setIsSqlFixOpen(false)}
         failedActionDescription={failedActionDescription}
         onPermissionsFixed={handleRefresh}
+      />
+
+      {/* Supabase Storage and Limits Quota Modal */}
+      <SupabaseQuotaModal
+        isOpen={isQuotaModalOpen}
+        onClose={() => setIsQuotaModalOpen(false)}
       />
     </div>
   );

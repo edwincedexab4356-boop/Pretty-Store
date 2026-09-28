@@ -23,6 +23,9 @@ import {
   HelpCircle,
   Video,
   Play,
+  ChevronLeft,
+  ChevronRight,
+  HardDrive,
 } from 'lucide-react';
 import {
   getAdminProducts,
@@ -34,6 +37,8 @@ import {
   getAdminCategories,
   uploadProductImageToSupabase,
   PROJECT_MEDIA_OPTIONS,
+  checkSupabaseStorageAndLimits,
+  SupabaseQuotaReport,
 } from '../../../services/adminService';
 import { Producto, Categoria } from '../../../types/database';
 import { getProductImages, isVideoMedia } from '../../../utils/productImages';
@@ -42,12 +47,14 @@ import { PermissionErrorBanner } from '../PermissionErrorBanner';
 
 interface ProductsViewProps {
   onOpenSqlFix?: (actionDesc?: string) => void;
+  onOpenQuotaModal?: () => void;
 }
 
-export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
+export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix, onOpenQuotaModal }) => {
   const [products, setProducts] = useState<Producto[]>([]);
   const [categories, setCategories] = useState<Categoria[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [quotaReport, setQuotaReport] = useState<SupabaseQuotaReport | null>(null);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,7 +73,6 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formPrice, setFormPrice] = useState<number | string>('');
-  const [formCost, setFormCost] = useState<number | string>('');
   const [formStock, setFormStock] = useState<number | string>(10);
   const [formCategory, setFormCategory] = useState('');
   const [formImageUrl, setFormImageUrl] = useState('');
@@ -100,6 +106,9 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
 
   useEffect(() => {
     loadData();
+    checkSupabaseStorageAndLimits()
+      .then((rep) => setQuotaReport(rep))
+      .catch(() => {});
   }, []);
 
   const openCreateModal = () => {
@@ -107,7 +116,6 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
     setFormName('');
     setFormDescription('');
     setFormPrice('');
-    setFormCost('');
     setFormStock(10);
     setFormCategory(categories[0]?.id || '');
     setFormImageUrl('');
@@ -122,7 +130,6 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
     setFormName(prod.nombre);
     setFormDescription(prod.descripcion || '');
     setFormPrice(prod.precio);
-    setFormCost(prod.costo || 0);
     setFormStock(prod.stock);
     setFormCategory(prod.categoria_id);
     const parsedImages = getProductImages(prod);
@@ -208,6 +215,28 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
     });
   };
 
+  const handleMoveImageLeft = (index: number) => {
+    if (index <= 0) return;
+    setFormImages((prev) => {
+      const copy = [...prev];
+      const temp = copy[index - 1];
+      copy[index - 1] = copy[index];
+      copy[index] = temp;
+      return copy;
+    });
+  };
+
+  const handleMoveImageRight = (index: number) => {
+    setFormImages((prev) => {
+      if (index >= prev.length - 1) return prev;
+      const copy = [...prev];
+      const temp = copy[index + 1];
+      copy[index + 1] = copy[index];
+      copy[index] = temp;
+      return copy;
+    });
+  };
+
   const handleRemoveImage = (index: number) => {
     setFormImages((prev) => prev.filter((_, idx) => idx !== index));
   };
@@ -239,7 +268,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
           nombre: formName,
           descripcion: formDescription,
           precio: Number(formPrice),
-          costo: Number(formCost) || 0,
+          costo: 0,
           stock: Number(formStock) || 0,
           categoria_id: formCategory,
           imagen_url: finalImages[0] || '',
@@ -256,7 +285,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                   ...updated,
                   imagen_url: finalImages[0] || '',
                   imagenes: finalImages,
-                  categoria: categories.find((c) => c.id === formCategory) || p.categoria,
+                  categoria: categories.find((c) => String(c.id) === String(formCategory)) || p.categoria,
                 }
               : p
           )
@@ -268,7 +297,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
           nombre: formName,
           descripcion: formDescription,
           precio: Number(formPrice),
-          costo: Number(formCost) || 0,
+          costo: 0,
           stock: Number(formStock) || 0,
           categoria_id: formCategory,
           imagen_url: finalImages[0] || '',
@@ -277,7 +306,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
         });
 
         // Inserción optimista inmediata
-        const cat = categories.find((c) => c.id === formCategory);
+        const cat = categories.find((c) => String(c.id) === String(formCategory));
         setProducts((prev) => [
           {
             ...created,
@@ -302,11 +331,18 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
   };
 
   const handleToggleActive = async (prod: Producto) => {
+    const nextState = !prod.activo;
     try {
-      await toggleProductActive(prod.id, !prod.activo);
+      await toggleProductActive(prod.id, nextState);
       setProducts((prev) =>
-        prev.map((p) => (p.id === prod.id ? { ...p, activo: !p.activo } : p))
+        prev.map((p) => (p.id === prod.id ? { ...p, activo: nextState } : p))
       );
+      setActionMessage({
+        type: 'success',
+        text: nextState
+          ? `"${prod.nombre}" ahora está ACTIVO y visible en la tienda.`
+          : `"${prod.nombre}" ahora está OCULTO de la tienda (no se mostrará a los clientes).`,
+      });
     } catch (err: any) {
       setActionMessage({ type: 'error', text: err?.message || 'Error al cambiar estado.' });
     }
@@ -416,6 +452,32 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
         </div>
 
         <div className="flex items-center gap-2.5 self-start md:self-auto flex-wrap">
+          {onOpenQuotaModal && (
+            <button
+              onClick={onOpenQuotaModal}
+              className={`px-3.5 py-2.5 rounded-xl border text-xs font-medium flex items-center justify-center gap-2 cursor-pointer transition-colors ${
+                quotaReport?.isApproachingLimit
+                  ? 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                  : 'bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 border-white/[0.08]'
+              }`}
+              title="Monitorear almacenamiento de Storage (1 GB) y Tablas de Base de Datos (500 MB)"
+            >
+              <HardDrive size={15} className="text-[#c5a059]" />
+              <span>Almacenamiento & Tablas</span>
+              {quotaReport && (
+                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                  quotaReport.status === 'critical'
+                    ? 'bg-rose-500/20 text-rose-300'
+                    : quotaReport.status === 'alert'
+                    ? 'bg-amber-500/20 text-amber-300'
+                    : 'bg-emerald-500/20 text-emerald-300'
+                }`}>
+                  {quotaReport.storageUsedMB} MB ({quotaReport.storagePercent}%)
+                </span>
+              )}
+            </button>
+          )}
+
           <button
             onClick={() => setShowBulkGuide(true)}
             className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 font-medium text-xs border border-white/[0.08] flex items-center justify-center gap-2 cursor-pointer transition-colors"
@@ -434,6 +496,22 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
           </button>
         </div>
       </div>
+
+      {/* Quota Warning Banner if approaching storage limit */}
+      {quotaReport?.isApproachingLimit && (
+        <div
+          onClick={onOpenQuotaModal}
+          className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-xs text-amber-200 cursor-pointer hover:bg-amber-500/15 transition-colors"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertCircle size={16} className="text-amber-400 shrink-0" />
+            <span>{quotaReport.message}</span>
+          </div>
+          <span className="font-semibold underline shrink-0 text-amber-300 text-[11px]">
+            Ver detalle y consejos →
+          </span>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -473,9 +551,9 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
             className="w-full px-3.5 py-2.5 rounded-xl bg-[#0e0e12] border border-white/10 text-xs text-stone-200 focus:outline-none focus:border-[#c5a059] cursor-pointer transition-colors"
           >
             <option value="all">Todos los Estados</option>
-            <option value="active">Solo Activos (En Tienda)</option>
-            <option value="inactive">Solo Inactivos (Ocultos)</option>
-            <option value="out_of_stock">Solo Agotados (Stock 0)</option>
+            <option value="active">🟢 Solo Activos (Visibles en Tienda)</option>
+            <option value="inactive">👁️‍🗨️ Solo Ocultos (No se muestran)</option>
+            <option value="out_of_stock">⚠️ Solo Agotados (Stock 0)</option>
           </select>
         </div>
       </div>
@@ -606,26 +684,26 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                       )}
                     </td>
 
-                    {/* Status */}
+                    {/* Status: Activo vs Oculto */}
                     <td className="py-3 px-4">
                       <button
                         onClick={() => handleToggleActive(p)}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors cursor-pointer ${
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
                           p.activo
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
-                            : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
+                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25'
+                            : 'bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25'
                         }`}
-                        title="Haz clic para activar o desactivar"
+                        title={p.activo ? 'Clic para Ocultar este producto de la tienda' : 'Clic para Hacer Activo y visible en la tienda'}
                       >
                         {p.activo ? (
                           <>
-                            <Eye size={12} />
+                            <Eye size={12} className="text-emerald-400" />
                             <span>Activo</span>
                           </>
                         ) : (
                           <>
-                            <EyeOff size={12} />
-                            <span>Inactivo</span>
+                            <EyeOff size={12} className="text-amber-400" />
+                            <span>Oculto</span>
                           </>
                         )}
                       </button>
@@ -717,20 +795,20 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono focus:outline-none focus:border-amber-500"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Costo ($)</label>
+                  <label className="block text-slate-300 font-semibold mb-1">Stock Disponible *</label>
                   <input
                     type="number"
-                    step="0.01"
                     min="0"
-                    placeholder="15.00"
-                    value={formCost}
-                    onChange={(e) => setFormCost(e.target.value)}
+                    required
+                    value={formStock}
+                    onChange={(e) => setFormStock(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
-                <div>
+                <div className="sm:col-span-2">
                   <label className="block text-slate-300 font-semibold mb-1">Categoría *</label>
                   <select
                     required
@@ -746,17 +824,6 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Stock Disponible *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={formStock}
-                    onChange={(e) => setFormStock(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono focus:outline-none focus:border-amber-500"
-                  />
-                </div>
               </div>
 
               {/* Carrusel de Imágenes y Videos: Subida desde Archivos y Supabase Storage */}
@@ -770,12 +837,19 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                       </span>
                     </label>
                     <span className="text-[10px] text-slate-400">
-                      Puedes subir fotos (.jpg, .png) y videos (.mp4, .webm, máx. 10MB) desde tus archivos.
+                      Puedes ordenar las fotos con las flechas ◀ ▶ y marcar tu foto favorita como Portada ⭐.
                     </span>
                   </div>
-                  <span className="text-[10px] text-amber-400 font-mono">
-                    Supabase Storage
-                  </span>
+                  {onOpenQuotaModal && (
+                    <button
+                      type="button"
+                      onClick={onOpenQuotaModal}
+                      className="text-[10px] text-amber-400 font-mono hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <HardDrive size={11} />
+                      <span>{quotaReport ? `${quotaReport.storageUsedMB} MB / 1GB` : 'Storage CDN'}</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Botón de Carga de Archivos */}
@@ -813,22 +887,28 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                   </label>
                 </div>
 
-                {/* Galería de imágenes y videos cargados */}
+                {/* Galería de imágenes y videos cargados con reordenamiento y favorita */}
                 {formImages.length > 0 && (
                   <div className="space-y-2 pt-2">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
-                      Elementos en el Carrusel (La primera será la portada de tienda):
-                    </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                    <div className="flex items-center justify-between text-[10px] text-slate-400">
+                      <span className="uppercase font-bold tracking-wider">
+                        Fotos en orden de visualización:
+                      </span>
+                      <span className="text-[#c5a059]">
+                        La foto #1 con ⭐ es la Portada principal de la tienda
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-h-64 overflow-y-auto pr-1">
                       {formImages.map((mediaUrl, idx) => {
                         const isVid = isVideoMedia(mediaUrl);
+                        const isPrimary = idx === 0;
                         return (
                           <div
                             key={idx}
-                            className={`relative rounded-xl overflow-hidden border p-1.5 flex flex-col justify-between group ${
-                              idx === 0
-                                ? 'border-amber-500/80 bg-amber-500/5'
-                                : 'border-slate-800 bg-slate-900'
+                            className={`relative rounded-xl overflow-hidden border p-1.5 flex flex-col justify-between group transition-all ${
+                              isPrimary
+                                ? 'border-[#c5a059] bg-[#c5a059]/10 shadow-md ring-1 ring-[#c5a059]/50'
+                                : 'border-slate-800 bg-slate-900 hover:border-slate-700'
                             }`}
                           >
                             <div className="relative aspect-square w-full rounded-lg overflow-hidden bg-black mb-1.5 flex items-center justify-center">
@@ -847,12 +927,17 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                                 />
                               )}
 
-                              {/* Badges */}
-                              <div className="absolute top-1 left-1 flex items-center gap-1">
-                                {idx === 0 && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500 text-slate-950 flex items-center gap-0.5 shadow">
+                              {/* Number Index Badge */}
+                              <div className="absolute top-1 left-1 flex items-center gap-1 z-10">
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold shadow ${
+                                  isPrimary ? 'bg-[#c5a059] text-black' : 'bg-black/80 text-white'
+                                }`}>
+                                  #{idx + 1}
+                                </span>
+                                {isPrimary && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#c5a059] text-slate-950 flex items-center gap-0.5 shadow">
                                     <Star size={10} fill="currentColor" />
-                                    <span>Portada</span>
+                                    <span>Favorita</span>
                                   </span>
                                 )}
                                 {isVid && (
@@ -862,27 +947,58 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                                   </span>
                                 )}
                               </div>
-                            </div>
 
-                            <div className="flex items-center justify-between gap-1 text-[10px]">
-                              {idx !== 0 ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleSetPrimaryImage(idx)}
-                                  className="text-amber-400 hover:underline cursor-pointer"
-                                >
-                                  Hacer Portada
-                                </button>
-                              ) : (
-                                <span className="text-slate-500 font-mono">#1 Portada</span>
-                              )}
+                              {/* Delete button on top right */}
                               <button
                                 type="button"
                                 onClick={() => handleRemoveImage(idx)}
-                                className="p-1 rounded text-rose-400 hover:bg-rose-500/20 cursor-pointer"
+                                className="absolute top-1 right-1 p-1 rounded-full bg-black/75 hover:bg-rose-600 text-white opacity-80 hover:opacity-100 transition-all cursor-pointer z-10"
                                 title="Quitar elemento"
                               >
                                 <X size={12} />
+                              </button>
+                            </div>
+
+                            {/* Reordering Controls: Move Left, Star Favorite, Move Right */}
+                            <div className="flex items-center justify-between gap-1 pt-1 border-t border-white/5 text-[10px]">
+                              {/* Move Left */}
+                              <button
+                                type="button"
+                                onClick={() => handleMoveImageLeft(idx)}
+                                disabled={idx === 0}
+                                className="p-1 rounded bg-black/40 hover:bg-black text-stone-300 disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed transition-colors"
+                                title="Mover foto a la izquierda"
+                              >
+                                <ChevronLeft size={13} />
+                              </button>
+
+                              {/* Favorite / Portada Button */}
+                              {isPrimary ? (
+                                <span className="text-[10px] font-semibold text-[#c5a059] flex items-center gap-0.5">
+                                  <Star size={11} fill="currentColor" />
+                                  <span>Portada</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSetPrimaryImage(idx)}
+                                  className="text-[10px] font-medium text-stone-400 hover:text-[#c5a059] flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="Marcar como foto favorita / portada de tienda"
+                                >
+                                  <Star size={11} />
+                                  <span>Favorita</span>
+                                </button>
+                              )}
+
+                              {/* Move Right */}
+                              <button
+                                type="button"
+                                onClick={() => handleMoveImageRight(idx)}
+                                disabled={idx === formImages.length - 1}
+                                className="p-1 rounded bg-black/40 hover:bg-black text-stone-300 disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed transition-colors"
+                                title="Mover foto a la derecha"
+                              >
+                                <ChevronRight size={13} />
                               </button>
                             </div>
                           </div>
@@ -937,20 +1053,50 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix }) => {
                 </div>
               </div>
 
-              {/* Estado Activo */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <div>
-                  <span className="font-semibold text-white block">Estado Activo</span>
-                  <span className="text-[11px] text-slate-400">
-                    Determina si los clientes pueden ver y comprar este producto
+              {/* Visibilidad en Tienda: Activo vs Oculto */}
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-white text-xs block">
+                    Visibilidad en la Tienda *
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    Controla si los clientes pueden ver y comprar este producto
                   </span>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={formActive}
-                  onChange={(e) => setFormActive(e.target.checked)}
-                  className="w-4 h-4 rounded text-amber-500 accent-amber-500 cursor-pointer"
-                />
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setFormActive(true)}
+                    className={`py-3 px-3.5 rounded-xl border flex items-center justify-center gap-2.5 text-xs font-semibold cursor-pointer transition-all ${
+                      formActive
+                        ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300 ring-1 ring-emerald-500/50 shadow-md'
+                        : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Eye size={17} className={formActive ? 'text-emerald-400' : 'text-slate-500'} />
+                    <div className="text-left">
+                      <span className="block leading-tight font-bold">Activo</span>
+                      <span className="text-[9px] font-normal block opacity-80">Visible en la tienda</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormActive(false)}
+                    className={`py-3 px-3.5 rounded-xl border flex items-center justify-center gap-2.5 text-xs font-semibold cursor-pointer transition-all ${
+                      !formActive
+                        ? 'bg-amber-500/15 border-amber-500 text-amber-300 ring-1 ring-amber-500/50 shadow-md'
+                        : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <EyeOff size={17} className={!formActive ? 'text-amber-400' : 'text-slate-500'} />
+                    <div className="text-left">
+                      <span className="block leading-tight font-bold">Oculto</span>
+                      <span className="text-[9px] font-normal block opacity-80">No se muestra en tienda</span>
+                    </div>
+                  </button>
+                </div>
               </div>
 
               <div className="pt-3 flex items-center justify-end gap-3">

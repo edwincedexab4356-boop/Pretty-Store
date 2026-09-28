@@ -60,6 +60,7 @@ export const CheckoutDemoModal: React.FC = () => {
 
   // Submission & Confirmation
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [confirmedOrder, setConfirmedOrder] = useState<CreatedOrderResult | null>(null);
   const [yappyRedirectUrl, setYappyRedirectUrl] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
@@ -163,6 +164,7 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
     e.preventDefault();
     if (!validateForm()) return;
 
+    setSubmissionError(null);
     setIsSubmitting(true);
 
     try {
@@ -170,6 +172,9 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
         metodoPago === 'tarjeta' && cardNumber
           ? `•••• •••• •••• ${cardNumber.replace(/\s/g, '').slice(-4)}`
           : undefined;
+
+      // Wipe CVV immediately from component memory
+      setCardCvv('');
 
       const orderSummary = await createRealOrder({
         items,
@@ -194,6 +199,8 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
         notas: notas.trim() || undefined,
       });
 
+      // Clear full card data
+      setCardNumber('');
       setConfirmedOrder(orderSummary);
       clearCart();
 
@@ -221,62 +228,11 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
         }, 500);
       }
     } catch (err: any) {
-      console.warn('Error al registrar pedido en Supabase:', err);
-      // Fallback display
-      const generatedId = `PED-${Math.floor(100000 + Math.random() * 900000)}`;
-      const fallbackOrderNumber = `#PED-${generatedId.slice(-6)}`;
-      setConfirmedOrder({
-        orderId: generatedId,
-        orderNumber: fallbackOrderNumber,
-        date: new Date().toLocaleDateString('es-ES', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-        nombre,
-        email: email || `${telefono}@prettystore.com`,
-        telefono,
-        direccion:
-          tipoEntrega === 'retiro'
-            ? 'Retiro en el Local / Tienda'
-            : `${direccion} (Envío vía: ${courier})`,
-        metodoPago,
-        tipoEntrega,
-        courier: tipoEntrega === 'delivery' ? courier : undefined,
-        comprobantePago,
-        subtotal,
-        shipping,
-        total,
-        itemCount: items.reduce((acc, i) => acc + i.quantity, 0),
-        notas: notas.trim() || undefined,
-        items,
-      });
-      clearCart();
-
-      if (metodoPago === 'yappy') {
-        const waUrl = generateYappyWhatsAppUrl(
-          fallbackOrderNumber,
-          generatedId,
-          items
-        );
-        setYappyRedirectUrl(waUrl);
-
-        setTimeout(() => {
-          try {
-            const anchor = document.createElement('a');
-            anchor.href = waUrl;
-            anchor.target = '_blank';
-            anchor.rel = 'noopener noreferrer';
-            document.body.appendChild(anchor);
-            anchor.click();
-            document.body.removeChild(anchor);
-          } catch (e) {
-            console.warn('Could not auto-open WhatsApp link:', e);
-          }
-        }, 500);
-      }
+      console.error('Error al registrar pedido:', err);
+      setCardCvv('');
+      setSubmissionError(
+        err?.message || 'No se pudo procesar el pedido en este momento. Por favor verifica tus datos e inténtalo nuevamente.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -472,6 +428,18 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
               </div>
 
               <form onSubmit={handleSubmitOrder} className="space-y-6">
+                {submissionError && (
+                  <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
+                    <AlertCircle size={17} className="shrink-0 text-rose-400 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-rose-200">No se pudo procesar la orden</p>
+                      <p className="text-[11px] text-rose-300/90 font-light mt-0.5 leading-relaxed">
+                        {submissionError}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* 1. SELECTOR: DELIVERY O RETIRO EN EL LOCAL */}
                 <div className="space-y-2">
                   <label className="text-[11px] uppercase tracking-[0.16em] text-stone-300 font-light block">

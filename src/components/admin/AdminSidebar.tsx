@@ -35,19 +35,21 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   onCloseMobile,
   onOpenSqlFix,
 }) => {
-  const { user, signOut } = useAdminAuth();
+  const { user, signOut, role, isAdmin } = useAdminAuth();
   const { config } = useStoreConfig();
 
-  const navItems: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
+  const allNavItems: { id: AdminTab; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
     { id: 'productos', label: 'Productos', icon: <Package size={18} /> },
-    { id: 'categorias', label: 'Categorías', icon: <Layers size={18} /> },
+    { id: 'categorias', label: 'Categorías', icon: <Layers size={18} />, adminOnly: true },
     { id: 'inventario', label: 'Inventario', icon: <Boxes size={18} /> },
     { id: 'pedidos', label: 'Pedidos', icon: <ShoppingBag size={18} /> },
     { id: 'clientes', label: 'Clientes', icon: <Users size={18} /> },
     { id: 'ventas', label: 'Ventas', icon: <TrendingUp size={18} /> },
-    { id: 'configuracion', label: 'Configuración', icon: <Settings size={18} /> },
+    { id: 'configuracion', label: 'Configuración', icon: <Settings size={18} />, adminOnly: true },
   ];
+
+  const navItems = allNavItems.filter((item) => (item.adminOnly ? isAdmin : true));
 
   const handleSelect = (tab: AdminTab) => {
     onSelectTab(tab);
@@ -137,13 +139,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           {/* User info */}
           <div className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06]">
             <div className="flex items-center gap-1.5 mb-0.5">
-              <Shield size={12} className="text-[#c5a059]" />
-              <span className="text-[10px] uppercase tracking-wider text-stone-400 font-medium">
-                Admin
+              <Shield size={12} className={isAdmin ? 'text-[#c5a059]' : 'text-blue-400'} />
+              <span className={`text-[10px] uppercase tracking-wider font-medium ${isAdmin ? 'text-[#c5a059]' : 'text-blue-400'}`}>
+                {isAdmin ? 'Administrador' : role === 'cajero' ? 'Cajero' : 'Personal'}
               </span>
             </div>
             <p className="text-xs text-stone-300 truncate">
-              {user?.email || 'admin@pretty-store.com'}
+              {user?.email || 'usuario@pretty-store.com'}
             </p>
           </div>
 

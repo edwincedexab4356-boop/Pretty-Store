@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   Store,
@@ -24,6 +24,9 @@ import {
   Gauge,
   Activity,
   HardDrive,
+  Database,
+  Table,
+  FolderOpen,
 } from 'lucide-react';
 import { useStoreConfig } from '../../../context/StoreConfigContext';
 import {
@@ -32,10 +35,16 @@ import {
   checkDatabaseHealth,
   optimizeHeavyProduct,
   uploadProductImageToSupabase,
+  checkSupabaseStorageAndLimits,
+  SupabaseQuotaReport,
 } from '../../../services/adminService';
 import { SUPABASE_FIX_SQL } from '../../../utils/supabaseSqlFix';
 
-export const SettingsView: React.FC = () => {
+interface SettingsViewProps {
+  onOpenQuotaModal?: () => void;
+}
+
+export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenQuotaModal }) => {
   const { config, updateConfig, resetToDefault, isLoading } = useStoreConfig();
 
   // Local form state initialized from config
@@ -71,8 +80,15 @@ export const SettingsView: React.FC = () => {
     heavyProducts: { id: string | number; nombre: string; payloadSizeKB: number; hasLargeBase64: boolean }[];
     totalPayloadKB: number;
   } | null>(null);
+  const [quotaReport, setQuotaReport] = useState<SupabaseQuotaReport | null>(null);
   const [isDiagnosing, setIsDiagnosing] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
+
+  useEffect(() => {
+    checkSupabaseStorageAndLimits()
+      .then((rep) => setQuotaReport(rep))
+      .catch(() => {});
+  }, []);
 
   // Hero Video Upload
   const [isUploadingHeroVideo, setIsUploadingHeroVideo] = useState(false);
@@ -120,12 +136,22 @@ export const SettingsView: React.FC = () => {
   const runSpeedDiagnostic = async () => {
     setIsDiagnosing(true);
     try {
-      const result = await checkDatabaseHealth();
+      const [result, quota] = await Promise.all([
+        checkDatabaseHealth(),
+        checkSupabaseStorageAndLimits(),
+      ]);
       setSpeedDiagnostic(result);
-      if (result.heavyProducts.length === 0) {
+      setQuotaReport(quota);
+
+      if (quota.isApproachingLimit) {
+        setActionMessage({
+          type: 'error',
+          text: quota.message,
+        });
+      } else if (result.heavyProducts.length === 0) {
         setActionMessage({
           type: 'success',
-          text: `Base de datos óptima: respuesta ultra rápida de ${result.latencyMs}ms. Peso total: ${result.totalPayloadKB} KB.`,
+          text: `Base de datos óptima: respuesta ultra rápida de ${result.latencyMs}ms. Storage usado: ${quota.storageUsedMB} MB (${quota.storagePercent}% de 1GB).`,
         });
       } else {
         setActionMessage({
@@ -819,6 +845,144 @@ export const SettingsView: React.FC = () => {
             )}
           </div>
         )}
+
+        {/* Almacenamiento de Tablas y Storage en Supabase (Siempre visible y en tiempo real) */}
+        {quotaReport ? (
+          <div className="p-4 sm:p-5 rounded-xl bg-black/40 border border-white/[0.08] space-y-4 font-sans">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-[#c5a059]/10 text-[#c5a059]">
+                  <HardDrive size={18} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <span>Almacenamiento de Tablas y Storage</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
+                      quotaReport.status === 'critical'
+                        ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                        : quotaReport.status === 'alert'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    }`}>
+                      {quotaReport.status === 'optimal' ? 'Capacidad Óptima' : `${quotaReport.storagePercent}% Usado`}
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-stone-400">
+                    Monitoreo en vivo del consumo en Supabase Free Tier (1 GB Storage CDN + 500 MB Base de Datos)
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    checkSupabaseStorageAndLimits()
+                      .then((rep) => setQuotaReport(rep))
+                      .catch(() => {});
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-stone-300 hover:text-white border border-white/10 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Actualizar mediciones de Storage y Tablas"
+                >
+                  <RefreshCw size={12} />
+                  <span>Actualizar</span>
+                </button>
+                {onOpenQuotaModal && (
+                  <button
+                    type="button"
+                    onClick={onOpenQuotaModal}
+                    className="px-3 py-1.5 rounded-lg bg-[#c5a059]/15 hover:bg-[#c5a059]/25 text-[#c5a059] border border-[#c5a059]/30 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <span>Ver Monitor Detallado →</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Dos Medidores Principales: Storage CDN y Base de Datos PostgreSQL */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Storage CDN */}
+              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-white flex items-center gap-1.5">
+                    <FolderOpen size={14} className="text-[#c5a059]" />
+                    <span>Storage CDN (Archivos & Multimedia)</span>
+                  </span>
+                  <span className="font-mono font-bold text-stone-200">
+                    {quotaReport.storageUsedMB} MB / {quotaReport.storageLimitMB} MB ({quotaReport.storagePercent}%)
+                  </span>
+                </div>
+                <div className="w-full h-2.5 bg-black/60 rounded-full overflow-hidden p-0.5 border border-white/10">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      quotaReport.storagePercent > 80
+                        ? 'bg-rose-500'
+                        : quotaReport.storagePercent > 60
+                        ? 'bg-amber-500'
+                        : 'bg-[#c5a059]'
+                    }`}
+                    style={{ width: `${Math.min(100, Math.max(2, quotaReport.storagePercent))}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-stone-400">
+                  <span>{quotaReport.storageFileCount} archivos alojados</span>
+                  <span className="text-emerald-400 font-mono">
+                    {(quotaReport.storageLimitMB - quotaReport.storageUsedMB).toFixed(1)} MB libres
+                  </span>
+                </div>
+              </div>
+
+              {/* Base de Datos PostgreSQL */}
+              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-white flex items-center gap-1.5">
+                    <Database size={14} className="text-emerald-400" />
+                    <span>Base de Datos (Filas de Tablas)</span>
+                  </span>
+                  <span className="font-mono font-bold text-stone-200">
+                    {quotaReport.databaseTotalKB} KB / {quotaReport.databaseLimitMB} MB ({quotaReport.databasePercent}%)
+                  </span>
+                </div>
+                <div className="w-full h-2.5 bg-black/60 rounded-full overflow-hidden p-0.5 border border-white/10">
+                  <div
+                    className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                    style={{ width: `${Math.min(100, Math.max(1, quotaReport.databasePercent))}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-stone-400">
+                  <span>{quotaReport.totalRecords} registros en total</span>
+                  <span className="text-emerald-400 font-mono">
+                    {(quotaReport.databaseLimitMB - quotaReport.databaseTotalMB).toFixed(1)} MB libres
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Desglose individual de cada tabla */}
+            {quotaReport.databaseTables && quotaReport.databaseTables.length > 0 && (
+              <div className="space-y-2 pt-2">
+                <span className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider block">
+                  Almacenamiento detallado por tabla:
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                  {quotaReport.databaseTables.map((t) => (
+                    <div key={t.name} className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-1">
+                      <span className="text-[11px] font-mono font-medium text-amber-300 block truncate">
+                        {t.name}
+                      </span>
+                      <div className="flex items-baseline justify-between text-xs">
+                        <span className="text-stone-300 font-mono font-bold">{t.rows}</span>
+                        <span className="text-[10px] text-stone-500 font-mono">
+                          {t.sizeKB > 0 ? `${t.sizeKB} KB` : '0 KB'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-stone-300">
           <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08] space-y-2">

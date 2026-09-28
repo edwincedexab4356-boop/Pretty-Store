@@ -8,6 +8,7 @@ import {
   DetallePedido,
   Cliente,
   Venta,
+  Perfil,
   StoreConfig,
   DashboardStats,
   EstadoPedido,
@@ -38,8 +39,26 @@ export const DEFAULT_STORE_CONFIG: StoreConfig = {
 };
 
 // ==========================================
-// AUTHENTICATION
+// AUTHENTICATION & ROLES
 // ==========================================
+
+export async function fetchUserProfile(userId: string): Promise<Perfil | null> {
+  const supabase = getSupabaseClient();
+  try {
+    const { data, error } = await supabase
+      .from('perfiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (!error && data) {
+      return data as Perfil;
+    }
+  } catch (e) {
+    console.warn('Perfil en base de datos no disponible:', e);
+  }
+  return null;
+}
 
 export async function loginAdmin(email: string, password: string) {
   const supabase = getSupabaseClient();
@@ -55,33 +74,41 @@ export async function loginAdmin(email: string, password: string) {
   return data;
 }
 
-export async function registerAdmin(email: string, password: string, nombre?: string) {
+export async function registerAdmin(
+  email: string,
+  password: string,
+  nombre?: string,
+  rol: 'admin' | 'cajero' | 'cliente' = 'admin'
+) {
   const supabase = getSupabaseClient();
+  const cleanEmail = email.trim().toLowerCase();
+
   const { data, error } = await supabase.auth.signUp({
-    email: email.trim(),
+    email: cleanEmail,
     password,
     options: {
       data: {
         nombre: nombre || 'Administrador',
-        rol: 'admin',
+        rol,
       },
     },
   });
 
   if (error) {
-    throw new Error(error.message || 'Error al registrar administrador.');
+    throw new Error(error.message || 'Error al registrar usuario.');
   }
 
-  // Si existe tabla perfiles, intentar insertar/actualizar
+  // Si existe tabla perfiles y el usuario fue creado, registrar o actualizar
   if (data.user) {
     try {
       await supabase.from('perfiles').upsert({
         id: data.user.id,
-        nombre: nombre || email.split('@')[0],
-        rol: 'admin',
+        email: cleanEmail,
+        nombre: nombre || cleanEmail.split('@')[0],
+        rol,
       });
-    } catch (e) {
-      // Ignorar si perfiles no permite escritura anónima aún
+    } catch {
+      // Ignorar si perfiles se maneja mediante el trigger on_auth_user_created
     }
   }
 
@@ -546,6 +573,195 @@ export async function checkDatabaseHealth(): Promise<{
   };
 }
 
+export interface TableStorageDetail {
+  name: string;
+  displayName: string;
+  rows: number;
+  bytes: number;
+  sizeKB: number;
+  sizeMB: number;
+}
+
+export interface BucketStorageDetail {
+  name: string;
+  files: number;
+  bytes: number;
+  sizeMB: number;
+}
+
+export interface SupabaseQuotaReport {
+  storageUsedBytes: number;
+  storageUsedMB: number;
+  storageLimitMB: number; // 1024 MB (Plan Free)
+  storagePercent: number;
+  storageFileCount: number;
+  buckets: BucketStorageDetail[];
+  databaseTables: TableStorageDetail[];
+  databaseTotalBytes: number;
+  databaseTotalKB: number;
+  databaseTotalMB: number;
+  databaseLimitMB: number; // 500 MB (Plan Free)
+  databasePercent: number;
+  totalRecords: number;
+  status: 'optimal' | 'warning' | 'alert' | 'critical';
+  isApproachingLimit: boolean;
+  message: string;
+  recommendation: string;
+}
+
+/**
+ * Consulta en tiempo real las cuotas y almacenamiento exacto de cada tabla y del Storage en Supabase
+ */
+export async function checkSupabaseStorageAndLimits(): Promise<SupabaseQuotaReport> {
+  const supabase = getSupabaseClient();
+  const STORAGE_LIMIT_MB = 1024; // 1 GB Límite oficial Supabase Free Tier
+  const DATABASE_LIMIT_MB = 500; // 500 MB Límite oficial DB Supabase Free Tier
+
+  let totalStorageBytes = 0;
+  let totalFiles = 0;
+  const bucketsDetail: BucketStorageDetail[] = [];
+
+  // 1. Escanear buckets de almacenamiento (Storage CDN)
+  const bucketsToCheck = ['product-images', 'videos', 'assets'];
+  for (const bucket of bucketsToCheck) {
+    try {
+      const { data: files, error } = await supabase.storage.from(bucket).list('', {
+        limit: 1000,
+        sortBy: { column: 'name', order: 'asc' },
+      });
+
+      if (!error && files) {
+        let bBytes = 0;
+        let bFiles = 0;
+        files.forEach((file) => {
+          if (file.name !== '.emptyFolderPlaceholder') {
+            bFiles += 1;
+            bBytes += file.metadata?.size || 0;
+          }
+        });
+        totalFiles += bFiles;
+        totalStorageBytes += bBytes;
+        bucketsDetail.push({
+          name: bucket,
+          files: bFiles,
+          bytes: bBytes,
+          sizeMB: Number((bBytes / (1024 * 1024)).toFixed(2)),
+        });
+      }
+    } catch (e) {
+      // Ignorar si el bucket no existe
+    }
+  }
+
+  // 2. Medir almacenamiento exacto y filas de cada tabla de la base de datos
+  const tablesToScan = [
+    { name: 'productos', label: 'Productos (Fotos, precios, descripción)' },
+    { name: 'inventario', label: 'Inventario (Existencias y stock)' },
+    { name: 'categorias', label: 'Categorías (Colecciones)' },
+    { name: 'pedidos', label: 'Pedidos (Órdenes de clientes)' },
+    { name: 'clientes', label: 'Clientes (Fichas y contactos)' },
+    { name: 'ventas', label: 'Ventas (Asientos contables)' },
+  ];
+
+  const databaseTables: TableStorageDetail[] = [];
+  let totalDbBytes = 0;
+  let totalRecords = 0;
+
+  for (const t of tablesToScan) {
+    try {
+      const { data, count, error } = await supabase.from(t.name).select('*', { count: 'exact' });
+      if (!error && data) {
+        const rowCount = count ?? data.length;
+        // Calcular bytes serializados de los registros
+        const serialized = JSON.stringify(data);
+        const bytes = new Blob([serialized]).size;
+        const sizeKB = Number((bytes / 1024).toFixed(2));
+        const sizeMB = Number((bytes / (1024 * 1024)).toFixed(3));
+
+        totalDbBytes += bytes;
+        totalRecords += rowCount;
+
+        databaseTables.push({
+          name: t.name,
+          displayName: t.label,
+          rows: rowCount,
+          bytes,
+          sizeKB,
+          sizeMB,
+        });
+      } else {
+        databaseTables.push({
+          name: t.name,
+          displayName: t.label,
+          rows: 0,
+          bytes: 0,
+          sizeKB: 0,
+          sizeMB: 0,
+        });
+      }
+    } catch {
+      databaseTables.push({
+        name: t.name,
+        displayName: t.label,
+        rows: 0,
+        bytes: 0,
+        sizeKB: 0,
+        sizeMB: 0,
+      });
+    }
+  }
+
+  const storageUsedMB = Number((totalStorageBytes / (1024 * 1024)).toFixed(2));
+  const storagePercent = Number(((storageUsedMB / STORAGE_LIMIT_MB) * 100).toFixed(1));
+
+  const databaseTotalKB = Number((totalDbBytes / 1024).toFixed(2));
+  const databaseTotalMB = Number((totalDbBytes / (1024 * 1024)).toFixed(3));
+  const databasePercent = Number(((databaseTotalMB / DATABASE_LIMIT_MB) * 100).toFixed(2));
+
+  // Determinar severidad del estado
+  let status: 'optimal' | 'warning' | 'alert' | 'critical' = 'optimal';
+  let isApproachingLimit = false;
+  let message = `Almacenamiento: ${storageUsedMB} MB de ${STORAGE_LIMIT_MB} MB (${storagePercent}% en uso) en Storage CDN. Tablas BD: ${databaseTotalKB} KB de ${DATABASE_LIMIT_MB} MB. Capacidad óptima.`;
+  let recommendation = 'Tus tablas y almacenamiento en Supabase están en óptimas condiciones.';
+
+  if (storagePercent >= 90 || databasePercent >= 90) {
+    status = 'critical';
+    isApproachingLimit = true;
+    message = `🚨 ¡ALERTA CRÍTICA!: Supabase Storage está al ${storagePercent}% (${storageUsedMB} MB / ${STORAGE_LIMIT_MB} MB).`;
+    recommendation = 'Acción urgente: Elimina fotos o videos que no utilices para liberar espacio de inmediato.';
+  } else if (storagePercent >= 75 || databasePercent >= 75) {
+    status = 'alert';
+    isApproachingLimit = true;
+    message = `⚠️ Advertencia: Supabase Storage está llegando al límite (${storagePercent}% de 1 GB).`;
+    recommendation = 'Te recomendamos no subir videos pesados y utilizar enlaces o comprimir archivos.';
+  } else if (storagePercent >= 50 || databasePercent >= 50) {
+    status = 'warning';
+    isApproachingLimit = true;
+    message = `Atención: Has consumido la mitad del almacenamiento gratuito (${storageUsedMB} MB de 1,024 MB).`;
+    recommendation = 'Mantén tus fotos optimizadas.';
+  }
+
+  return {
+    storageUsedBytes: totalStorageBytes,
+    storageUsedMB,
+    storageLimitMB: STORAGE_LIMIT_MB,
+    storagePercent,
+    storageFileCount: totalFiles,
+    buckets: bucketsDetail,
+    databaseTables,
+    databaseTotalBytes: totalDbBytes,
+    databaseTotalKB,
+    databaseTotalMB,
+    databaseLimitMB: DATABASE_LIMIT_MB,
+    databasePercent,
+    totalRecords,
+    status,
+    isApproachingLimit,
+    message,
+    recommendation,
+  };
+}
+
 /**
  * Limpia y optimiza productos que tienen imágenes/videos pesados en Base64 en la base de datos
  */
@@ -609,14 +825,23 @@ export async function getAdminProducts(): Promise<Producto[]> {
 
   const { data: cats } = await supabase.from('categorias').select('*');
   const catMap = new Map<string, Categoria>();
-  if (cats) cats.forEach((c) => catMap.set(c.id, c));
+  if (cats) {
+    cats.forEach((c) => {
+      catMap.set(String(c.id), c);
+      catMap.set(String(c.id).toLowerCase(), c);
+    });
+  }
 
   const { data: invs } = await supabase.from('inventario').select('*');
   const invMap = new Map<string, Inventario>();
-  if (invs) invs.forEach((i) => invMap.set(i.producto_id, i));
+  if (invs) {
+    invs.forEach((i) => {
+      invMap.set(String(i.producto_id), i);
+    });
+  }
 
   return (prods || []).map((p) => {
-    const inv = invMap.get(p.id);
+    const inv = invMap.get(String(p.id));
     const stockResolved = inv && typeof inv.stock_actual === 'number' ? inv.stock_actual : p.stock;
 
     let imagenes: string[] = [];
@@ -647,7 +872,7 @@ export async function getAdminProducts(): Promise<Producto[]> {
       stock: stockResolved,
       imagen_url: primaryImageUrl,
       imagenes,
-      categoria: catMap.get(p.categoria_id),
+      categoria: catMap.get(String(p.categoria_id)),
     };
   });
 }

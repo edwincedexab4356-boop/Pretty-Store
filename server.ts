@@ -21,12 +21,22 @@ async function startServer() {
     fs.mkdirSync(videosDir, { recursive: true });
   }
 
+  // Allowed media extensions for uploads
+  const ALLOWED_EXTENSIONS = new Set(['.mp4', '.webm', '.mov', '.jpg', '.jpeg', '.png', '.webp']);
+
   // Upload endpoint for videos & media
   app.post('/api/upload', (req, res) => {
     try {
       const { filename, base64 } = req.body;
-      if (!filename || !base64) {
-        return res.status(400).json({ error: 'Faltan datos de archivo (filename o base64).' });
+      if (!filename || !base64 || typeof filename !== 'string' || typeof base64 !== 'string') {
+        return res.status(400).json({ error: 'Faltan datos de archivo válidos.' });
+      }
+
+      const ext = path.extname(filename).toLowerCase();
+      if (!ALLOWED_EXTENSIONS.has(ext)) {
+        return res.status(400).json({
+          error: `Formato de archivo "${ext}" no permitido. Formatos permitidos: mp4, webm, mov, jpg, png, webp.`,
+        });
       }
 
       // Extract raw base64 data if it has data URL prefix
@@ -41,7 +51,6 @@ async function startServer() {
         });
       }
 
-      const ext = path.extname(filename) || '.mp4';
       const cleanBase = path.basename(filename, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30);
       const safeFilename = `${Date.now()}_${cleanBase}${ext}`;
       const filePath = path.join(videosDir, safeFilename);
@@ -49,11 +58,9 @@ async function startServer() {
       fs.writeFileSync(filePath, buffer);
 
       const publicUrl = `/videos/${safeFilename}`;
-      console.log(`[Upload API] Video guardado exitosamente: ${publicUrl} (${(buffer.length / (1024 * 1024)).toFixed(2)}MB)`);
       return res.json({ url: publicUrl, filename: safeFilename, size: buffer.length });
-    } catch (err: any) {
-      console.error('[Upload API] Error guardando archivo:', err);
-      return res.status(500).json({ error: err?.message || 'Error al guardar archivo en el servidor.' });
+    } catch {
+      return res.status(500).json({ error: 'Error procesando archivo en el servidor.' });
     }
   });
 

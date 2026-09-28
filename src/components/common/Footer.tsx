@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Smartphone, Mail, MapPin, Instagram, Facebook, Twitter, Lock } from 'lucide-react';
 import { Categoria } from '../../types/database';
 import { useStoreConfig } from '../../context/StoreConfigContext';
+import { LegalModal, LegalTab } from './LegalModal';
 
 interface FooterProps {
   categories: Categoria[];
@@ -11,6 +12,13 @@ interface FooterProps {
 
 export const Footer: React.FC<FooterProps> = ({ categories, onSelectCategory, onOpenAdmin }) => {
   const { config } = useStoreConfig();
+  const [isLegalOpen, setIsLegalOpen] = useState(false);
+  const [legalTab, setLegalTab] = useState<LegalTab>('privacidad');
+
+  const openLegal = (tab: LegalTab) => {
+    setLegalTab(tab);
+    setIsLegalOpen(true);
+  };
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -207,20 +215,44 @@ export const Footer: React.FC<FooterProps> = ({ categories, onSelectCategory, on
         {/* Bottom Bar */}
         <div className="mt-14 pt-8 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4 text-stone-500 font-light text-[11px]">
           <p>© {new Date().getFullYear()} {config.nombre_tienda || 'Pretty-Store'}. Todos los derechos reservados.</p>
-          <div className="flex items-center gap-4 text-stone-500">
-            <span>Privacidad</span>
-            <span>•</span>
-            <span>Términos</span>
+          <div className="flex items-center gap-4 text-stone-400">
+            <button
+              onClick={() => openLegal('privacidad')}
+              className="hover:text-white transition-colors cursor-pointer"
+            >
+              Política de Privacidad
+            </button>
+            <span className="text-stone-700">•</span>
+            <button
+              onClick={() => openLegal('terminos')}
+              className="hover:text-white transition-colors cursor-pointer"
+            >
+              Términos y Condiciones
+            </button>
+            <span className="text-stone-700">•</span>
+            <button
+              onClick={() => openLegal('cambios')}
+              className="hover:text-white transition-colors cursor-pointer"
+            >
+              Cambios & Garantía
+            </button>
+            <span className="text-stone-700">•</span>
+            <button
+              onClick={() => openLegal('contacto')}
+              className="hover:text-white transition-colors cursor-pointer"
+            >
+              Contacto
+            </button>
           </div>
         </div>
 
-        {/* Botón de admin al final de todo, bien escondido por seguridad */}
+        {/* Botón de admin al final de todo, bien protegido */}
         {onOpenAdmin && (
           <div className="mt-8 pt-2 flex justify-end items-center border-t border-white/[0.02]">
             <button
               onClick={onOpenAdmin}
               className="opacity-10 hover:opacity-80 transition-opacity p-1.5 text-stone-600 hover:text-[#c5a059] cursor-pointer focus:outline-none"
-              aria-label="Acceso privado"
+              aria-label="Acceso privado administrativo"
               title=""
             >
               <Lock size={10} />
@@ -228,6 +260,13 @@ export const Footer: React.FC<FooterProps> = ({ categories, onSelectCategory, on
           </div>
         )}
       </div>
+
+      {/* Modal de Privacidad, Términos y Soporte */}
+      <LegalModal
+        isOpen={isLegalOpen}
+        onClose={() => setIsLegalOpen(false)}
+        initialTab={legalTab}
+      />
     </footer>
   );
 };

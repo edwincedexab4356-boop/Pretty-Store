@@ -27,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(false);
   const [desktopDropdownOpen, setDesktopDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -43,8 +44,29 @@ export const Header: React.FC<HeaderProps> = ({
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    };
   }, []);
+
+  const handleMouseEnterDropdown = () => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    setDesktopDropdownOpen(true);
+  };
+
+  const handleMouseLeaveDropdown = () => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setDesktopDropdownOpen(false);
+    }, 250);
+  };
+
+  const handleToggleCategories = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    setDesktopDropdownOpen((prev) => !prev);
+  };
 
   const handleNavClick = (sectionId: string) => {
     setMobileMenuOpen(false);
@@ -131,12 +153,14 @@ export const Header: React.FC<HeaderProps> = ({
             <div
               ref={dropdownRef}
               className="relative py-1"
-              onMouseEnter={() => setDesktopDropdownOpen(true)}
-              onMouseLeave={() => setDesktopDropdownOpen(false)}
+              onMouseEnter={handleMouseEnterDropdown}
+              onMouseLeave={handleMouseLeaveDropdown}
             >
               <button
-                onClick={() => setDesktopDropdownOpen(!desktopDropdownOpen)}
-                className="hover:text-white transition-colors cursor-pointer py-1 relative group flex items-center gap-1.5"
+                type="button"
+                onClick={handleToggleCategories}
+                className="hover:text-white transition-colors cursor-pointer py-1 relative group flex items-center gap-1.5 focus:outline-none"
+                aria-expanded={desktopDropdownOpen}
               >
                 <span>Categorías</span>
                 <ChevronDown
@@ -149,27 +173,44 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
 
               {desktopDropdownOpen && (
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-56 bg-[#09090b]/98 backdrop-blur-2xl border border-white/10 shadow-2xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                  <div className="px-4 py-2 border-b border-white/10 text-[9px] uppercase tracking-[0.25em] text-[#c5a059]">
-                    Colecciones Disponibles
-                  </div>
-                  <button
-                    onClick={() => handlePickCategory('all')}
-                    className="w-full text-left px-4 py-2.5 text-xs text-stone-300 hover:text-white hover:bg-white/5 transition-colors flex items-center justify-between"
-                  >
-                    <span>Todo el Catálogo</span>
-                    <span className="text-[10px] text-stone-500 font-mono">Ver Todo</span>
-                  </button>
-                  {categories.map((cat) => (
+                <div
+                  className="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-60 z-50 animate-in fade-in slide-in-from-top-1 duration-150"
+                  onMouseEnter={handleMouseEnterDropdown}
+                  onMouseLeave={handleMouseLeaveDropdown}
+                >
+                  <div className="bg-[#09090b]/98 backdrop-blur-2xl border border-white/10 shadow-2xl py-2 rounded-lg overflow-hidden">
+                    <div className="px-4 py-2 border-b border-white/10 text-[9px] uppercase tracking-[0.25em] text-[#c5a059] font-medium flex items-center justify-between">
+                      <span>Colecciones</span>
+                      <span className="text-stone-500 font-mono text-[9px] lowercase">
+                        {categories.length} categorías
+                      </span>
+                    </div>
                     <button
-                      key={cat.id}
-                      onClick={() => handlePickCategory(cat.id)}
-                      className="w-full text-left px-4 py-2 text-xs text-stone-300 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2"
+                      type="button"
+                      onClick={() => handlePickCategory('all')}
+                      className="w-full text-left px-4 py-2.5 text-xs text-stone-300 hover:text-white hover:bg-white/5 transition-colors flex items-center justify-between cursor-pointer"
                     >
-                      <span className="w-1 h-1 rounded-full bg-[#c5a059]" />
-                      <span className="capitalize text-stone-200">{cat.nombre}</span>
+                      <span className="font-medium text-[#c5a059]">Todo el Catálogo</span>
+                      <span className="text-[10px] text-stone-500 font-mono">Ver Todo</span>
                     </button>
-                  ))}
+                    {categories.length === 0 ? (
+                      <div className="px-4 py-3 text-xs text-stone-500 italic">
+                        Cargando colecciones...
+                      </div>
+                    ) : (
+                      categories.map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => handlePickCategory(cat.id)}
+                          className="w-full text-left px-4 py-2 text-xs text-stone-300 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2.5 cursor-pointer"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#c5a059] shrink-0" />
+                          <span className="capitalize text-stone-200">{cat.nombre}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -238,8 +279,12 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Accordion Deslizante de Categorías */}
             <div className="border border-white/10 rounded-lg overflow-hidden my-1 bg-black/40">
               <button
-                onClick={() => setMobileCategoriesOpen(!mobileCategoriesOpen)}
-                className="w-full text-left py-3 px-3 text-stone-200 hover:text-white flex items-center justify-between transition-colors bg-white/[0.02]"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMobileCategoriesOpen((prev) => !prev);
+                }}
+                className="w-full text-left py-3 px-3 text-stone-200 hover:text-white flex items-center justify-between transition-colors bg-white/[0.02] cursor-pointer"
               >
                 <div className="flex items-center gap-2">
                   <Layers size={14} className="text-[#c5a059]" />

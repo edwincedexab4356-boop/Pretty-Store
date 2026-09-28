@@ -1,12 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Menu,
   RefreshCw,
   Store,
   Database,
   Terminal,
+  AlertTriangle,
+  HardDrive,
 } from 'lucide-react';
 import { AdminTab } from '../../hooks/useAdminRoute';
+import { checkSupabaseStorageAndLimits, SupabaseQuotaReport } from '../../services/adminService';
 
 interface AdminHeaderProps {
   currentTab: AdminTab;
@@ -15,6 +18,7 @@ interface AdminHeaderProps {
   isRefreshing: boolean;
   onGoToStore: () => void;
   onOpenSqlFix?: () => void;
+  onOpenQuotaModal?: () => void;
 }
 
 const TAB_TITLES: Record<AdminTab, { title: string; subtitle: string }> = {
@@ -59,8 +63,22 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   isRefreshing,
   onGoToStore,
   onOpenSqlFix,
+  onOpenQuotaModal,
 }) => {
   const currentInfo = TAB_TITLES[currentTab] || TAB_TITLES.dashboard;
+  const [quotaReport, setQuotaReport] = useState<SupabaseQuotaReport | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    checkSupabaseStorageAndLimits()
+      .then((rep) => {
+        if (isMounted) setQuotaReport(rep);
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [isRefreshing]);
 
   return (
     <header className="sticky top-0 z-30 bg-[#0d0d11]/90 backdrop-blur-md border-b border-white/[0.08] px-4 sm:px-6 lg:px-8 py-4">
@@ -86,6 +104,46 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2.5">
+          {/* Supabase Storage / Limits Quota Indicator */}
+          {onOpenQuotaModal && (
+            <button
+              onClick={onOpenQuotaModal}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+                quotaReport?.status === 'critical'
+                  ? 'bg-rose-500/15 border-rose-500/40 text-rose-300 animate-pulse'
+                  : quotaReport?.status === 'alert'
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                  : quotaReport?.status === 'warning'
+                  ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-300'
+                  : 'bg-white/[0.03] hover:bg-white/[0.06] border-white/[0.08] text-stone-300'
+              }`}
+              title="Haz clic para ver límites de Almacenamiento y Base de Datos de Supabase"
+            >
+              <HardDrive
+                size={13}
+                className={
+                  quotaReport?.status === 'critical'
+                    ? 'text-rose-400'
+                    : quotaReport?.status === 'alert'
+                    ? 'text-amber-400'
+                    : 'text-[#c5a059]'
+                }
+              />
+              <span className="hidden sm:inline">Storage:</span>
+              <span
+                className={`font-mono text-[11px] ${
+                  quotaReport?.status === 'critical'
+                    ? 'text-rose-400 font-bold'
+                    : quotaReport?.status === 'alert'
+                    ? 'text-amber-400 font-semibold'
+                    : 'text-emerald-400 font-medium'
+                }`}
+              >
+                {quotaReport ? `${quotaReport.storageUsedMB} MB (${quotaReport.storagePercent}%)` : 'Verificando...'}
+              </span>
+            </button>
+          )}
+
           {/* Fix SQL Button if available */}
           {onOpenSqlFix && (
             <button

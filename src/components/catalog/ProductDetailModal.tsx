@@ -33,6 +33,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
   const [isVideoMuted, setIsVideoMuted] = useState(true);
 
+  // Touch Swipe tracking for phones & tablets
+  const touchStartX = React.useRef<number | null>(null);
+  const touchStartY = React.useRef<number | null>(null);
+  const touchEndX = React.useRef<number | null>(null);
+  const touchEndY = React.useRef<number | null>(null);
+
   if (!product) return null;
 
   const images = getProductImages(product);
@@ -47,14 +53,50 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const availableToAdd = Math.max(0, product.stock - inCartQty);
   const isOutOfStock = product.stock <= 0;
 
-  const handlePrevImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handlePrevImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setCurrentImgIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
   };
 
-  const handleNextImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleNextImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setCurrentImgIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!hasMultipleImages) return;
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    touchEndX.current = null;
+    touchEndY.current = null;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!hasMultipleImages) return;
+    touchEndX.current = e.touches[0].clientX;
+    touchEndY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = () => {
+    if (!hasMultipleImages || touchStartX.current === null || touchEndX.current === null) return;
+    const diffX = touchStartX.current - touchEndX.current;
+    const diffY = (touchStartY.current || 0) - (touchEndY.current || 0);
+
+    // Only trigger if horizontal swipe is dominant and exceeds 35px threshold
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 35) {
+      if (diffX > 0) {
+        // Deslizar a la izquierda -> siguiente foto
+        handleNextImage();
+      } else {
+        // Deslizar a la derecha -> foto anterior
+        handlePrevImage();
+      }
+    }
+
+    touchStartX.current = null;
+    touchStartY.current = null;
+    touchEndX.current = null;
+    touchEndY.current = null;
   };
 
   const handleAdd = () => {
@@ -90,8 +132,13 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
         <div className="grid grid-cols-1 lg:grid-cols-12 overflow-y-auto">
           {/* Media & Carousel Column (7 cols on desktop for expansive presentation) */}
-          <div className="lg:col-span-7 flex flex-col bg-[#141418] border-b lg:border-b-0 lg:border-r border-white/10">
-            <div className="relative aspect-[4/5] sm:aspect-[1/1] lg:aspect-[4/5] w-full flex items-center justify-center overflow-hidden bg-black/60">
+          <div className="lg:col-span-7 flex flex-col bg-[#141418] border-b lg:border-b-0 lg:border-r border-white/10 select-none">
+            <div
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              className="relative aspect-[4/5] sm:aspect-[1/1] lg:aspect-[4/5] w-full flex items-center justify-center overflow-hidden bg-black/60 touch-pan-y"
+            >
               {currentMediaUrl && !imgError ? (
                 isCurrentVideo ? (
                   embedUrl ? (
@@ -186,7 +233,26 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     <ChevronRight size={20} />
                   </button>
 
-                  {/* Photo Index Counter */}
+                  {/* Photo Index Counter & Mobile Swipe Hint */}
+                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 bg-black/80 backdrop-blur-md rounded-full border border-white/10 z-20">
+                    {images.map((_, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCurrentImgIndex(i);
+                        }}
+                        className={`transition-all rounded-full cursor-pointer ${
+                          i === currentImgIndex
+                            ? 'w-4 h-1.5 bg-[#c5a059]'
+                            : 'w-1.5 h-1.5 bg-white/30 hover:bg-white/60'
+                        }`}
+                        aria-label={`Ir a foto ${i + 1}`}
+                      />
+                    ))}
+                  </div>
+
                   <span className="absolute bottom-3 right-3 px-2 py-0.5 text-[10px] font-mono bg-black/80 text-stone-300 border border-white/10 tracking-wider z-20">
                     {currentImgIndex + 1} / {images.length}
                   </span>
