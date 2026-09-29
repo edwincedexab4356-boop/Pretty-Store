@@ -2,8 +2,10 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { CartProvider } from './context/CartContext';
 import { AdminAuthProvider } from './context/AdminAuthContext';
 import { StoreConfigProvider, useStoreConfig } from './context/StoreConfigContext';
-import { useAdminNavigation } from './hooks/useAdminRoute';
+import { useAppNavigation } from './hooks/useAppRoute';
 import { AdminLayout } from './components/admin/AdminLayout';
+import { TermsPage } from './components/legal/TermsPage';
+import { PrivacyPage } from './components/legal/PrivacyPage';
 import { Header } from './components/common/Header';
 import { Hero } from './components/hero/Hero';
 import { EditorialSection } from './components/editorial/EditorialSection';
@@ -23,9 +25,11 @@ export type LoadStatus = 'loading' | 'unconfigured' | 'error' | 'empty' | 'succe
 
 interface StoreAppProps {
   onOpenAdmin: () => void;
+  onOpenTerms?: () => void;
+  onOpenPrivacy?: () => void;
 }
 
-function StoreApp({ onOpenAdmin }: StoreAppProps) {
+function StoreApp({ onOpenAdmin, onOpenTerms, onOpenPrivacy }: StoreAppProps) {
   const { config } = useStoreConfig();
   const [status, setStatus] = useState<LoadStatus>('loading');
   const [categories, setCategories] = useState<Categoria[]>([]);
@@ -225,6 +229,8 @@ function StoreApp({ onOpenAdmin }: StoreAppProps) {
         categories={categories}
         onSelectCategory={setSelectedCategoryId}
         onOpenAdmin={onOpenAdmin}
+        onOpenTerms={onOpenTerms}
+        onOpenPrivacy={onOpenPrivacy}
       />
 
       {/* 8. Slide-Over Cart Drawer */}
@@ -240,19 +246,61 @@ function StoreApp({ onOpenAdmin }: StoreAppProps) {
 }
 
 function MainRoot() {
-  const { isAdmin, currentTab, navigateToAdmin, navigateToStore } = useAdminNavigation();
+  const {
+    route,
+    navigateToAdmin,
+    navigateToStore,
+    navigateToTerms,
+    navigateToPrivacy,
+  } = useAppNavigation();
 
-  if (isAdmin) {
+  if (route.type === 'admin') {
     return (
       <AdminLayout
-        currentTab={currentTab}
+        currentTab={route.adminTab}
         onNavigateTab={navigateToAdmin}
         onGoToStore={navigateToStore}
       />
     );
   }
 
-  return <StoreApp onOpenAdmin={() => navigateToAdmin('dashboard')} />;
+  if (route.type === 'terms') {
+    return (
+      <>
+        <TermsPage
+          onGoToStore={navigateToStore}
+          onGoToPrivacy={navigateToPrivacy}
+          onOpenAdmin={() => navigateToAdmin('dashboard')}
+        />
+        <CartDrawer />
+        <CheckoutDemoModal />
+        <ToastNotification />
+      </>
+    );
+  }
+
+  if (route.type === 'privacy') {
+    return (
+      <>
+        <PrivacyPage
+          onGoToStore={navigateToStore}
+          onGoToTerms={navigateToTerms}
+          onOpenAdmin={() => navigateToAdmin('dashboard')}
+        />
+        <CartDrawer />
+        <CheckoutDemoModal />
+        <ToastNotification />
+      </>
+    );
+  }
+
+  return (
+    <StoreApp
+      onOpenAdmin={() => navigateToAdmin('dashboard')}
+      onOpenTerms={navigateToTerms}
+      onOpenPrivacy={navigateToPrivacy}
+    />
+  );
 }
 
 export default function App() {

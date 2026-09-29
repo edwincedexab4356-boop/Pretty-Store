@@ -267,10 +267,28 @@ export const LegalModal: React.FC<LegalModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 sm:p-5 border-t border-white/[0.08] bg-black/30 flex justify-end">
+        <div className="p-4 sm:p-5 border-t border-white/[0.08] bg-black/30 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-3 text-[11px] text-stone-400">
+            <a
+              href="/terminos-y-condiciones"
+              onClick={onClose}
+              className="hover:text-[#c5a059] underline underline-offset-4 transition-colors"
+            >
+              Página de Términos
+            </a>
+            <span className="text-stone-700">•</span>
+            <a
+              href="/politica-de-privacidad"
+              onClick={onClose}
+              className="hover:text-[#c5a059] underline underline-offset-4 transition-colors"
+            >
+              Página de Privacidad
+            </a>
+          </div>
+
           <button
             onClick={onClose}
-            className="px-6 py-2.5 rounded-xl bg-white hover:bg-stone-200 text-black text-xs font-medium uppercase tracking-wider transition-colors cursor-pointer"
+            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-white hover:bg-stone-200 text-black text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer"
           >
             Entendido
           </button>

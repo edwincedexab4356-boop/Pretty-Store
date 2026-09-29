@@ -59,6 +59,7 @@ export const CheckoutDemoModal: React.FC = () => {
   const [cardCvv, setCardCvv] = useState('');
 
   // Submission & Confirmation
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [confirmedOrder, setConfirmedOrder] = useState<CreatedOrderResult | null>(null);
@@ -154,6 +155,10 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
       if (cardCvv.length < 3) {
         errors.cardCvv = 'CVV inválido';
       }
+    }
+
+    if (!acceptedTerms) {
+      errors.terms = 'Debes aceptar los Términos y Condiciones y la Política de Privacidad para finalizar tu pedido';
     }
 
     setFormErrors(errors);
@@ -863,8 +868,55 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
                   )}
                 </div>
 
+                {/* Mandatory Legal Acceptance Checkbox */}
+                <div className="pt-4 border-t border-white/[0.08] space-y-1.5">
+                  <label className="flex items-start gap-2.5 cursor-pointer text-xs select-none group">
+                    <input
+                      type="checkbox"
+                      checked={acceptedTerms}
+                      onChange={(e) => {
+                        setAcceptedTerms(e.target.checked);
+                        if (formErrors.terms) {
+                          setFormErrors((prev) => {
+                            const updated = { ...prev };
+                            delete updated.terms;
+                            return updated;
+                          });
+                        }
+                      }}
+                      className="mt-0.5 w-4 h-4 rounded border border-white/20 bg-black/60 text-[#c5a059] focus:ring-1 focus:ring-[#c5a059] focus:ring-offset-0 cursor-pointer accent-[#c5a059]"
+                    />
+                    <span className="leading-snug text-[11px] text-stone-300 font-light">
+                      He leído y acepto los{' '}
+                      <a
+                        href="/terminos-y-condiciones"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#c5a059] hover:underline underline-offset-2 font-medium"
+                      >
+                        Términos y Condiciones
+                      </a>{' '}
+                      y la{' '}
+                      <a
+                        href="/politica-de-privacidad"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#c5a059] hover:underline underline-offset-2 font-medium"
+                      >
+                        Política de Privacidad
+                      </a>
+                      .*
+                    </span>
+                  </label>
+                  {formErrors.terms && (
+                    <p className="text-[10px] text-rose-400 pl-6.5 font-medium leading-tight">
+                      {formErrors.terms}
+                    </p>
+                  )}
+                </div>
+
                 {/* Submit button on mobile/desktop */}
-                <div className="pt-4">
+                <div className="pt-2">
                   <button
                     type="submit"
                     disabled={isSubmitting || items.length === 0}

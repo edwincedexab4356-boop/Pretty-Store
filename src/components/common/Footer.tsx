@@ -8,9 +8,17 @@ interface FooterProps {
   categories: Categoria[];
   onSelectCategory: (id: string) => void;
   onOpenAdmin?: () => void;
+  onOpenTerms?: () => void;
+  onOpenPrivacy?: () => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ categories, onSelectCategory, onOpenAdmin }) => {
+export const Footer: React.FC<FooterProps> = ({
+  categories,
+  onSelectCategory,
+  onOpenAdmin,
+  onOpenTerms,
+  onOpenPrivacy,
+}) => {
   const { config } = useStoreConfig();
   const [isLegalOpen, setIsLegalOpen] = useState(false);
   const [legalTab, setLegalTab] = useState<LegalTab>('privacidad');
@@ -119,6 +127,34 @@ export const Footer: React.FC<FooterProps> = ({ categories, onSelectCategory, on
                   Sobre Nosotros
                 </button>
               </li>
+              <li>
+                <a
+                  href="/terminos-y-condiciones"
+                  onClick={(e) => {
+                    if (onOpenTerms) {
+                      e.preventDefault();
+                      onOpenTerms();
+                    }
+                  }}
+                  className="hover:text-white transition-colors cursor-pointer"
+                >
+                  Términos y Condiciones
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/politica-de-privacidad"
+                  onClick={(e) => {
+                    if (onOpenPrivacy) {
+                      e.preventDefault();
+                      onOpenPrivacy();
+                    }
+                  }}
+                  className="hover:text-white transition-colors cursor-pointer"
+                >
+                  Política de Privacidad
+                </a>
+              </li>
             </ul>
           </div>
 
@@ -199,20 +235,38 @@ export const Footer: React.FC<FooterProps> = ({ categories, onSelectCategory, on
         {/* Bottom Bar */}
         <div className="mt-14 pt-8 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4 text-stone-500 font-light text-[11px]">
           <p>© {new Date().getFullYear()} {config.nombre_tienda || 'Pretty-Store'}. Todos los derechos reservados.</p>
-          <div className="flex items-center gap-4 text-stone-400">
-            <button
-              onClick={() => openLegal('privacidad')}
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-x-4 gap-y-2 text-stone-400">
+            <a
+              href="/politica-de-privacidad"
+              onClick={(e) => {
+                if (onOpenPrivacy) {
+                  e.preventDefault();
+                  onOpenPrivacy();
+                } else {
+                  e.preventDefault();
+                  openLegal('privacidad');
+                }
+              }}
               className="hover:text-white transition-colors cursor-pointer"
             >
               Política de Privacidad
-            </button>
+            </a>
             <span className="text-stone-700">•</span>
-            <button
-              onClick={() => openLegal('terminos')}
+            <a
+              href="/terminos-y-condiciones"
+              onClick={(e) => {
+                if (onOpenTerms) {
+                  e.preventDefault();
+                  onOpenTerms();
+                } else {
+                  e.preventDefault();
+                  openLegal('terminos');
+                }
+              }}
               className="hover:text-white transition-colors cursor-pointer"
             >
               Términos y Condiciones
-            </button>
+            </a>
             <span className="text-stone-700">•</span>
             <button
               onClick={() => openLegal('cambios')}
