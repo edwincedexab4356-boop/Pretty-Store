@@ -30,12 +30,13 @@ export const DEFAULT_STORE_CONFIG: StoreConfig = {
   email: 'contacto@pretty-store.com',
   direccion: 'https://maps.app.goo.gl/PxA3suMXNZxuFF5X7',
   instagram: 'https://instagram.com',
+  tiktok: 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS',
   facebook: '',
   twitter: '',
   yappy_numero: '+507 6890-1234',
   banco_datos: 'Banco General - Cuenta Corriente #03-01-01-123456-7 a nombre de Pretty-Store Inc.',
   pasarela_tarjeta: 'PagueloFacil',
-  link_pago_tarjeta: '',
+  link_pago_tarjeta: 'https://checkout.paguelofacil.com/gorras',
 };
 
 // ==========================================
@@ -1195,46 +1196,88 @@ export async function updateProductStock(id: string, newStock: number) {
   }
 }
 
-export async function deleteAdminProduct(id: string): Promise<{ softDeleted: boolean }> {
+export async function deleteAdminProduct(id: string | number): Promise<{ success: boolean }> {
   const supabase = getSupabaseClient();
+  const cleanId = String(id).trim();
+  const numId = Number(cleanId);
+  const isNumeric = !isNaN(numId) && cleanId !== '';
 
-  // Check if product is in detalle_pedidos
+  // 1. Eliminar o desvincular referencias en detalle_pedidos para evitar violación de Foreign Key
   try {
-    const { data: ordersWithProd } = await supabase
-      .from('detalle_pedidos')
-      .select('id')
-      .eq('producto_id', id)
-      .limit(1);
-
-    if (ordersWithProd && ordersWithProd.length > 0) {
-      // Soft delete to protect foreign key integrity of existing customer orders
-      await supabase
-        .from('productos')
-        .update({ activo: false, updated_at: new Date().toISOString() })
-        .eq('id', id);
-      return { softDeleted: true };
+    await supabase.from('detalle_pedidos').delete().eq('producto_id', cleanId);
+    if (isNumeric) {
+      await supabase.from('detalle_pedidos').delete().eq('producto_id', numId);
     }
   } catch (e) {
-    // Continue to attempt physical delete
+    console.warn('Aviso detalle_pedidos:', e);
   }
 
-  // Attempt physical delete
+  // 2. Eliminar registros vinculados en inventario
   try {
-    await supabase.from('inventario').delete().eq('producto_id', id);
-  } catch (e) {}
-
-  const { error } = await supabase.from('productos').delete().eq('id', id);
-
-  if (error) {
-    // Fallback to soft delete
-    await supabase
-      .from('productos')
-      .update({ activo: false, updated_at: new Date().toISOString() })
-      .eq('id', id);
-    return { softDeleted: true };
+    await supabase.from('inventario').delete().eq('producto_id', cleanId);
+    if (isNumeric) {
+      await supabase.from('inventario').delete().eq('producto_id', numId);
+    }
+  } catch (e) {
+    console.warn('Aviso inventario:', e);
   }
 
-  return { softDeleted: false };
+  // 3. Eliminar físicamente el producto de la tabla productos en Supabase
+  let res = await supabase.from('productos').delete().eq('id', cleanId);
+  if (res.error && isNumeric) {
+    res = await supabase.from('productos').delete().eq('id', numId);
+  }
+
+  if (res.error) {
+    console.error('Error al eliminar producto en Supabase:', res.error);
+    // Fallback: si RLS o un constraint bloquea el DELETE físico, desactivarlo
+    try {
+      await supabase.from('productos').update({ activo: false, updated_at: new Date().toISOString() }).eq('id', cleanId);
+    } catch {}
+    throw new Error(`Error al eliminar de Supabase: ${res.error.message}`);
+  }
+
+  return { success: true };
+}
+
+export async function deleteAdminSale(orderId: string | number): Promise<{ success: boolean }> {
+  const supabase = getSupabaseClient();
+  const cleanId = String(orderId).trim();
+  const numId = Number(cleanId);
+  const isNumeric = !isNaN(numId) && cleanId !== '';
+
+  // 1. Eliminar items de detalle_pedidos asociados a este pedido
+  try {
+    await supabase.from('detalle_pedidos').delete().eq('pedido_id', cleanId);
+    if (isNumeric) {
+      await supabase.from('detalle_pedidos').delete().eq('pedido_id', numId);
+    }
+  } catch (e) {
+    console.warn('Aviso detalle_pedidos:', e);
+  }
+
+  // 2. Eliminar de tabla ventas si existiese
+  try {
+    await supabase.from('ventas').delete().eq('pedido_id', cleanId);
+    await supabase.from('ventas').delete().eq('id', cleanId);
+    if (isNumeric) {
+      await supabase.from('ventas').delete().eq('pedido_id', numId);
+      await supabase.from('ventas').delete().eq('id', numId);
+    }
+  } catch {}
+
+  // 3. Eliminar pedido de la tabla pedidos en Supabase
+  let res = await supabase.from('pedidos').delete().eq('id', cleanId);
+  if (res.error && isNumeric) {
+    res = await supabase.from('pedidos').delete().eq('id', numId);
+  }
+
+  if (res.error) {
+    console.error('Error al eliminar pedido en Supabase:', res.error);
+    throw new Error(`Error al eliminar pedido en Supabase: ${res.error.message}`);
+  }
+
+  return { success: true };
 }
 
 // ==========================================

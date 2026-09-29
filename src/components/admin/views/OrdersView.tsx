@@ -20,8 +20,9 @@ import {
   CreditCard,
   FileText,
   Plus,
+  Trash2,
 } from 'lucide-react';
-import { getAdminOrders, updateOrderStatus } from '../../../services/adminService';
+import { getAdminOrders, updateOrderStatus, deleteAdminSale } from '../../../services/adminService';
 import { Pedido, EstadoPedido } from '../../../types/database';
 import { isPermissionError } from '../../../utils/supabaseSqlFix';
 import { PermissionErrorBanner } from '../PermissionErrorBanner';
@@ -44,6 +45,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isManualSaleOpen, setIsManualSaleOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<Pedido | null>(null);
+  const [isDeletingOrder, setIsDeletingOrder] = useState(false);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -88,6 +91,30 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
       setActionMessage({ type: 'error', text: err?.message || 'Error al actualizar pedido.' });
     } finally {
       setIsUpdatingStatus(false);
+    }
+  };
+
+  const handleConfirmDeleteOrder = async () => {
+    if (!orderToDelete) return;
+    setIsDeletingOrder(true);
+    try {
+      await deleteAdminSale(orderToDelete.id);
+      setOrders((prev) => prev.filter((o) => o.id !== orderToDelete.id));
+      if (selectedOrder && selectedOrder.id === orderToDelete.id) {
+        setSelectedOrder(null);
+      }
+      setActionMessage({
+        type: 'success',
+        text: `Pedido #PED-${String(orderToDelete.id || '').replace(/-/g, '').slice(0, 6).toUpperCase()} eliminado definitivamente de Supabase.`,
+      });
+      setOrderToDelete(null);
+    } catch (err: any) {
+      setActionMessage({
+        type: 'error',
+        text: err?.message || 'Error al eliminar pedido de Supabase.',
+      });
+    } finally {
+      setIsDeletingOrder(false);
     }
   };
 
@@ -358,13 +385,24 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
                         </select>
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={() => handleOpenDetail(order)}
-                          className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-[#c5a059] border border-white/[0.08] hover:border-white/20 text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5"
-                        >
-                          <Eye size={12} />
-                          <span>Detalle</span>
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenDetail(order)}
+                            className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-[#c5a059] border border-white/[0.08] hover:border-white/20 text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                            title="Ver detalles del pedido"
+                          >
+                            <Eye size={12} />
+                            <span>Detalle</span>
+                          </button>
+                          <button
+                            onClick={() => setOrderToDelete(order)}
+                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors cursor-pointer"
+                            title="Eliminar pedido de Supabase"
+                            aria-label="Eliminar pedido"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -374,6 +412,51 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
           </div>
         )}
       </div>
+
+      {/* DELETE ORDER IN-APP CONFIRMATION MODAL */}
+      {orderToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[#0e0e12] border border-rose-500/30 rounded-2xl w-full max-w-md p-6 sm:p-8 shadow-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-4">
+              <Trash2 size={22} />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2 font-serif-luxury">
+              ¿Eliminar este pedido de Supabase?
+            </h3>
+            <p className="text-xs text-stone-300 leading-relaxed mb-6">
+              Estás a punto de eliminar definitivamente el pedido <strong className="text-white">#PED-{String(orderToDelete.id || '').replace(/-/g, '').slice(0, 6).toUpperCase()}</strong> del cliente <strong className="text-white">{orderToDelete.cliente?.nombre || 'Cliente General'}</strong> por un total de <strong className="text-[#c5a059]">{formatMoney(orderToDelete.total)}</strong>.
+              <br /><br />
+              Esta acción eliminará el pedido y sus registros asociados en las tablas <span className="font-mono text-stone-200">pedidos</span>, <span className="font-mono text-stone-200">detalle_pedidos</span> y <span className="font-mono text-stone-200">ventas</span> en Supabase.
+            </p>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setOrderToDelete(null)}
+                disabled={isDeletingOrder}
+                className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 font-medium text-xs cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteOrder}
+                disabled={isDeletingOrder}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/20 cursor-pointer flex items-center gap-2"
+              >
+                {isDeletingOrder ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    <span>Eliminando en Supabase...</span>
+                  </>
+                ) : (
+                  <span>Sí, eliminar pedido</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ORDER DETAIL MODAL */}
       {selectedOrder && (
@@ -566,20 +649,33 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
                 </select>
               </div>
 
-              <button
-                onClick={() => handleSaveStatus(selectedOrder.id, newStatus)}
-                disabled={isUpdatingStatus || newStatus === selectedOrder.estado}
-                className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
-              >
-                {isUpdatingStatus ? (
-                  <>
-                    <RefreshCw size={14} className="animate-spin text-black" />
-                    <span>Guardando...</span>
-                  </>
-                ) : (
-                  <span>Guardar Cambios</span>
-                )}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOrderToDelete(selectedOrder)}
+                  disabled={isUpdatingStatus}
+                  className="px-3.5 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 font-medium text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all disabled:opacity-50"
+                  title="Eliminar permanentemente de Supabase"
+                >
+                  <Trash2 size={14} />
+                  <span>Eliminar</span>
+                </button>
+
+                <button
+                  onClick={() => handleSaveStatus(selectedOrder.id, newStatus)}
+                  disabled={isUpdatingStatus || newStatus === selectedOrder.estado}
+                  className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
+                >
+                  {isUpdatingStatus ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin text-black" />
+                      <span>Guardando...</span>
+                    </>
+                  ) : (
+                    <span>Guardar Cambios</span>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

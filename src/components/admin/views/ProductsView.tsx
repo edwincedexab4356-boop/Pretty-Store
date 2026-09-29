@@ -363,15 +363,9 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix, onOpen
   const handleDelete = async () => {
     if (!isDeleting) return;
     try {
-      const result = await deleteAdminProduct(isDeleting.id);
-      if (result.softDeleted) {
-        setActionMessage({
-          type: 'success',
-          text: `El producto tiene pedidos históricos asociados. Se desactivó (activo = false) para proteger el historial.`,
-        });
-      } else {
-        setActionMessage({ type: 'success', text: 'Producto eliminado definitivamente de Supabase.' });
-      }
+      await deleteAdminProduct(isDeleting.id);
+      setActionMessage({ type: 'success', text: `Producto "${isDeleting.nombre}" e inventario eliminados definitivamente de Supabase.` });
+      setProducts((prev) => prev.filter((p) => p.id !== isDeleting.id));
       setIsDeleting(null);
       await loadData();
     } catch (err: any) {
@@ -1225,7 +1219,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix, onOpen
               ¿Eliminar producto?
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed mb-6">
-              Estás a punto de eliminar <strong>"{isDeleting.nombre}"</strong>. Si este producto ya tiene pedidos realizados por clientes, se realizará una <em>eliminación lógica</em> (quedará oculto e inactivo) para proteger el historial de compras.
+              Estás a punto de eliminar definitivamente <strong>"{isDeleting.nombre}"</strong>. Esta acción eliminará permanentemente el producto y su registro de inventario de Supabase.
             </p>
 
             <div className="flex items-center justify-end gap-3">

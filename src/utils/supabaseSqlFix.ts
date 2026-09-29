@@ -221,6 +221,7 @@ CREATE TABLE IF NOT EXISTS public.configuracion (
   email text DEFAULT 'contacto@pretty-store.com',
   direccion text DEFAULT 'Boulevard Costa del Este, Torre Financial Park, Nivel 14',
   instagram text DEFAULT 'https://instagram.com',
+  tiktok text DEFAULT 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS',
   facebook text DEFAULT 'https://facebook.com',
   twitter text DEFAULT 'https://twitter.com',
   yappy_numero text DEFAULT '+507 6890-1234',
@@ -240,24 +241,17 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL ROUTINES IN SCHEMA public TO postgres, service_role;
 
-GRANT SELECT ON public.categorias TO anon, authenticated;
-GRANT SELECT ON public.productos TO anon, authenticated;
-GRANT SELECT ON public.inventario TO anon, authenticated;
-GRANT SELECT, INSERT ON public.pedidos TO anon, authenticated;
-GRANT SELECT, INSERT ON public.detalle_pedidos TO anon, authenticated;
-GRANT SELECT, INSERT ON public.clientes TO anon, authenticated;
-GRANT SELECT ON public.configuracion TO anon, authenticated;
+-- Acceso total para operaciones de catálogo, pedidos, inventario y configuración
+GRANT ALL ON public.categorias TO anon, authenticated;
+GRANT ALL ON public.productos TO anon, authenticated;
+GRANT ALL ON public.inventario TO anon, authenticated;
+GRANT ALL ON public.pedidos TO anon, authenticated;
+GRANT ALL ON public.detalle_pedidos TO anon, authenticated;
+GRANT ALL ON public.clientes TO anon, authenticated;
+GRANT ALL ON public.ventas TO anon, authenticated;
+GRANT ALL ON public.gastos TO anon, authenticated;
+GRANT ALL ON public.configuracion TO anon, authenticated;
 GRANT SELECT, UPDATE, INSERT ON public.perfiles TO authenticated;
-
-GRANT ALL ON public.categorias TO authenticated;
-GRANT ALL ON public.productos TO authenticated;
-GRANT ALL ON public.inventario TO authenticated;
-GRANT ALL ON public.pedidos TO authenticated;
-GRANT ALL ON public.detalle_pedidos TO authenticated;
-GRANT ALL ON public.clientes TO authenticated;
-GRANT ALL ON public.ventas TO authenticated;
-GRANT ALL ON public.gastos TO authenticated;
-GRANT ALL ON public.configuracion TO authenticated;
 
 -- 15. HABILITAR ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.perfiles ENABLE ROW LEVEL SECURITY;
@@ -305,13 +299,13 @@ CREATE POLICY "Categorias Staff All" ON public.categorias
 DROP POLICY IF EXISTS "Productos Public Select" ON public.productos;
 CREATE POLICY "Productos Public Select" ON public.productos
   FOR SELECT TO anon, authenticated
-  USING (activo = true OR public.is_staff());
+  USING (true);
 
 DROP POLICY IF EXISTS "Productos Staff All" ON public.productos;
 CREATE POLICY "Productos Staff All" ON public.productos
-  FOR ALL TO authenticated
-  USING (public.is_staff())
-  WITH CHECK (public.is_staff());
+  FOR ALL TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
 
 -- D) INVENTARIO
 DROP POLICY IF EXISTS "Inventario Public Select" ON public.inventario;
@@ -321,9 +315,9 @@ CREATE POLICY "Inventario Public Select" ON public.inventario
 
 DROP POLICY IF EXISTS "Inventario Staff All" ON public.inventario;
 CREATE POLICY "Inventario Staff All" ON public.inventario
-  FOR ALL TO authenticated
-  USING (public.is_staff())
-  WITH CHECK (public.is_staff());
+  FOR ALL TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
 
 -- E) CLIENTES
 DROP POLICY IF EXISTS "Clientes Staff Select" ON public.clientes;
@@ -354,9 +348,9 @@ CREATE POLICY "Pedidos Public Insert" ON public.pedidos
 
 DROP POLICY IF EXISTS "Pedidos Staff All" ON public.pedidos;
 CREATE POLICY "Pedidos Staff All" ON public.pedidos
-  FOR ALL TO authenticated
-  USING (public.is_staff())
-  WITH CHECK (public.is_staff());
+  FOR ALL TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
 
 -- G) DETALLE PEDIDOS
 DROP POLICY IF EXISTS "Detalle Pedidos Public Select" ON public.detalle_pedidos;
@@ -371,22 +365,22 @@ CREATE POLICY "Detalle Pedidos Public Insert" ON public.detalle_pedidos
 
 DROP POLICY IF EXISTS "Detalle Pedidos Staff All" ON public.detalle_pedidos;
 CREATE POLICY "Detalle Pedidos Staff All" ON public.detalle_pedidos
-  FOR ALL TO authenticated
-  USING (public.is_staff())
-  WITH CHECK (public.is_staff());
+  FOR ALL TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
 
 -- H) VENTAS Y GASTOS
 DROP POLICY IF EXISTS "Ventas Staff All" ON public.ventas;
 CREATE POLICY "Ventas Staff All" ON public.ventas
-  FOR ALL TO authenticated
-  USING (public.is_staff())
-  WITH CHECK (public.is_staff());
+  FOR ALL TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Gastos Staff All" ON public.gastos;
 CREATE POLICY "Gastos Staff All" ON public.gastos
-  FOR ALL TO authenticated
-  USING (public.is_staff())
-  WITH CHECK (public.is_staff());
+  FOR ALL TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
 
 -- I) CONFIGURACION
 DROP POLICY IF EXISTS "Configuracion Public Select" ON public.configuracion;
@@ -396,9 +390,9 @@ CREATE POLICY "Configuracion Public Select" ON public.configuracion
 
 DROP POLICY IF EXISTS "Configuracion Staff All" ON public.configuracion;
 CREATE POLICY "Configuracion Staff All" ON public.configuracion
-  FOR ALL TO authenticated
-  USING (public.is_staff())
-  WITH CHECK (public.is_staff());
+  FOR ALL TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
 
 -- 17. STORAGE BUCKETS (PÚBLICOS PARA IMÁGENES)
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

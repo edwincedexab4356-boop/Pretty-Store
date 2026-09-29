@@ -95,7 +95,7 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     throw new Error('Por favor especifica una dirección de entrega completa.');
   }
 
-  const validMetodos: MetodoPago[] = ['yappy', 'tarjeta', 'transferencia', 'efectivo'];
+  const validMetodos: MetodoPago[] = ['yappy', 'tarjeta', 'efectivo'];
   if (!validMetodos.includes(metodoPago)) {
     throw new Error('Método de pago no reconocido.');
   }

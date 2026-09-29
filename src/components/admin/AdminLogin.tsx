@@ -7,8 +7,6 @@ import {
   AlertCircle,
   Store,
   KeyRound,
-  User,
-  CheckCircle2,
 } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 
@@ -17,20 +15,16 @@ interface AdminLoginProps {
 }
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
-  const { signIn, signUp } = useAdminAuth();
+  const { signIn } = useAdminAuth();
 
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
-    setSuccessMessage(null);
 
     let cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !password) {
@@ -46,19 +40,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
     setIsSubmitting(true);
 
     try {
-      if (mode === 'register') {
-        if (!cleanEmail.includes('@')) {
-          setErrorMessage('Para registrarte debes ingresar un correo electrónico válido (ej. admin@pretty-store.com).');
-          setIsSubmitting(false);
-          return;
-        }
-
-        await signUp(cleanEmail, password, nombre.trim() || undefined);
-        setSuccessMessage('¡Cuenta creada con éxito! Ingresando al panel...');
-        return;
-      }
-
-      // Modo Inicio de Sesión
       try {
         await signIn(cleanEmail, password);
         return;
@@ -73,13 +54,11 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
       console.error('Error de autenticación:', err);
       const msg = err?.message || 'Error en la autenticación con Supabase.';
       if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('fetch')) {
-        setErrorMessage('Error de conexión ("Failed to fetch"): El navegador no pudo conectar con Supabase. Esto ocurre si un bloqueador de anuncios (AdBlock / Brave Shields) está bloqueando supabase.co, o si la sesión anterior quedó guardada. Recarga la página (Ctrl+F5 o Cmd+Shift+R) e inténtalo de nuevo.');
+        setErrorMessage('Error de conexión ("Failed to fetch"): El navegador no pudo conectar con Supabase. Esto ocurre si un bloqueador de anuncios (AdBlock / Brave Shields) está bloqueando supabase.co. Recarga la página e inténtalo de nuevo.');
       } else if (msg.includes('Invalid login credentials')) {
-        setErrorMessage('Credenciales inválidas. Si aún no has creado tu usuario en este nuevo proyecto de Supabase, cámbiate a la pestaña "Crear Administrador".');
+        setErrorMessage('Credenciales inválidas. Verifica tu correo y contraseña.');
       } else if (msg.includes('Email not confirmed')) {
         setErrorMessage('El correo no ha sido confirmado en Supabase. En Supabase > Authentication > Users confirma el usuario o marca "Auto Confirm User".');
-      } else if (msg.includes('rate limit')) {
-        setErrorMessage('Límite de correos en Supabase. Ve a Supabase > Authentication > Users y pulsa "Add user" > "Create user" marcando "Auto Confirm User".');
       } else {
         setErrorMessage(msg);
       }
@@ -129,73 +108,23 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
             Panel de Administración
           </h1>
           <p className="text-xs text-stone-400 mt-1.5 font-light">
-            {mode === 'login'
-              ? 'Ingresa tus credenciales para gestionar la tienda'
-              : 'Registra el primer administrador para tu tienda'}
+            Ingresa tus credenciales para gestionar la tienda
           </p>
-        </div>
-
-        {/* Mode Toggle Tabs */}
-        <div className="grid grid-cols-2 p-1 bg-white/[0.04] border border-white/10 rounded-xl mb-5">
-          <button
-            type="button"
-            onClick={() => {
-              setMode('login');
-              setErrorMessage(null);
-            }}
-            className={`py-2 text-xs font-medium rounded-lg transition-all cursor-pointer ${
-              mode === 'login'
-                ? 'bg-[#c5a059] text-black shadow-md font-semibold'
-                : 'text-stone-400 hover:text-white'
-            }`}
-          >
-            Iniciar Sesión
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode('register');
-              setErrorMessage(null);
-            }}
-            className={`py-2 text-xs font-medium rounded-lg transition-all cursor-pointer ${
-              mode === 'register'
-                ? 'bg-[#c5a059] text-black shadow-md font-semibold'
-                : 'text-stone-400 hover:text-white'
-            }`}
-          >
-            Crear Administrador
-          </button>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === 'register' && (
-            <div>
-              <label className="block text-xs font-medium text-stone-300 mb-1.5 flex items-center gap-1.5">
-                <User size={13} className="text-[#c5a059]" />
-                <span>Nombre Completo</span>
-              </label>
-              <input
-                type="text"
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                placeholder="Ej. Edwin Administrador"
-                className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 text-sm text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] focus:ring-1 focus:ring-[#c5a059]/40 transition-colors"
-              />
-            </div>
-          )}
-
           <div>
             <label className="block text-xs font-medium text-stone-300 mb-1.5 flex items-center gap-1.5">
               <Mail size={13} className="text-[#c5a059]" />
-              <span>{mode === 'login' ? 'Correo Electrónico o Usuario' : 'Correo Electrónico'}</span>
+              <span>Correo Electrónico o Usuario</span>
             </label>
             <input
               type="text"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder={mode === 'login' ? 'admin@pretty-store.com o usuario' : 'admin@pretty-store.com'}
+              placeholder="admin@pretty-store.com o usuario"
               className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 text-sm text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] focus:ring-1 focus:ring-[#c5a059]/40 transition-colors"
             />
           </div>
@@ -222,13 +151,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
             </div>
           )}
 
-          {successMessage && (
-            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-start gap-2">
-              <CheckCircle2 size={15} className="shrink-0 text-emerald-400 mt-0.5" />
-              <span className="leading-relaxed">{successMessage}</span>
-            </div>
-          )}
-
           <button
             type="submit"
             disabled={isSubmitting}
@@ -237,11 +159,11 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
             {isSubmitting ? (
               <>
                 <RefreshCw size={16} className="animate-spin text-black" />
-                <span>{mode === 'login' ? 'Verificando credenciales...' : 'Creando administrador...'}</span>
+                <span>Verificando credenciales...</span>
               </>
             ) : (
               <>
-                <span>{mode === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta y Entrar'}</span>
+                <span>Iniciar Sesión</span>
                 <ArrowRight size={16} />
               </>
             )}

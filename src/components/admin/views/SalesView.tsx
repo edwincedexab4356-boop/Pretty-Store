@@ -11,8 +11,9 @@ import {
   Plus,
   CheckCircle2,
   X,
+  Trash2,
 } from 'lucide-react';
-import { getAdminSales } from '../../../services/adminService';
+import { getAdminSales, deleteAdminSale } from '../../../services/adminService';
 import { isPermissionError } from '../../../utils/supabaseSqlFix';
 import { PermissionErrorBanner } from '../PermissionErrorBanner';
 import { ManualSaleModal } from '../ManualSaleModal';
@@ -28,6 +29,23 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isManualSaleOpen, setIsManualSaleOpen] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [saleToDelete, setSaleToDelete] = useState<any | null>(null);
+  const [isDeletingSale, setIsDeletingSale] = useState(false);
+
+  const handleDeleteSale = async () => {
+    if (!saleToDelete) return;
+    setIsDeletingSale(true);
+    try {
+      await deleteAdminSale(saleToDelete.id);
+      setSuccessMsg('Venta eliminada exitosamente del sistema.');
+      setSales((prev) => prev.filter((s) => s.id !== saleToDelete.id));
+      setSaleToDelete(null);
+    } catch (err: any) {
+      setLoadError(err?.message || 'Error al eliminar la venta.');
+    } finally {
+      setIsDeletingSale(false);
+    }
+  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -241,6 +259,7 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
                   <th className="py-3.5 px-4">Método</th>
                   <th className="py-3.5 px-4">Estado</th>
                   <th className="py-3.5 px-4 text-right">Monto</th>
+                  <th className="py-3.5 px-4 text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.04]">
@@ -274,6 +293,16 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
                     <td className="py-3.5 px-4 text-right font-mono font-semibold text-base text-white">
                       {formatMoney(s.total)}
                     </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        onClick={() => setSaleToDelete(s)}
+                        className="p-1.5 text-stone-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                        title="Eliminar venta de Supabase"
+                        aria-label="Eliminar venta"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -281,6 +310,49 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
           </div>
         )}
       </div>
+
+      {/* Delete Sale Confirmation Modal */}
+      {saleToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[#0e0e12] border border-rose-500/30 rounded-2xl w-full max-w-md p-6 sm:p-8 shadow-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-4">
+              <Trash2 size={22} />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2 font-serif-luxury">
+              ¿Eliminar esta venta?
+            </h3>
+            <p className="text-xs text-stone-300 leading-relaxed mb-6">
+              Estás a punto de eliminar la venta <strong className="text-white">#PED-{String(saleToDelete.pedido_id || saleToDelete.id || '').replace(/-/g, '').slice(0, 6).toUpperCase()}</strong> por un monto de <strong className="text-[#c5a059]">{formatMoney(saleToDelete.total)}</strong>. Esta acción eliminará permanentemente la venta y sus ítems de Supabase.
+            </p>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setSaleToDelete(null)}
+                disabled={isDeletingSale}
+                className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 font-medium text-xs cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSale}
+                disabled={isDeletingSale}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/20 cursor-pointer flex items-center gap-2"
+              >
+                {isDeletingSale ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    <span>Eliminando...</span>
+                  </>
+                ) : (
+                  <span>Sí, eliminar venta</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Manual Sale Creation Modal */}
       <ManualSaleModal

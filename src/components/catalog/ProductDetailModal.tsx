@@ -344,7 +344,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     <span>100% Original</span>
                   </div>
                   <p className="text-[10px] text-stone-400 font-light">
-                    Garantía de autenticidad en cada pieza.
+                    Piezas exclusivas con acabados de primera calidad.
                   </p>
                 </div>
                 <div className="p-3 bg-stone-900/40 border border-white/[0.06] rounded-sm space-y-1">

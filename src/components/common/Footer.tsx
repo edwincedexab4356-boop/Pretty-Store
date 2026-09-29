@@ -76,10 +76,24 @@ export const Footer: React.FC<FooterProps> = ({
                   rel="noreferrer"
                   className="p-2 border border-white/10 hover:border-white/30 hover:text-white transition-colors"
                   aria-label="Instagram"
+                  title="Instagram"
                 >
                   <Instagram size={14} />
                 </a>
               )}
+              {/* TikTok */}
+              <a
+                href={config.tiktok || 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS'}
+                target="_blank"
+                rel="noreferrer"
+                className="p-2 border border-white/10 hover:border-white/30 hover:text-white transition-colors flex items-center justify-center group"
+                aria-label="TikTok"
+                title="TikTok @tienda_prettystore"
+              >
+                <svg className="w-3.5 h-3.5 fill-current transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .58.04.86.12V9.42a6.34 6.34 0 0 0-.86-.06 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V9.08a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.51z" />
+                </svg>
+              </a>
             </div>
           </div>
 
@@ -225,7 +239,6 @@ export const Footer: React.FC<FooterProps> = ({
               <div className="flex flex-wrap gap-2 text-[10px] text-stone-300 font-light">
                 <span className="px-2 py-0.5 bg-stone-900 border border-white/10">Yappy</span>
                 <span className="px-2 py-0.5 bg-stone-900 border border-white/10">Visa / MC</span>
-                <span className="px-2 py-0.5 bg-stone-900 border border-white/10">ACH Directo</span>
                 <span className="px-2 py-0.5 bg-stone-900 border border-white/10">Efectivo</span>
               </div>
             </div>
@@ -267,13 +280,6 @@ export const Footer: React.FC<FooterProps> = ({
             >
               Términos y Condiciones
             </a>
-            <span className="text-stone-700">•</span>
-            <button
-              onClick={() => openLegal('cambios')}
-              className="hover:text-white transition-colors cursor-pointer"
-            >
-              Cambios & Garantía
-            </button>
             <span className="text-stone-700">•</span>
             <button
               onClick={() => openLegal('contacto')}

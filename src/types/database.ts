@@ -55,7 +55,7 @@ export interface Inventario {
   producto?: Producto;
 }
 
-export type MetodoPago = 'efectivo' | 'tarjeta' | 'yappy' | 'transferencia';
+export type MetodoPago = 'efectivo' | 'tarjeta' | 'yappy';
 export type TipoEntrega = 'delivery' | 'retiro';
 export type CourierOption = 'Uno Express' | 'Ferguson' | 'Servientrega';
 
@@ -149,6 +149,7 @@ export interface StoreConfig {
   email: string;
   direccion: string;
   instagram: string;
+  tiktok?: string;
   facebook: string;
   twitter: string;
   yappy_numero?: string;

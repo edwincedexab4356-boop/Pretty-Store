@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   X,
   CreditCard,
   Banknote,
   Smartphone,
-  Building2,
   CheckCircle2,
   ArrowRight,
   ShieldCheck,
@@ -13,6 +12,7 @@ import {
   Phone,
   Truck,
   Store,
+  Home,
   Lock,
   Calendar,
   AlertCircle,
@@ -24,6 +24,38 @@ import { useCart } from '../../context/CartContext';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 import { MetodoPago, TipoEntrega, CourierOption } from '../../types/database';
 import { createRealOrder, CreatedOrderResult } from '../../services/checkoutService';
+
+export type PanamaProvince =
+  | 'Panamá Oeste'
+  | 'Panamá Capital'
+  | 'Colón'
+  | 'Coclé'
+  | 'Herrera'
+  | 'Los Santos'
+  | 'Veraguas'
+  | 'Chiriquí'
+  | 'Bocas del Toro'
+  | 'Darién'
+  | 'Comarcas';
+
+export const PANAMA_PROVINCES: {
+  id: PanamaProvince;
+  name: string;
+  zone: 'cerca' | 'lejos';
+  tag: string;
+}[] = [
+  { id: 'Panamá Oeste', name: 'Panamá Oeste', zone: 'cerca', tag: 'La Chorrera · Sede' },
+  { id: 'Panamá Capital', name: 'Panamá Capital', zone: 'cerca', tag: 'Ciudad de Panamá' },
+  { id: 'Colón', name: 'Colón', zone: 'lejos', tag: 'Costa Atlántica' },
+  { id: 'Coclé', name: 'Coclé', zone: 'lejos', tag: 'Penonomé · Aguadulce' },
+  { id: 'Herrera', name: 'Herrera', zone: 'lejos', tag: 'Chitré · Pesé' },
+  { id: 'Los Santos', name: 'Los Santos', zone: 'lejos', tag: 'Las Tablas · Pedasí' },
+  { id: 'Veraguas', name: 'Veraguas', zone: 'lejos', tag: 'Santiago · Soná' },
+  { id: 'Chiriquí', name: 'Chiriquí', zone: 'lejos', tag: 'David · Boquete · Bugaba' },
+  { id: 'Bocas del Toro', name: 'Bocas del Toro', zone: 'lejos', tag: 'Changuinola · Isla Colón' },
+  { id: 'Darién', name: 'Darién', zone: 'lejos', tag: 'Metetí · La Palma' },
+  { id: 'Comarcas', name: 'Comarcas', zone: 'lejos', tag: 'Guna Yala · Ngäbe-Buglé' },
+];
 
 export const CheckoutDemoModal: React.FC = () => {
   const { config } = useStoreConfig();
@@ -39,7 +71,10 @@ export const CheckoutDemoModal: React.FC = () => {
 
   // Tipo de Entrega: 'delivery' o 'retiro'
   const [tipoEntrega, setTipoEntrega] = useState<TipoEntrega>('delivery');
-  const [courier, setCourier] = useState<CourierOption>('Uno Express');
+  const [provincia, setProvincia] = useState<PanamaProvince>('Panamá Oeste');
+  const [courier, setCourier] = useState<CourierOption>('Servientrega');
+  const [servientregaModalidad, setServientregaModalidad] = useState<'sucursal' | 'domicilio'>('domicilio');
+  const [sucursalRetiro, setSucursalRetiro] = useState('');
 
   // Contact Details
   const [nombre, setNombre] = useState('');
@@ -48,11 +83,36 @@ export const CheckoutDemoModal: React.FC = () => {
   const [direccion, setDireccion] = useState('');
   const [notas, setNotas] = useState('');
 
+  // Determinar si la provincia es lejana de La Chorrera
+  const isFarProvince = useMemo(() => {
+    const found = PANAMA_PROVINCES.find((p) => p.id === provincia);
+    return found ? found.zone === 'lejos' : false;
+  }, [provincia]);
+
+  // Texto descriptivo de la tarifa estimada
+  const shippingCostEstimate = useMemo(() => {
+    if (tipoEntrega === 'retiro') return 'Gratis ($0.00)';
+    if (courier === 'Ferguson') return '$5.00 - $6.50 (Solo retiro en sucursal)';
+    if (courier === 'Uno Express') return '$6.50 - $7.50 (Solo retiro en sucursal)';
+    // Servientrega
+    if (servientregaModalidad === 'sucursal') {
+      return isFarProvince ? '$5.00 (Retiro en sucursal)' : '$3.86 (Retiro en sucursal cercana)';
+    }
+    return isFarProvince
+      ? '$7.03 (Delivery a domicilio - sujeto a cobertura)'
+      : '$7.03 (Delivery a domicilio)';
+  }, [tipoEntrega, courier, servientregaModalidad, isFarProvince]);
+
   // Payment Method
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('yappy');
   const [comprobantePago, setComprobantePago] = useState('');
 
-  // Card form state
+  // Card and PagueloFacil form state
+  const [tarjetaModo, setTarjetaModo] = useState<'paguelofacil' | 'manual'>('paguelofacil');
+  const [isPagueloFacilOpen, setIsPagueloFacilOpen] = useState(false);
+  const [pagueloFacilRef, setPagueloFacilRef] = useState('');
+  const pagueloFacilUrl = config.link_pago_tarjeta || 'https://checkout.paguelofacil.com/gorras';
+
   const [cardNumber, setCardNumber] = useState('');
   const [cardHolder, setCardHolder] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
@@ -107,7 +167,11 @@ export const CheckoutDemoModal: React.FC = () => {
     const deliveryDetail =
       tipoEntrega === 'retiro'
         ? '🏢 *Modalidad:* Retiro en el Local / Tienda física'
-        : `🚚 *Modalidad:* Envío a Domicilio (${courier || 'Uno Express'})\n📍 *Dirección de Entrega:* ${direccion.trim()}`;
+        : `🚚 *Modalidad:* Envío con ${courier}\n📍 *Provincia:* ${provincia} (${isFarProvince ? 'Interior / Zona Lejana' : 'Zona Central'})\n📦 *Tipo de Entrega:* ${
+            courier === 'Servientrega' && servientregaModalidad === 'domicilio'
+              ? `Delivery hasta la casa (${direccion.trim()})`
+              : `Retiro en Sucursal ${courier} (${sucursalRetiro.trim() || direccion.trim() || 'Por definir'})`
+          }\n💵 *Tarifa Estimada de Envío:* ${shippingCostEstimate} *(Sujeto al tamaño y peso del paquete)*`;
 
     const textMessage = `✨ *NUEVO PEDIDO - ${config.nombre_tienda || 'PRETTY-STORE'}* ✨
 
@@ -119,7 +183,7 @@ ${deliveryDetail}
 🛒 *Detalle del Pedido:*
 ${itemsSummary}
 
-💰 *Total Pagado por Yappy:* $${total.toFixed(2)}
+💰 *Total Productos:* $${total.toFixed(2)}
 ${comprobantePago.trim() ? `🧾 *Comprobante / Referencia:* ${comprobantePago.trim()}\n` : ''}
 Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yappy. Adjunto aquí la captura / comprobante de mi pago para su verificación y envío. ¡Muchas gracias!`;
 
@@ -133,15 +197,25 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
     if (!telefono.trim()) errors.telefono = 'El teléfono de contacto es requerido';
 
     if (tipoEntrega === 'delivery') {
-      if (!direccion.trim()) {
-        errors.direccion = 'La ubicación o dirección de entrega es requerida para envíos';
+      if (!provincia) {
+        errors.provincia = 'Selecciona la provincia de entrega';
       }
       if (!courier) {
         errors.courier = 'Selecciona la empresa de envíos preferida';
       }
+
+      if (courier === 'Servientrega' && servientregaModalidad === 'domicilio') {
+        if (!direccion.trim()) {
+          errors.direccion = 'Ingresa la dirección completa para el delivery hasta la casa';
+        }
+      } else {
+        if (!sucursalRetiro.trim() && !direccion.trim()) {
+          errors.sucursalRetiro = `Indica la sucursal de ${courier} donde retirarás el paquete`;
+        }
+      }
     }
 
-    if (metodoPago === 'tarjeta') {
+    if (metodoPago === 'tarjeta' && tarjetaModo === 'manual') {
       const cleanCard = cardNumber.replace(/\s/g, '');
       if (cleanCard.length < 15) {
         errors.cardNumber = 'Ingresa un número de tarjeta válido (15-16 dígitos)';
@@ -181,6 +255,26 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
       // Wipe CVV immediately from component memory
       setCardCvv('');
 
+      const resolvedComprobante =
+        metodoPago === 'tarjeta' && tarjetaModo === 'paguelofacil'
+          ? pagueloFacilRef.trim() || comprobantePago.trim() || 'Pago vía PagueloFacil'
+          : comprobantePago.trim() || undefined;
+
+      const resolvedTarjetaInfo =
+        metodoPago === 'tarjeta'
+          ? tarjetaModo === 'paguelofacil'
+            ? {
+                numeroEnmascarado: 'PagueloFacil Checkout',
+                titular: nombre.trim() || 'Cliente PagueloFacil',
+              }
+            : maskedCard
+            ? {
+                numeroEnmascarado: maskedCard,
+                titular: cardHolder.trim(),
+              }
+            : undefined
+          : undefined;
+
       const orderSummary = await createRealOrder({
         items,
         subtotal,
@@ -193,14 +287,8 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
         metodoPago,
         tipoEntrega,
         courier: tipoEntrega === 'delivery' ? courier : undefined,
-        comprobantePago: comprobantePago.trim() || undefined,
-        tarjetaInfo:
-          metodoPago === 'tarjeta' && maskedCard
-            ? {
-                numeroEnmascarado: maskedCard,
-                titular: cardHolder.trim(),
-              }
-            : undefined,
+        comprobantePago: resolvedComprobante,
+        tarjetaInfo: resolvedTarjetaInfo,
         notas: notas.trim() || undefined,
       });
 
@@ -247,6 +335,8 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
     setConfirmedOrder(null);
     setYappyRedirectUrl(null);
     setIsCheckoutOpen(false);
+    setIsPagueloFacilOpen(false);
+    setPagueloFacilRef('');
     setNombre('');
     setTelefono('');
     setEmail('');
@@ -532,58 +622,300 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
                     </div>
                   </div>
 
-                  {/* 3. SI ELIGE DELIVERY: PEDIR UBICACIÓN Y AGENCIA (Uno Express, Ferguson, Servi Entrega) */}
+                  {/* 3. SI ELIGE DELIVERY: SELECCIÓN DE PROVINCIA Y COURIER CON TARIFAS EXACTAS */}
                   {tipoEntrega === 'delivery' ? (
                     <div className="space-y-4 p-4 rounded-xl bg-stone-900/40 border border-white/10 animate-in fade-in duration-200">
-                      <div className="space-y-1.5">
-                        <label className="text-[11px] uppercase tracking-[0.16em] text-stone-300 font-light block flex items-center justify-between">
-                          <span>Ubicación / Dirección exacta de Entrega *</span>
-                          <span className="text-[10px] text-[#c5a059] font-mono">Panamá</span>
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Calle, Edificio/Casa, Número de Apto, Corregimiento o Sucursal"
-                          value={direccion}
-                          onChange={(e) => setDireccion(e.target.value)}
-                          className={`w-full px-3.5 py-2.5 bg-stone-900/80 border text-xs text-white placeholder-stone-600 focus:outline-none transition-colors ${
-                            formErrors.direccion ? 'border-rose-500' : 'border-white/10 focus:border-white/30'
-                          }`}
-                        />
-                        {formErrors.direccion && (
-                          <p className="text-[10px] text-rose-400">{formErrors.direccion}</p>
-                        )}
+                      {/* Apartado visual: Selecciona tu Provincia */}
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-white/[0.08] pb-1.5">
+                          <label className="text-[11px] uppercase tracking-[0.16em] text-white font-medium flex items-center gap-1.5">
+                            <MapPin size={13} className="text-[#c5a059]" />
+                            <span>1. Elige la Provincia donde te encuentras *</span>
+                          </label>
+                          <span className="text-[10px] text-[#c5a059] font-mono font-medium">
+                            {provincia}
+                          </span>
+                        </div>
+
+                        {/* Grid de Provincias de Panamá */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                          {PANAMA_PROVINCES.map((prov) => {
+                            const isSelected = provincia === prov.id;
+                            return (
+                              <button
+                                key={prov.id}
+                                type="button"
+                                onClick={() => setProvincia(prov.id)}
+                                className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between min-h-[58px] ${
+                                  isSelected
+                                    ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-1 ring-[#c5a059] shadow-md shadow-[#c5a059]/10'
+                                    : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20 hover:text-stone-200'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-1">
+                                  <span className="font-semibold text-xs text-white leading-tight">
+                                    {prov.name}
+                                  </span>
+                                  {isSelected && (
+                                    <span className="w-2 h-2 rounded-full bg-[#c5a059] shrink-0 mt-0.5" />
+                                  )}
+                                </div>
+                                <div className="mt-1 flex items-center justify-between gap-1 text-[9px]">
+                                  <span className="text-stone-400 truncate font-light">
+                                    {prov.tag}
+                                  </span>
+                                  <span
+                                    className={`px-1 py-0.2 rounded font-mono shrink-0 ${
+                                      prov.zone === 'cerca'
+                                        ? 'text-emerald-400 bg-emerald-500/10'
+                                        : 'text-amber-300 bg-amber-500/10'
+                                    }`}
+                                  >
+                                    {prov.zone === 'cerca' ? 'Cerca' : 'Interior'}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Indicador de cercanía de la provincia */}
+                        <div className="p-2.5 rounded-lg bg-black/40 border border-white/[0.06] text-[10px] text-stone-300 flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-stone-400">Provincia seleccionada:</span>
+                            <strong className="text-white font-semibold">{provincia}</strong>
+                          </div>
+                          {isFarProvince ? (
+                            <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/20 text-amber-300 font-medium">
+                              Zona Interior / Lejana a La Chorrera
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 font-medium">
+                              Zona Cercana a La Chorrera
+                            </span>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Selector de Agencia de Envíos */}
+                      {/* Selector de Empresa de Envíos */}
                       <div className="space-y-2">
                         <label className="text-[11px] uppercase tracking-[0.16em] text-stone-300 font-light block">
-                          ¿Por dónde lo quieres enviar? *
+                          ¿Por cuál empresa deseas recibirlo? *
                         </label>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          {courierOptions.map((opt) => (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                          {/* Servientrega */}
+                          <button
+                            type="button"
+                            onClick={() => setCourier('Servientrega')}
+                            className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                              courier === 'Servientrega'
+                                ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-1 ring-[#c5a059]'
+                                : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-xs text-white">Servi Entrega</span>
+                              {courier === 'Servientrega' && <span className="w-2 h-2 rounded-full bg-[#c5a059]" />}
+                            </div>
+                            <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-medium">
+                              Delivery a Casa o Sucursal
+                            </span>
+                            <span className="text-[10px] text-[#c5a059] block mt-1 font-mono font-medium">
+                              Desde $3.86
+                            </span>
+                          </button>
+
+                          {/* Ferguson */}
+                          <button
+                            type="button"
+                            onClick={() => setCourier('Ferguson')}
+                            className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                              courier === 'Ferguson'
+                                ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-1 ring-[#c5a059]'
+                                : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-xs text-white">Ferguson</span>
+                              {courier === 'Ferguson' && <span className="w-2 h-2 rounded-full bg-[#c5a059]" />}
+                            </div>
+                            <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-stone-800 text-stone-300 text-[9px]">
+                              Solo retiro en sucursal
+                            </span>
+                            <span className="text-[10px] text-[#c5a059] block mt-1 font-mono font-medium">
+                              $5.00 - $6.50
+                            </span>
+                          </button>
+
+                          {/* Uno Express */}
+                          <button
+                            type="button"
+                            onClick={() => setCourier('Uno Express')}
+                            className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                              courier === 'Uno Express'
+                                ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-1 ring-[#c5a059]'
+                                : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-xs text-white">Uno Express</span>
+                              {courier === 'Uno Express' && <span className="w-2 h-2 rounded-full bg-[#c5a059]" />}
+                            </div>
+                            <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-stone-800 text-stone-300 text-[9px]">
+                              Solo retiro en sucursal
+                            </span>
+                            <span className="text-[10px] text-[#c5a059] block mt-1 font-mono font-medium">
+                              $6.50 - $7.50
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Modalidad específica si eligió Servientrega: Preguntar envío a la casa o retiro en sucursal */}
+                      {courier === 'Servientrega' && (
+                        <div className="p-4 rounded-xl bg-black/60 border border-[#c5a059]/40 space-y-3 shadow-lg animate-in fade-in duration-200">
+                          <div className="flex items-center justify-between pb-1 border-b border-white/[0.08]">
+                            <label className="text-xs uppercase tracking-wider text-white font-medium flex items-center gap-1.5">
+                              <Truck size={14} className="text-[#c5a059]" />
+                              <span>¿Cómo deseas recibir tu pedido con Servi Entrega? *</span>
+                            </label>
+                            <span className="text-[10px] text-[#c5a059] font-mono font-semibold">
+                              {servientregaModalidad === 'domicilio' ? 'Envío a la Casa' : 'Retiro en Sucursal'}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {/* Opción 1: Envío a la Casa */}
                             <button
-                              key={opt.id}
                               type="button"
-                              onClick={() => setCourier(opt.id)}
-                              className={`p-3 rounded-lg border text-left cursor-pointer transition-all ${
-                                courier === opt.id
-                                  ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-1 ring-[#c5a059]'
-                                  : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
+                              onClick={() => setServientregaModalidad('domicilio')}
+                              className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all flex items-start gap-3 ${
+                                servientregaModalidad === 'domicilio'
+                                  ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-2 ring-[#c5a059] shadow-lg shadow-[#c5a059]/15'
+                                  : 'border-white/10 bg-stone-900/60 text-stone-400 hover:border-white/25 hover:text-white'
                               }`}
                             >
-                              <div className="flex items-center justify-between">
-                                <span className="font-semibold text-xs text-white">{opt.name}</span>
-                                {courier === opt.id && <span className="w-1.5 h-1.5 rounded-full bg-[#c5a059]" />}
+                              <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+                                servientregaModalidad === 'domicilio'
+                                  ? 'bg-[#c5a059] text-black'
+                                  : 'bg-white/5 text-stone-400'
+                              }`}>
+                                <Home size={18} />
                               </div>
-                              <span className="text-[9px] text-stone-400 block mt-1 leading-tight">
-                                {opt.desc}
-                              </span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-white">Envío a la Casa</span>
+                                  <span className="text-xs font-mono font-bold text-[#c5a059]">$7.03</span>
+                                </div>
+                                <p className="text-[10px] text-stone-300 font-light mt-0.5 leading-tight">
+                                  Delivery directo hasta la puerta de tu casa o local comercial.
+                                </p>
+                                <span className="inline-block mt-1.5 px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-medium">
+                                  Entrega a Domicilio
+                                </span>
+                              </div>
                             </button>
-                          ))}
+
+                            {/* Opción 2: Retiro en Sucursal */}
+                            <button
+                              type="button"
+                              onClick={() => setServientregaModalidad('sucursal')}
+                              className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all flex items-start gap-3 ${
+                                servientregaModalidad === 'sucursal'
+                                  ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-2 ring-[#c5a059] shadow-lg shadow-[#c5a059]/15'
+                                  : 'border-white/10 bg-stone-900/60 text-stone-400 hover:border-white/25 hover:text-white'
+                              }`}
+                            >
+                              <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+                                servientregaModalidad === 'sucursal'
+                                  ? 'bg-[#c5a059] text-black'
+                                  : 'bg-white/5 text-stone-400'
+                              }`}>
+                                <Store size={18} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-white">Retiro en Sucursal</span>
+                                  <span className="text-xs font-mono font-bold text-[#c5a059]">
+                                    {isFarProvince ? '$5.00' : '$3.86'}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-stone-300 font-light mt-0.5 leading-tight">
+                                  Pasa a retirar personalmente en la agencia Servi Entrega.
+                                </p>
+                                <span className={`inline-block mt-1.5 px-2 py-0.5 rounded text-[9px] font-medium ${
+                                  isFarProvince
+                                    ? 'bg-amber-500/20 text-amber-300'
+                                    : 'bg-emerald-500/20 text-emerald-300'
+                                }`}>
+                                  {isFarProvince ? 'Tarifa Interior ($5.00)' : 'Tarifa Cercana ($3.86)'}
+                                </span>
+                              </div>
+                            </button>
+                          </div>
                         </div>
-                        <p className="text-[10px] text-[#c5a059] font-light mt-1">
-                          * El costo de envío con {courier} se coordina directamente según el destino y peso del paquete.
-                        </p>
+                      )}
+
+                      {/* Dirección o Sucursal según modalidad */}
+                      {courier === 'Servientrega' && servientregaModalidad === 'domicilio' ? (
+                        <div className="space-y-1.5 p-3.5 rounded-xl bg-stone-900/60 border border-white/10">
+                          <label className="text-[11px] uppercase tracking-[0.16em] text-white font-medium block flex items-center gap-1.5">
+                            <Home size={13} className="text-[#c5a059]" />
+                            <span>Dirección completa para el Envío a tu Casa *</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Barriada, calle, número de casa/apto o punto de referencia"
+                            value={direccion}
+                            onChange={(e) => setDireccion(e.target.value)}
+                            className={`w-full px-3.5 py-2.5 bg-black/60 border text-xs text-white placeholder-stone-600 focus:outline-none transition-colors rounded-lg ${
+                              formErrors.direccion ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
+                            }`}
+                          />
+                          {formErrors.direccion && (
+                            <p className="text-[10px] text-rose-400">{formErrors.direccion}</p>
+                          )}
+                          <p className="text-[10px] text-stone-400 font-light">
+                            Servi Entrega entregará tu pedido directamente en esta dirección en {provincia}.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5 p-3.5 rounded-xl bg-stone-900/60 border border-white/10">
+                          <label className="text-[11px] uppercase tracking-[0.16em] text-white font-medium block flex items-center gap-1.5">
+                            <Store size={13} className="text-[#c5a059]" />
+                            <span>Sucursal de {courier} para Retiro Personal *</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder={`Ej. Sucursal ${courier} ${provincia === 'Chiriquí' ? 'David' : provincia === 'Herrera' ? 'Chitré' : 'Central'}...`}
+                            value={sucursalRetiro}
+                            onChange={(e) => setSucursalRetiro(e.target.value)}
+                            className={`w-full px-3.5 py-2.5 bg-black/60 border text-xs text-white placeholder-stone-600 focus:outline-none transition-colors rounded-lg ${
+                              formErrors.sucursalRetiro ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
+                            }`}
+                          />
+                          {formErrors.sucursalRetiro && (
+                            <p className="text-[10px] text-rose-400">{formErrors.sucursalRetiro}</p>
+                          )}
+                          <p className="text-[10px] text-stone-400 font-light">
+                            {courier === 'Ferguson' && 'Ferguson solo opera con retiro en sus agencias y sucursales autorizadas.'}
+                            {courier === 'Uno Express' && 'Uno Express solo opera con retiro en sus agencias nacionales.'}
+                            {courier === 'Servientrega' && `Retirarás personalmente en la sucursal de Servi Entrega en ${provincia}.`}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* NOTA OBLIGATORIA DEL TAMAÑO DEL PAQUETE */}
+                      <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-200 text-xs flex items-start gap-2">
+                        <AlertCircle size={15} className="text-amber-400 shrink-0 mt-0.5" />
+                        <div className="text-[11px] leading-relaxed">
+                          <strong className="block font-semibold text-amber-300">
+                            Tarifa Estimada: {shippingCostEstimate}
+                          </strong>
+                          <span className="text-stone-300 font-light">
+                            Nota: El costo final del envío depende del tamaño y peso del paquete.
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -594,7 +926,7 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
                         <span>Retiro directo en Tienda física</span>
                       </div>
                       <p className="text-[11px] text-stone-300 font-light">
-                        Boutique Pretty-Store (<a href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7" target="_blank" rel="noreferrer" className="text-[#c5a059] underline underline-offset-2">Ver ubicación en Google Maps</a>). Tu pedido se apartará de inmediato a tu nombre y teléfono.
+                        Boutique Pretty-Store (<a href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7" target="_blank" rel="noreferrer" className="text-[#c5a059] underline underline-offset-2">Ver ubicación en Google Maps</a>). Tu pedido se apartará de inmediato a tu nombre y teléfono sin costo de envío.
                       </p>
                     </div>
                   )}
@@ -613,12 +945,12 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
                   </div>
                 </div>
 
-                {/* 4. MÉTODO DE PAGO */}
+                {/* 4. MÉTODO DE PAGO (Solo Yappy, Tarjeta y Efectivo - ACH removido) */}
                 <div className="space-y-3 pt-4 border-t border-white/10">
                   <label className="text-[11px] uppercase tracking-[0.16em] text-stone-300 font-light block">
                     Método de Pago
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     {/* Yappy */}
                     <button
                       type="button"
@@ -645,20 +977,6 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
                     >
                       <CreditCard size={18} className={metodoPago === 'tarjeta' ? 'text-[#c5a059]' : 'text-stone-400'} />
                       <span className="text-xs font-medium">Tarjeta</span>
-                    </button>
-
-                    {/* Transferencia */}
-                    <button
-                      type="button"
-                      onClick={() => setMetodoPago('transferencia')}
-                      className={`p-3 border text-center cursor-pointer transition-all flex flex-col items-center gap-1.5 ${
-                        metodoPago === 'transferencia'
-                          ? 'border-[#c5a059] bg-[#c5a059]/10 text-white'
-                          : 'border-white/10 bg-stone-900/40 text-stone-400 hover:border-white/20'
-                      }`}
-                    >
-                      <Building2 size={18} className={metodoPago === 'transferencia' ? 'text-[#c5a059]' : 'text-stone-400'} />
-                      <span className="text-xs font-medium">ACH / Banco</span>
                     </button>
 
                     {/* Efectivo */}
@@ -714,145 +1032,186 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
                   )}
 
                   {metodoPago === 'tarjeta' && (
-                    <div className="p-4 rounded-xl bg-stone-900/80 border border-white/10 space-y-3 text-xs animate-in fade-in duration-200">
+                    <div className="p-4 rounded-xl bg-stone-900/80 border border-white/10 space-y-3.5 text-xs animate-in fade-in duration-200">
                       <div className="flex items-center justify-between pb-2 border-b border-white/10">
                         <span className="text-stone-300 font-medium flex items-center gap-1.5">
                           <Lock size={12} className="text-[#c5a059]" />
                           <span>Pago Seguro con Tarjeta</span>
                         </span>
-                        <span className="text-[10px] text-stone-400 uppercase tracking-widest font-mono">
-                          Visa / Mastercard / Clave
+                        <span className="text-[10px] text-[#c5a059] uppercase tracking-widest font-mono font-medium">
+                          PagueloFacil / Visa / Mastercard / Clave
                         </span>
                       </div>
 
-                      {/* Optional Payment Link button if configured by store owner */}
-                      {config.link_pago_tarjeta && (
-                        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center justify-between gap-2">
-                          <div className="text-[11px] text-amber-200">
-                            <span className="font-semibold block">Pasarela Externa Disponible:</span>
-                            <span className="text-[10px] text-amber-300/80 font-light">
-                              Puedes pagar directamente por link seguro o ingresar tus datos abajo.
+                      {/* Selector de Modo: PagueloFacil o Manual */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setTarjetaModo('paguelofacil')}
+                          className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                            tarjetaModo === 'paguelofacil'
+                              ? 'border-[#c5a059] bg-[#c5a059]/15 text-white font-medium ring-1 ring-[#c5a059]'
+                              : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-1.5">
+                            <CreditCard size={13} className={tarjetaModo === 'paguelofacil' ? 'text-[#c5a059]' : 'text-stone-400'} />
+                            <span className="text-xs font-semibold">PagueloFacil (En la App)</span>
+                          </div>
+                          <span className="text-[9px] text-[#c5a059] block mt-0.5 font-light">Recomendado · Rápido y Seguro</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setTarjetaModo('manual')}
+                          className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                            tarjetaModo === 'manual'
+                              ? 'border-[#c5a059] bg-[#c5a059]/15 text-white font-medium ring-1 ring-[#c5a059]'
+                              : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
+                          }`}
+                        >
+                          <span className="text-xs block">Ingresar Datos Manual</span>
+                          <span className="text-[9px] text-stone-400 block mt-0.5 font-light">Formulario directo</span>
+                        </button>
+                      </div>
+
+                      {/* MODO PAGUELOFACIL INTEGRADO DENTRO DE LA APP */}
+                      {tarjetaModo === 'paguelofacil' && (
+                        <div className="space-y-3 p-3.5 rounded-xl bg-black/60 border border-[#c5a059]/30">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="text-xs font-bold text-white block">
+                                Pasarela PagueloFacil Panamá
+                              </span>
+                              <p className="text-[11px] text-stone-300 font-light mt-0.5 leading-relaxed">
+                                Paga de forma segura desde adentro de la app con tus tarjetas Visa, Mastercard o Clave con el enlace oficial de la tienda.
+                              </p>
+                            </div>
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-mono shrink-0">
+                              Activa
                             </span>
                           </div>
-                          <a
-                            href={config.link_pago_tarjeta}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-bold shrink-0 flex items-center gap-1 shadow"
-                          >
-                            <span>Abrir Pasarela</span>
-                            <ExternalLink size={12} />
-                          </a>
-                        </div>
-                      )}
 
-                      <div className="space-y-2.5">
-                        <div>
-                          <label className="text-[10px] uppercase tracking-wider text-stone-400 block mb-1">
-                            Número de Tarjeta *
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="4000 1234 5678 9010"
-                            value={cardNumber}
-                            onChange={(e) => handleCardNumberChange(e.target.value)}
-                            maxLength={19}
-                            className={`w-full px-3 py-2 bg-black/60 border text-xs text-white font-mono focus:outline-none ${
-                              formErrors.cardNumber ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
-                            }`}
-                          />
-                          {formErrors.cardNumber && (
-                            <p className="text-[10px] text-rose-400 mt-1">{formErrors.cardNumber}</p>
-                          )}
-                        </div>
+                          {/* Botón principal para abrir la pasarela adentro de la app */}
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setIsPagueloFacilOpen(true)}
+                              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d4af37] hover:from-[#d4af37] hover:to-[#c5a059] text-black font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#c5a059]/20 transition-all cursor-pointer"
+                            >
+                              <CreditCard size={16} />
+                              <span>Pagar ${total.toFixed(2)} USD en PagueloFacil (Abrir Pasarela)</span>
+                            </button>
+                          </div>
 
-                        <div>
-                          <label className="text-[10px] uppercase tracking-wider text-stone-400 block mb-1">
-                            Nombre del Titular (en la tarjeta) *
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="ROBERTO DE LA ESPRIELLA"
-                            value={cardHolder}
-                            onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
-                            className={`w-full px-3 py-2 bg-black/60 border text-xs text-white uppercase focus:outline-none ${
-                              formErrors.cardHolder ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
-                            }`}
-                          />
-                          {formErrors.cardHolder && (
-                            <p className="text-[10px] text-rose-400 mt-1">{formErrors.cardHolder}</p>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="text-[10px] uppercase tracking-wider text-stone-400 block mb-1">
-                              Vencimiento (MM/AA) *
+                          {/* Campo opcional de comprobante / confirmación */}
+                          <div className="pt-2 border-t border-white/[0.08] space-y-1">
+                            <label className="text-[10px] uppercase tracking-wider text-stone-300 block font-medium">
+                              Número de Aprobación / Referencia de PagueloFacil (Opcional):
                             </label>
                             <input
                               type="text"
-                              placeholder="12/28"
-                              value={cardExpiry}
-                              onChange={(e) => handleCardExpiryChange(e.target.value)}
-                              maxLength={5}
+                              placeholder="Ej. PF-1049284 o número de autorización"
+                              value={pagueloFacilRef}
+                              onChange={(e) => {
+                                setPagueloFacilRef(e.target.value);
+                                setComprobantePago(e.target.value);
+                              }}
+                              className="w-full px-3 py-2 bg-stone-900/80 border border-white/10 text-xs text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] rounded-lg"
+                            />
+                            <p className="text-[10px] text-stone-400 font-light">
+                              Al presionar el botón dorado podrás pagar directamente en la ventana integrada. Al terminar, regresa aquí para confirmar tu pedido.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* MODO MANUAL DE DATOS DE TARJETA */}
+                      {tarjetaModo === 'manual' && (
+                        <div className="space-y-2.5">
+                          <div>
+                            <label className="text-[10px] uppercase tracking-wider text-stone-400 block mb-1">
+                              Número de Tarjeta *
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="4000 1234 5678 9010"
+                              value={cardNumber}
+                              onChange={(e) => handleCardNumberChange(e.target.value)}
+                              maxLength={19}
                               className={`w-full px-3 py-2 bg-black/60 border text-xs text-white font-mono focus:outline-none ${
-                                formErrors.cardExpiry ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
+                                formErrors.cardNumber ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
                               }`}
                             />
-                            {formErrors.cardExpiry && (
-                              <p className="text-[10px] text-rose-400 mt-1">{formErrors.cardExpiry}</p>
+                            {formErrors.cardNumber && (
+                              <p className="text-[10px] text-rose-400 mt-1">{formErrors.cardNumber}</p>
                             )}
                           </div>
 
                           <div>
                             <label className="text-[10px] uppercase tracking-wider text-stone-400 block mb-1">
-                              CVV *
+                              Nombre del Titular (en la tarjeta) *
                             </label>
                             <input
-                              type="password"
-                              placeholder="123"
-                              value={cardCvv}
-                              onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                              maxLength={4}
-                              className={`w-full px-3 py-2 bg-black/60 border text-xs text-white font-mono focus:outline-none ${
-                                formErrors.cardCvv ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
+                              type="text"
+                              placeholder="ROBERTO DE LA ESPRIELLA"
+                              value={cardHolder}
+                              onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
+                              className={`w-full px-3 py-2 bg-black/60 border text-xs text-white uppercase focus:outline-none ${
+                                formErrors.cardHolder ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
                               }`}
                             />
-                            {formErrors.cardCvv && (
-                              <p className="text-[10px] text-rose-400 mt-1">{formErrors.cardCvv}</p>
+                            {formErrors.cardHolder && (
+                              <p className="text-[10px] text-rose-400 mt-1">{formErrors.cardHolder}</p>
                             )}
                           </div>
-                        </div>
 
-                        <div className="flex items-center gap-1.5 pt-1 text-[10px] text-stone-500">
-                          <Lock size={10} className="text-[#c5a059]" />
-                          <span>Cifrado SSL 256-bit. Tus datos viajan protegidos bajo estrictos protocolos bancarios.</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-[10px] uppercase tracking-wider text-stone-400 block mb-1">
+                                Vencimiento (MM/AA) *
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="12/28"
+                                value={cardExpiry}
+                                onChange={(e) => handleCardExpiryChange(e.target.value)}
+                                maxLength={5}
+                                className={`w-full px-3 py-2 bg-black/60 border text-xs text-white font-mono focus:outline-none ${
+                                  formErrors.cardExpiry ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
+                                }`}
+                              />
+                              {formErrors.cardExpiry && (
+                                <p className="text-[10px] text-rose-400 mt-1">{formErrors.cardExpiry}</p>
+                              )}
+                            </div>
 
-                  {metodoPago === 'transferencia' && (
-                    <div className="p-4 rounded-xl bg-stone-900/80 border border-white/10 space-y-3 text-xs animate-in fade-in duration-200">
-                      <span className="text-stone-300 font-medium block pb-1 border-b border-white/10">
-                        Datos Bancarios para ACH / Depósito:
-                      </span>
-                      <div className="space-y-1 text-slate-300 font-mono text-[11px] whitespace-pre-line bg-black/40 p-3 rounded border border-white/5">
-                        {config.banco_datos ||
-                          'Banco General - Cuenta Corriente #03-01-01-123456-7 a nombre de Pretty-Store Inc.'}
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase tracking-wider text-stone-400 block mb-1">
-                          Nº de Referencia o Comprobante de Transferencia:
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Ej. ACH-908123"
-                          value={comprobantePago}
-                          onChange={(e) => setComprobantePago(e.target.value)}
-                          className="w-full px-3 py-2 bg-black/60 border border-white/10 rounded text-xs text-white font-mono focus:outline-none focus:border-[#c5a059]"
-                        />
-                      </div>
+                            <div>
+                              <label className="text-[10px] uppercase tracking-wider text-stone-400 block mb-1">
+                                CVV *
+                              </label>
+                              <input
+                                type="password"
+                                placeholder="123"
+                                value={cardCvv}
+                                onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                maxLength={4}
+                                className={`w-full px-3 py-2 bg-black/60 border text-xs text-white font-mono focus:outline-none ${
+                                  formErrors.cardCvv ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
+                                }`}
+                              />
+                              {formErrors.cardCvv && (
+                                <p className="text-[10px] text-rose-400 mt-1">{formErrors.cardCvv}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 pt-1 text-[10px] text-stone-500">
+                            <Lock size={10} className="text-[#c5a059]" />
+                            <span>Cifrado SSL 256-bit. Tus datos viajan protegidos bajo estrictos protocolos bancarios.</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -976,15 +1335,17 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
                   <span>Subtotal</span>
                   <span className="font-mono tabular-nums text-white">${subtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-stone-400 font-light">
+                <div className="flex justify-between text-stone-400 font-light gap-2">
                   <span>
                     {tipoEntrega === 'retiro' ? 'Retiro en Local' : `Envío (${courier})`}
                   </span>
-                  <span className="font-mono tabular-nums text-white">
+                  <span className="font-mono text-xs text-right text-white">
                     {tipoEntrega === 'retiro' ? (
                       <span className="text-emerald-400">Gratis ($0.00)</span>
                     ) : (
-                      <span className="text-[#c5a059]">Por coordinar</span>
+                      <span className="text-[#c5a059] font-medium text-[11px] block">
+                        {shippingCostEstimate}
+                      </span>
                     )}
                   </span>
                 </div>
@@ -999,6 +1360,88 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
                   <ShieldCheck size={14} className="text-[#c5a059]" />
                   <span>Transacción protegida. Registro automático en Supabase.</span>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* IN-APP PAGUELOFACIL EMBEDDED MODAL */}
+        {isPagueloFacilOpen && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-2 sm:p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="relative w-full max-w-2xl bg-[#0e0e12] border border-[#c5a059]/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+              {/* Header */}
+              <div className="p-3.5 sm:p-4 border-b border-white/10 flex items-center justify-between bg-black/80">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[#c5a059]/20 border border-[#c5a059]/40 flex items-center justify-center text-[#c5a059]">
+                    <CreditCard size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+                      <span>Pasarela PagueloFacil Integrada</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+                        Seguro SSL
+                      </span>
+                    </h3>
+                    <p className="text-[10px] text-stone-400 font-light">
+                      Monto total: <strong className="text-[#c5a059] font-mono">${total.toFixed(2)} USD</strong> • Pretty-Store
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <a
+                    href={pagueloFacilUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-2.5 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 text-[10px] font-medium border border-white/10 flex items-center gap-1 transition-colors"
+                    title="Abrir en pantalla completa o navegador externo"
+                  >
+                    <span className="hidden sm:inline">Nueva Ventana</span>
+                    <ExternalLink size={12} />
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsPagueloFacilOpen(false)}
+                    className="p-1.5 rounded-lg text-stone-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] transition-colors cursor-pointer"
+                    aria-label="Cerrar pasarela"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* iFrame con https://checkout.paguelofacil.com/gorras */}
+              <div className="flex-1 bg-white relative min-h-[460px] sm:min-h-[560px] overflow-hidden">
+                <iframe
+                  src={pagueloFacilUrl}
+                  title="Pasarela de Pago PagueloFacil"
+                  className="w-full h-full min-h-[460px] sm:min-h-[560px] border-0"
+                  allow="payment *; clipboard-write *"
+                />
+              </div>
+
+              {/* Footer con confirmación de pago */}
+              <div className="p-3 sm:p-4 border-t border-white/10 bg-black/90 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                <div className="text-[11px] text-stone-300 text-center sm:text-left">
+                  <span>¿Realizaste tu pago en PagueloFacil?</span>
+                  <span className="text-[10px] text-stone-400 block font-light">
+                    Pulsa el botón para regresar a la tienda y finalizar tu pedido.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPagueloFacilOpen(false);
+                    if (!pagueloFacilRef) {
+                      setPagueloFacilRef('Pago completado en PagueloFacil');
+                      setComprobantePago('Pago completado en PagueloFacil');
+                    }
+                  }}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-lg transition-all"
+                >
+                  <CheckCircle2 size={14} />
+                  <span>Ya realicé mi pago en PagueloFacil</span>
+                </button>
               </div>
             </div>
           </div>

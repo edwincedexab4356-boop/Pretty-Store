@@ -5,9 +5,10 @@ import { getSupabaseClient } from '../lib/supabase';
 
 interface StoreConfigContextType {
   config: StoreConfig;
-  updateConfig: (newConfig: Partial<StoreConfig>) => Promise<void>;
+  updateConfig: (newConfig: Partial<StoreConfig>) => Promise<{ syncedToSupabase: boolean; error?: string }>;
   resetToDefault: () => void;
   isLoading: boolean;
+  isSyncedToSupabase: boolean;
 }
 
 const StoreConfigContext = createContext<StoreConfigContextType | undefined>(undefined);
@@ -21,9 +22,13 @@ export const StoreConfigProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!local.hero_video_url || local.hero_video_url.includes('mixkit') || local.hero_video_url.includes('2026-09-23')) {
       local.hero_video_url = '/videos/WhatsApp Video 2026-09-26 at 15.05.22.mp4';
     }
+    if (!local.link_pago_tarjeta) {
+      local.link_pago_tarjeta = 'https://checkout.paguelofacil.com/gorras';
+    }
     return local;
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isSyncedToSupabase, setIsSyncedToSupabase] = useState(false);
 
   // Sync with Supabase on mount
   useEffect(() => {
@@ -50,38 +55,80 @@ export const StoreConfigProvider: React.FC<{ children: React.ReactNode }> = ({ c
           if (!merged.nombre_tienda || merged.nombre_tienda === 'AURA') {
             merged.nombre_tienda = 'Pretty-Store';
           }
+          if (!merged.link_pago_tarjeta) {
+            merged.link_pago_tarjeta = 'https://checkout.paguelofacil.com/gorras';
+          }
           merged.hero_poster_url = '';
           setConfig(merged);
           saveLocalStoreConfig(merged);
+          setIsSyncedToSupabase(true);
         }
       } catch (e) {
         // Fallback to local storage
+        setIsSyncedToSupabase(false);
       }
     }
 
     loadRemoteConfig();
   }, []);
 
-  const updateConfig = async (newConfig: Partial<StoreConfig>) => {
+  const updateConfig = async (newConfig: Partial<StoreConfig>): Promise<{ syncedToSupabase: boolean; error?: string }> => {
     setIsLoading(true);
     const updated = { ...config, ...newConfig };
     setConfig(updated);
     saveLocalStoreConfig(updated);
 
+    let synced = false;
+    let syncError: string | undefined = undefined;
+
     try {
       const supabase = getSupabaseClient();
-      await supabase
+      
+      // Payload sanitizado exactamente con las columnas esperadas en public.configuracion
+      const remotePayload = {
+        id: 1,
+        nombre_tienda: updated.nombre_tienda || 'Pretty-Store',
+        descripcion: updated.descripcion || '',
+        logo_url: updated.logo_url || '/images/logo/logotipo.jpeg',
+        hero_video_url: updated.hero_video_url || '',
+        hero_poster_url: updated.hero_poster_url || '',
+        catalog_video_url: updated.catalog_video_url || '',
+        telefono: updated.telefono || '',
+        whatsapp: updated.whatsapp || '',
+        email: updated.email || '',
+        direccion: updated.direccion || '',
+        instagram: updated.instagram || '',
+        tiktok: updated.tiktok || 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS',
+        facebook: updated.facebook || '',
+        twitter: updated.twitter || '',
+        yappy_numero: updated.yappy_numero || '',
+        banco_datos: updated.banco_datos || '',
+        pasarela_tarjeta: updated.pasarela_tarjeta || 'PagueloFacil',
+        link_pago_tarjeta: updated.link_pago_tarjeta || '',
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
         .from('configuracion')
-        .upsert({
-          id: 1,
-          ...updated,
-          updated_at: new Date().toISOString(),
-        });
-    } catch (e) {
-      // Configuracion table might not exist; local persistence keeps it active
+        .upsert(remotePayload, { onConflict: 'id' });
+
+      if (error) {
+        console.warn('Aviso: no se pudo guardar en tabla public.configuracion de Supabase:', error.message);
+        syncError = error.message;
+        setIsSyncedToSupabase(false);
+      } else {
+        synced = true;
+        setIsSyncedToSupabase(true);
+      }
+    } catch (e: any) {
+      console.warn('Aviso conexión Supabase:', e);
+      syncError = e?.message || 'Error de conexión';
+      setIsSyncedToSupabase(false);
     } finally {
       setIsLoading(false);
     }
+
+    return { syncedToSupabase: synced, error: syncError };
   };
 
   const resetToDefault = () => {
@@ -90,7 +137,7 @@ export const StoreConfigProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   return (
-    <StoreConfigContext.Provider value={{ config, updateConfig, resetToDefault, isLoading }}>
+    <StoreConfigContext.Provider value={{ config, updateConfig, resetToDefault, isLoading, isSyncedToSupabase }}>
       {children}
     </StoreConfigContext.Provider>
   );

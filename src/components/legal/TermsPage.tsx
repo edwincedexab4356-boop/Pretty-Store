@@ -257,25 +257,6 @@ export const TermsPage: React.FC<TermsPageProps> = ({
         <section className="space-y-3">
           <h2 className="text-base sm:text-lg font-serif-luxury font-semibold text-white tracking-[0.04em] flex items-center gap-2 border-b border-white/[0.08] pb-2">
             <span className="text-[#c5a059] font-mono text-sm">11.</span>
-            <span>Política de Cambios, Devoluciones y Garantías</span>
-          </h2>
-          <p className="text-xs sm:text-sm">
-            En atención a la naturaleza de los artículos de alta gama, perfumería y accesorios personales comercializados, los cambios y devoluciones se rigen por las siguientes directrices básicas:
-          </p>
-          <ul className="list-disc list-inside space-y-1.5 text-xs pl-2 text-stone-300">
-            <li>Las piezas deben conservar su estado original, sin señales de uso, con sus precintos, estuches, etiquetas y certificados de autenticidad intactos.</li>
-            <li>Por estrictas razones higiénicas y sanitarias, los productos de perfumería o cosmética cuyos sellos de protección hayan sido abiertos no admiten cambio ni devolución.</li>
-            <li>En caso de defecto comprobable de fabricación o recepción de una pieza distinta a la ordenada, {storeName} asumirá la reposición sin cargo adicional.</li>
-          </ul>
-          <div className="p-3 rounded-lg bg-black/40 border border-amber-500/20 text-amber-300 text-[11px] font-mono">
-            [COMPLETAR POR EL PROPIETARIO - Plazo máximo legal para solicitar cambios o devoluciones (ej. 7, 15 o 30 días calendario contados desde la recepción), políticas específicas para artículos en promoción o liquidación, y distribución de costos de transporte en devoluciones].
-          </div>
-        </section>
-
-        {/* Section 12 */}
-        <section className="space-y-3">
-          <h2 className="text-base sm:text-lg font-serif-luxury font-semibold text-white tracking-[0.04em] flex items-center gap-2 border-b border-white/[0.08] pb-2">
-            <span className="text-[#c5a059] font-mono text-sm">12.</span>
             <span>Responsabilidad del Usuario</span>
           </h2>
           <p className="text-xs sm:text-sm">

@@ -58,6 +58,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenQuotaModal }) 
   const [email, setEmail] = useState(config.email);
   const [direccion, setDireccion] = useState(config.direccion);
   const [instagram, setInstagram] = useState(config.instagram || '');
+  const [tiktok, setTiktok] = useState(config.tiktok || 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS');
   const [facebook, setFacebook] = useState(config.facebook || '');
   const [twitter, setTwitter] = useState(config.twitter || '');
 
@@ -189,7 +190,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenQuotaModal }) 
   const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await updateConfig({
+      const res = await updateConfig({
         nombre_tienda: nombre,
         descripcion,
         logo_url: logoUrl,
@@ -200,6 +201,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenQuotaModal }) 
         email,
         direccion,
         instagram,
+        tiktok,
         facebook,
         twitter,
         yappy_numero: yappyNumero,
@@ -207,10 +209,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenQuotaModal }) 
         pasarela_tarjeta: pasarelaTarjeta,
         link_pago_tarjeta: linkPagoTarjeta,
       });
-      setActionMessage({
-        type: 'success',
-        text: 'Configuración guardada exitosamente y aplicada a la tienda.',
-      });
+
+      if (res.syncedToSupabase) {
+        setActionMessage({
+          type: 'success',
+          text: '¡Configuración guardada exitosamente y sincronizada en Supabase (tabla "configuracion")!',
+        });
+      } else {
+        setActionMessage({
+          type: 'success',
+          text: `Configuración guardada en la tienda. ${res.error ? `Aviso de base de datos: ${res.error}` : 'Recuerda ejecutar el Script SQL en Supabase para persistir permanentemente en la nube'}.`,
+        });
+      }
     } catch (err: any) {
       setActionMessage({ type: 'error', text: err?.message || 'Error al guardar configuración.' });
     }
@@ -595,7 +605,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenQuotaModal }) 
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
           <div>
             <label className="block text-slate-300 font-semibold mb-1">Instagram</label>
             <input
@@ -603,6 +613,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenQuotaModal }) 
               value={instagram}
               onChange={(e) => setInstagram(e.target.value)}
               placeholder="https://instagram.com/..."
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-[11px] focus:outline-none focus:border-amber-500"
+            />
+          </div>
+          <div>
+            <label className="block text-slate-300 font-semibold mb-1">TikTok</label>
+            <input
+              type="url"
+              value={tiktok}
+              onChange={(e) => setTiktok(e.target.value)}
+              placeholder="https://www.tiktok.com/@..."
               className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-[11px] focus:outline-none focus:border-amber-500"
             />
           </div>

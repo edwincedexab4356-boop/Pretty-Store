@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { X, ShieldCheck, FileText, RefreshCw, Mail, Phone, MapPin } from 'lucide-react';
+import { X, ShieldCheck, FileText, Mail, Phone, MapPin } from 'lucide-react';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 
-export type LegalTab = 'privacidad' | 'terminos' | 'cambios' | 'contacto';
+export type LegalTab = 'privacidad' | 'terminos' | 'contacto';
 
 interface LegalModalProps {
   isOpen: boolean;
@@ -30,7 +30,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({
               {config.nombre_tienda || 'Pretty-Store'} • Información Legal
             </span>
             <h2 className="text-lg sm:text-xl font-serif-luxury font-medium text-white">
-              Términos, Privacidad & Garantías
+              Términos de Servicio & Privacidad
             </h2>
           </div>
 
@@ -67,18 +67,6 @@ export const LegalModal: React.FC<LegalModalProps> = ({
           >
             <FileText size={14} className={activeTab === 'terminos' ? 'text-[#c5a059]' : 'text-stone-400'} />
             <span>Términos y Condiciones</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('cambios')}
-            className={`flex items-center gap-2 px-4 py-3 border-b-2 cursor-pointer transition-colors whitespace-nowrap ${
-              activeTab === 'cambios'
-                ? 'border-[#c5a059] text-white bg-white/[0.02]'
-                : 'border-transparent text-stone-400 hover:text-white'
-            }`}
-          >
-            <RefreshCw size={14} className={activeTab === 'cambios' ? 'text-[#c5a059]' : 'text-stone-400'} />
-            <span>Cambios y Devoluciones</span>
           </button>
 
           <button
@@ -171,42 +159,6 @@ export const LegalModal: React.FC<LegalModalProps> = ({
                 </h3>
                 <p>
                   El registro de un pedido genera un comprobante con estado 'Pendiente'. La confirmación y despacho de la orden queda sujeta a la validación efectiva del pago por parte de nuestro departamento de administración o a la confirmación de la pasarela autorizada.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'cambios' && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  1. Política de Cambios y Garantía
-                </h3>
-                <p>
-                  En {config.nombre_tienda || 'Pretty-Store'}, garantizamos la autenticidad y excelencia de cada una de nuestras piezas. Si al momento de recibir su pedido la pieza presenta algún inconveniente o discrepancia con respecto a lo solicitado, puede gestionar su solicitud de cambio dentro del plazo acordado comunicándose con nuestro equipo de atención.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  2. Condiciones para el Cambio
-                </h3>
-                <p>
-                  Para ser elegible para cambio o revisión por garantía:
-                </p>
-                <ul className="list-disc pl-5 space-y-1 text-stone-400">
-                  <li>El artículo debe encontrarse sin uso, en su empaque original, con estuches, manuales y certificados correspondientes.</li>
-                  <li>Presentar el número o comprobante de pedido emitido por la boutique.</li>
-                  <li>Notificar a nuestro canal de soporte dentro del plazo estipulado posterior a la entrega.</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  3. Procedimiento
-                </h3>
-                <p>
-                  Coordine la revisión de la pieza contactándonos por WhatsApp o acercándose directamente a nuestra boutique física con su comprobante de compra.
                 </p>
               </div>
             </div>
