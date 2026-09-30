@@ -107,17 +107,6 @@ export const CheckoutDemoModal: React.FC = () => {
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('yappy');
   const [comprobantePago, setComprobantePago] = useState('');
 
-  // Card and PagueloFacil form state
-  const [tarjetaModo, setTarjetaModo] = useState<'paguelofacil' | 'manual'>('paguelofacil');
-  const [isPagueloFacilOpen, setIsPagueloFacilOpen] = useState(false);
-  const [pagueloFacilRef, setPagueloFacilRef] = useState('');
-  const pagueloFacilUrl = config.link_pago_tarjeta || 'https://checkout.paguelofacil.com/gorras';
-
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardHolder, setCardHolder] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-
   // Submission & Confirmation
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -127,23 +116,6 @@ export const CheckoutDemoModal: React.FC = () => {
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
 
   if (!isCheckoutOpen) return null;
-
-  // Format Card Number (adds spaces every 4 digits)
-  const handleCardNumberChange = (val: string) => {
-    const raw = val.replace(/\D/g, '').slice(0, 16);
-    const formatted = raw.replace(/(\d{4})(?=\d)/g, '$1 ');
-    setCardNumber(formatted);
-  };
-
-  // Format Card Expiry MM/AA
-  const handleCardExpiryChange = (val: string) => {
-    const raw = val.replace(/\D/g, '').slice(0, 4);
-    if (raw.length >= 3) {
-      setCardExpiry(`${raw.slice(0, 2)}/${raw.slice(2)}`);
-    } else {
-      setCardExpiry(raw);
-    }
-  };
 
   const generateYappyWhatsAppUrl = (
     orderNum: string,
@@ -215,22 +187,6 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
       }
     }
 
-    if (metodoPago === 'tarjeta' && tarjetaModo === 'manual') {
-      const cleanCard = cardNumber.replace(/\s/g, '');
-      if (cleanCard.length < 15) {
-        errors.cardNumber = 'Ingresa un número de tarjeta válido (15-16 dígitos)';
-      }
-      if (!cardHolder.trim()) {
-        errors.cardHolder = 'Ingresa el nombre del titular como aparece en la tarjeta';
-      }
-      if (!cardExpiry.includes('/') || cardExpiry.length < 5) {
-        errors.cardExpiry = 'Fecha de expiración inválida (MM/AA)';
-      }
-      if (cardCvv.length < 3) {
-        errors.cardCvv = 'CVV inválido';
-      }
-    }
-
     if (!acceptedTerms) {
       errors.terms = 'Debes aceptar los Términos y Condiciones y la Política de Privacidad para finalizar tu pedido';
     }
@@ -247,34 +203,6 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
     setIsSubmitting(true);
 
     try {
-      const maskedCard =
-        metodoPago === 'tarjeta' && cardNumber
-          ? `•••• •••• •••• ${cardNumber.replace(/\s/g, '').slice(-4)}`
-          : undefined;
-
-      // Wipe CVV immediately from component memory
-      setCardCvv('');
-
-      const resolvedComprobante =
-        metodoPago === 'tarjeta' && tarjetaModo === 'paguelofacil'
-          ? pagueloFacilRef.trim() || comprobantePago.trim() || 'Pago vía PagueloFacil'
-          : comprobantePago.trim() || undefined;
-
-      const resolvedTarjetaInfo =
-        metodoPago === 'tarjeta'
-          ? tarjetaModo === 'paguelofacil'
-            ? {
-                numeroEnmascarado: 'PagueloFacil Checkout',
-                titular: nombre.trim() || 'Cliente PagueloFacil',
-              }
-            : maskedCard
-            ? {
-                numeroEnmascarado: maskedCard,
-                titular: cardHolder.trim(),
-              }
-            : undefined
-          : undefined;
-
       const orderSummary = await createRealOrder({
         items,
         subtotal,
@@ -287,18 +215,37 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
         metodoPago,
         tipoEntrega,
         courier: tipoEntrega === 'delivery' ? courier : undefined,
-        comprobantePago: resolvedComprobante,
-        tarjetaInfo: resolvedTarjetaInfo,
+        comprobantePago: metodoPago === 'tarjeta' ? 'PagueloFacil' : comprobantePago.trim() || undefined,
+        tarjetaInfo:
+          metodoPago === 'tarjeta'
+            ? {
+                numeroEnmascarado: 'PagueloFacil Checkout',
+                titular: nombre.trim() || 'Cliente PagueloFacil',
+              }
+            : undefined,
         notas: notas.trim() || undefined,
       });
 
-      // Clear full card data
-      setCardNumber('');
       setConfirmedOrder(orderSummary);
       clearCart();
 
-      // Redireccionar a WhatsApp para enviar comprobante y pedido si pagó con Yappy
-      if (metodoPago === 'yappy') {
+      // Si pagó con Tarjeta (PagueloFacil), abrir automáticamente el link de pago sin ventanas emergentes
+      if (metodoPago === 'tarjeta') {
+        const pagueloUrl = config.link_pago_tarjeta || 'https://checkout.paguelofacil.com/gorras';
+        setTimeout(() => {
+          try {
+            const anchor = document.createElement('a');
+            anchor.href = pagueloUrl;
+            anchor.target = '_blank';
+            anchor.rel = 'noopener noreferrer';
+            document.body.appendChild(anchor);
+            anchor.click();
+            document.body.removeChild(anchor);
+          } catch (e) {
+            console.warn('Could not auto-open PagueloFacil link:', e);
+          }
+        }, 500);
+      } else if (metodoPago === 'yappy') {
         const waUrl = generateYappyWhatsAppUrl(
           orderSummary.orderNumber,
           orderSummary.orderId,
@@ -320,9 +267,9 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
           }
         }, 500);
       }
+      // En caso de Efectivo, no redirecciona: muestra directamente el recibo completo con los productos
     } catch (err: any) {
       console.error('Error al registrar pedido:', err);
-      setCardCvv('');
       setSubmissionError(
         err?.message || 'No se pudo procesar el pedido en este momento. Por favor verifica tus datos e inténtalo nuevamente.'
       );
@@ -335,18 +282,12 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
     setConfirmedOrder(null);
     setYappyRedirectUrl(null);
     setIsCheckoutOpen(false);
-    setIsPagueloFacilOpen(false);
-    setPagueloFacilRef('');
     setNombre('');
     setTelefono('');
     setEmail('');
     setDireccion('');
     setNotas('');
     setComprobantePago('');
-    setCardNumber('');
-    setCardHolder('');
-    setCardExpiry('');
-    setCardCvv('');
   };
 
   const courierOptions: { id: CourierOption; name: string; desc: string }[] = [
@@ -400,71 +341,184 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
             </p>
 
             {/* Receipt Summary Card */}
-            <div className="bg-stone-900/50 border border-white/10 p-6 max-w-lg mx-auto text-left mb-8 space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+            <div className="bg-stone-900/60 border border-white/10 p-6 sm:p-8 max-w-xl mx-auto text-left mb-6 space-y-5 rounded-2xl shadow-2xl">
+              {/* Header del Recibo */}
+              <div className="flex items-center justify-between pb-4 border-b border-white/10">
                 <div>
-                  <span className="text-[10px] uppercase tracking-[0.2em] text-stone-400 block">Número de Pedido</span>
-                  <span className="text-base font-mono tabular-nums text-white font-medium">
-                    #{confirmedOrder.orderId}
+                  <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] block font-semibold">
+                    Recibo Oficial de Compra
+                  </span>
+                  <span className="text-lg font-mono tabular-nums text-white font-bold">
+                    #{confirmedOrder.orderNumber || confirmedOrder.orderId}
                   </span>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] uppercase tracking-[0.2em] text-stone-400 block">Modalidad</span>
-                  <span className="text-xs text-[#c5a059] font-medium uppercase tracking-wider">
-                    {confirmedOrder.tipoEntrega === 'retiro' ? 'Retiro en Local' : `Delivery (${confirmedOrder.courier})`}
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-stone-400 block">Fecha</span>
+                  <span className="text-xs text-stone-300 font-mono">
+                    {confirmedOrder.date}
                   </span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 text-xs">
+              {/* Datos del Cliente y Entrega */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-black/40 p-4 rounded-xl border border-white/5">
                 <div>
-                  <span className="text-stone-400 font-light block">Cliente:</span>
-                  <span className="text-white font-medium">{confirmedOrder.nombre}</span>
-                  <span className="text-stone-400 block font-light">{confirmedOrder.telefono}</span>
+                  <span className="text-stone-400 font-light block text-[11px]">Cliente:</span>
+                  <span className="text-white font-medium block">{confirmedOrder.nombre}</span>
+                  <span className="text-stone-300 font-mono text-[11px] block">{confirmedOrder.telefono}</span>
                 </div>
                 <div>
-                  <span className="text-stone-400 font-light block">Método de Pago:</span>
-                  <span className="text-white font-medium uppercase text-[11px] tracking-wider">
-                    {confirmedOrder.metodoPago}
+                  <span className="text-stone-400 font-light block text-[11px]">Método de Pago:</span>
+                  <span className="text-[#c5a059] font-medium uppercase text-[11px] tracking-wider block">
+                    {confirmedOrder.metodoPago === 'tarjeta'
+                      ? 'Tarjeta (PagueloFacil)'
+                      : confirmedOrder.metodoPago === 'yappy'
+                      ? 'Yappy'
+                      : 'Efectivo'}
                   </span>
-                  {confirmedOrder.comprobantePago && (
-                    <span className="text-[10px] text-amber-400 font-mono block">
-                      Ref: {confirmedOrder.comprobantePago}
-                    </span>
-                  )}
+                  <span className="text-stone-400 font-light block text-[11px] mt-1">Entrega:</span>
+                  <span className="text-white font-medium block">
+                    {confirmedOrder.tipoEntrega === 'retiro'
+                      ? 'Retiro en Boutique'
+                      : `Delivery (${confirmedOrder.courier})`}
+                  </span>
                 </div>
+                {confirmedOrder.tipoEntrega === 'delivery' ? (
+                  <div className="sm:col-span-2 pt-2 border-t border-white/5 text-[11px]">
+                    <span className="text-stone-400 font-light block">Dirección de Entrega:</span>
+                    <span className="text-white font-medium">{confirmedOrder.direccion}</span>
+                  </div>
+                ) : (
+                  <div className="sm:col-span-2 pt-2 border-t border-white/5 text-[11px]">
+                    <span className="text-stone-400 font-light block">Lugar de Retiro:</span>
+                    <a
+                      href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#c5a059] font-medium hover:underline inline-flex items-center gap-1"
+                    >
+                      Boutique Pretty-Store (Ver en Google Maps)
+                    </a>
+                  </div>
+                )}
               </div>
 
-              {confirmedOrder.tipoEntrega === 'delivery' ? (
-                <div className="pt-2 border-t border-white/10 text-xs">
-                  <span className="text-stone-400 font-light block">Dirección de Entrega:</span>
-                  <span className="text-white">{confirmedOrder.direccion}</span>
-                </div>
-              ) : (
-                <div className="pt-2 border-t border-white/10 text-xs">
-                  <span className="text-stone-400 font-light block">Punto de Retiro:</span>
-                  <a
-                    href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[#c5a059] font-medium hover:underline inline-flex items-center gap-1 mt-0.5"
-                  >
-                    <span>Boutique Pretty-Store (Ver en Google Maps)</span>
-                  </a>
-                </div>
-              )}
-
-              <div className="pt-3 border-t border-white/10 flex items-center justify-between text-xs">
-                <span className="text-stone-400">Total a Cancelar:</span>
-                <span className="text-lg font-mono tabular-nums font-semibold text-white">
-                  ${confirmedOrder.total.toFixed(2)}
+              {/* DETALLE DE LO QUE COMPRASTE (Artículos adquiridos) */}
+              <div className="space-y-2.5">
+                <span className="text-xs uppercase tracking-[0.16em] text-white font-semibold flex items-center gap-1.5">
+                  <span>Productos Comprados</span>
+                  <span className="text-[10px] text-stone-400 font-normal">
+                    ({(confirmedOrder.items || items).length} { (confirmedOrder.items || items).length === 1 ? 'artículo' : 'artículos'})
+                  </span>
                 </span>
+
+                <div className="divide-y divide-white/5 border border-white/10 rounded-xl overflow-hidden bg-black/40">
+                  {(confirmedOrder.items || items).map((item, idx) => (
+                    <div key={idx} className="p-3 flex items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <img
+                          src={item.product.imagen_url || '/images/products/gorra-1.webp'}
+                          alt={item.product.nombre}
+                          className="w-12 h-12 object-cover rounded-lg border border-white/10 shrink-0 bg-stone-900"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-white font-medium truncate text-xs">{item.product.nombre}</p>
+                          <p className="text-[11px] text-stone-400 font-mono mt-0.5">
+                            Cant: <strong className="text-white">{item.quantity}</strong> × ${item.product.precio.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="font-mono text-white font-semibold text-xs shrink-0">
+                        ${(item.quantity * item.product.precio).toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Desglose de Precios */}
+              <div className="pt-3 border-t border-white/10 space-y-2 text-xs">
+                <div className="flex justify-between text-stone-400 font-light">
+                  <span>Subtotal</span>
+                  <span className="font-mono text-white">${confirmedOrder.subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-stone-400 font-light">
+                  <span>Envío / Entrega</span>
+                  <span className="font-mono text-white">
+                    {confirmedOrder.shipping > 0 ? `$${confirmedOrder.shipping.toFixed(2)}` : 'Gratis ($0.00)'}
+                  </span>
+                </div>
+                <div className="pt-2 border-t border-white/10 flex justify-between items-center text-sm">
+                  <span className="font-semibold text-white uppercase tracking-wider text-xs">Total:</span>
+                  <span className="text-xl font-mono tabular-nums font-bold text-[#c5a059]">
+                    ${confirmedOrder.total.toFixed(2)} USD
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* WhatsApp Receipt Card for Yappy */}
+            {/* ACTION CARD: PAGUELOFACIL (TARJETA) */}
+            {confirmedOrder.metodoPago === 'tarjeta' && (
+              <div className="max-w-xl mx-auto mb-8 p-6 rounded-2xl bg-gradient-to-br from-[#c5a059]/15 via-[#0e0e12] to-black border border-[#c5a059]/40 text-left space-y-4 shadow-2xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-[#c5a059]/20 border border-[#c5a059]/40 flex items-center justify-center shrink-0 text-[#c5a059]">
+                    <CreditCard size={24} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-widest text-[#c5a059] block">
+                      Pagar con Tarjeta · PagueloFacil
+                    </span>
+                    <h3 className="text-base font-semibold text-white">
+                      Completar Pago en PagueloFacil
+                    </h3>
+                  </div>
+                </div>
+
+                <p className="text-xs text-stone-300 leading-relaxed font-light">
+                  Tu pedido <strong className="text-white">#{confirmedOrder.orderNumber || confirmedOrder.orderId}</strong> ha sido registrado en el sistema. Se abrió la pasarela oficial de PagueloFacil en tu navegador para realizar el pago. Si no se abrió automáticamente, presiona el botón a continuación para pagar tus <strong className="text-[#c5a059] font-mono">${confirmedOrder.total.toFixed(2)} USD</strong> con Visa, Mastercard o Clave:
+                </p>
+
+                <div className="pt-1">
+                  <a
+                    href={config.link_pago_tarjeta || 'https://checkout.paguelofacil.com/gorras'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d4af37] hover:from-[#d4af37] hover:to-[#c5a059] text-black font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-[#c5a059]/20 cursor-pointer"
+                  >
+                    <CreditCard size={18} />
+                    <span>Pagar ${confirmedOrder.total.toFixed(2)} USD en PagueloFacil</span>
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* ACTION CARD: EFECTIVO */}
+            {confirmedOrder.metodoPago === 'efectivo' && (
+              <div className="max-w-xl mx-auto mb-8 p-6 rounded-2xl bg-gradient-to-br from-stone-900 via-[#0e0e12] to-black border border-white/20 text-left space-y-3 shadow-2xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0 text-white">
+                    <Banknote size={24} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-widest text-stone-400 block">
+                      Pago en Efectivo
+                    </span>
+                    <h3 className="text-base font-semibold text-white">
+                      Pedido Registrado con Éxito
+                    </h3>
+                  </div>
+                </div>
+                <p className="text-xs text-stone-300 leading-relaxed font-light">
+                  {confirmedOrder.tipoEntrega === 'retiro'
+                    ? 'Tus artículos están reservados. Podrás abonar el monto exacto en efectivo al momento de retirarlos en nuestra boutique.'
+                    : 'Tus productos están siendo preparados para entrega. Recuerda tener preparado el monto en efectivo al recibir al repartidor.'}
+                </p>
+              </div>
+            )}
+
+            {/* ACTION CARD: YAPPY */}
             {confirmedOrder.metodoPago === 'yappy' && (
-              <div className="max-w-lg mx-auto mb-8 p-6 rounded-2xl bg-gradient-to-br from-emerald-950/80 via-[#0e0e12] to-emerald-950/40 border border-emerald-500/40 text-left space-y-4 shadow-2xl">
+              <div className="max-w-xl mx-auto mb-8 p-6 rounded-2xl bg-gradient-to-br from-emerald-950/80 via-[#0e0e12] to-emerald-950/40 border border-emerald-500/40 text-left space-y-4 shadow-2xl">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-2xl bg-[#25D366]/20 border border-[#25D366]/40 flex items-center justify-center shrink-0">
                     <MessageSquare size={24} className="text-[#25D366]" />
@@ -480,7 +534,7 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
                 </div>
 
                 <p className="text-xs text-stone-300 leading-relaxed font-light">
-                  Tu pedido <strong className="text-white">{confirmedOrder.orderNumber || '#' + confirmedOrder.orderId}</strong> ha sido registrado en el sistema. Para procesar tu despacho, envía la captura o comprobante de tu pago por Yappy al WhatsApp oficial del comercio. El mensaje ya ha sido redactado con todos los detalles de tu orden.
+                  Tu pedido <strong className="text-white">#{confirmedOrder.orderNumber || confirmedOrder.orderId}</strong> ha sido registrado en el sistema. Para procesar tu despacho, envía la captura o comprobante de tu pago por Yappy al WhatsApp oficial del comercio. El mensaje ya ha sido redactado con todos los detalles de tu orden.
                 </p>
 
                 <div className="pt-2">
@@ -1011,22 +1065,9 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
                       <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 flex items-start gap-2.5 text-[11px] leading-relaxed">
                         <MessageSquare size={16} className="text-[#25D366] shrink-0 mt-0.5" />
                         <div>
-                          <strong className="text-white block font-medium">Redirección a WhatsApp para Comprobante:</strong>
-                          Al presionar <span className="text-white font-semibold">"Confirmar Pedido"</span> serás redirigido automáticamente a nuestro WhatsApp con todos los detalles de tu orden listos para que adjuntes tu captura o comprobante de Yappy.
+                          <strong className="text-white block font-medium">Confirmación Automática por WhatsApp:</strong>
+                          Al presionar <span className="text-white font-semibold">"Confirmar Pedido"</span> serás redirigido directamente a nuestro WhatsApp con todos los datos de tu compra listos para enviar sin necesidad de ingresar comprobantes o datos manuales aquí.
                         </div>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] uppercase tracking-wider text-stone-400 block mb-1">
-                          Nº de Referencia o Celular Yappy (Opcional si adjuntas comprobante en WhatsApp):
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Ej. 6890-1234 o #REF-9842"
-                          value={comprobantePago}
-                          onChange={(e) => setComprobantePago(e.target.value)}
-                          className="w-full px-3 py-2 bg-black/60 border border-white/10 rounded text-xs text-white font-mono focus:outline-none focus:border-[#c5a059]"
-                        />
                       </div>
                     </div>
                   )}
@@ -1043,175 +1084,25 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
                         </span>
                       </div>
 
-                      {/* Selector de Modo: PagueloFacil o Manual */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setTarjetaModo('paguelofacil')}
-                          className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                            tarjetaModo === 'paguelofacil'
-                              ? 'border-[#c5a059] bg-[#c5a059]/15 text-white font-medium ring-1 ring-[#c5a059]'
-                              : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
-                          }`}
-                        >
-                          <div className="flex items-center justify-center gap-1.5">
-                            <CreditCard size={13} className={tarjetaModo === 'paguelofacil' ? 'text-[#c5a059]' : 'text-stone-400'} />
-                            <span className="text-xs font-semibold">PagueloFacil (En la App)</span>
+                      {/* MODO PAGUELOFACIL DIRECTO SIN FORMULARIO MANUAL */}
+                      <div className="p-4 rounded-xl bg-black/60 border border-[#c5a059]/40 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-white font-medium text-xs">
+                            <CreditCard size={15} className="text-[#c5a059]" />
+                            <span>Pasarela Oficial PagueloFacil Panamá</span>
                           </div>
-                          <span className="text-[9px] text-[#c5a059] block mt-0.5 font-light">Recomendado · Rápido y Seguro</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setTarjetaModo('manual')}
-                          className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                            tarjetaModo === 'manual'
-                              ? 'border-[#c5a059] bg-[#c5a059]/15 text-white font-medium ring-1 ring-[#c5a059]'
-                              : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
-                          }`}
-                        >
-                          <span className="text-xs block">Ingresar Datos Manual</span>
-                          <span className="text-[9px] text-stone-400 block mt-0.5 font-light">Formulario directo</span>
-                        </button>
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-mono">
+                            Activa
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-stone-300 leading-relaxed font-light">
+                          Al presionar <strong className="text-white">"Confirmar Pedido"</strong> abajo, se generará tu recibo detallado con lo que compraste y te enviaremos directamente al enlace oficial de PagueloFacil para pagar tus <strong className="text-[#c5a059] font-mono">${total.toFixed(2)} USD</strong> con tus tarjetas Visa, Mastercard o Clave.
+                        </p>
+                        <div className="flex items-center gap-2 pt-1 text-[10px] text-emerald-400 font-mono">
+                          <ShieldCheck size={12} />
+                          <span>Conexión cifrada sin ingresar datos bancarios en esta página</span>
+                        </div>
                       </div>
-
-                      {/* MODO PAGUELOFACIL INTEGRADO DENTRO DE LA APP */}
-                      {tarjetaModo === 'paguelofacil' && (
-                        <div className="space-y-3 p-3.5 rounded-xl bg-black/60 border border-[#c5a059]/30">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <span className="text-xs font-bold text-white block">
-                                Pasarela PagueloFacil Panamá
-                              </span>
-                              <p className="text-[11px] text-stone-300 font-light mt-0.5 leading-relaxed">
-                                Paga de forma segura desde adentro de la app con tus tarjetas Visa, Mastercard o Clave con el enlace oficial de la tienda.
-                              </p>
-                            </div>
-                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-mono shrink-0">
-                              Activa
-                            </span>
-                          </div>
-
-                          {/* Botón principal para abrir la pasarela adentro de la app */}
-                          <div className="pt-1">
-                            <button
-                              type="button"
-                              onClick={() => setIsPagueloFacilOpen(true)}
-                              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d4af37] hover:from-[#d4af37] hover:to-[#c5a059] text-black font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#c5a059]/20 transition-all cursor-pointer"
-                            >
-                              <CreditCard size={16} />
-                              <span>Pagar ${total.toFixed(2)} USD en PagueloFacil (Abrir Pasarela)</span>
-                            </button>
-                          </div>
-
-                          {/* Campo opcional de comprobante / confirmación */}
-                          <div className="pt-2 border-t border-white/[0.08] space-y-1">
-                            <label className="text-[10px] uppercase tracking-wider text-stone-300 block font-medium">
-                              Número de Aprobación / Referencia de PagueloFacil (Opcional):
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Ej. PF-1049284 o número de autorización"
-                              value={pagueloFacilRef}
-                              onChange={(e) => {
-                                setPagueloFacilRef(e.target.value);
-                                setComprobantePago(e.target.value);
-                              }}
-                              className="w-full px-3 py-2 bg-stone-900/80 border border-white/10 text-xs text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] rounded-lg"
-                            />
-                            <p className="text-[10px] text-stone-400 font-light">
-                              Al presionar el botón dorado podrás pagar directamente en la ventana integrada. Al terminar, regresa aquí para confirmar tu pedido.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* MODO MANUAL DE DATOS DE TARJETA */}
-                      {tarjetaModo === 'manual' && (
-                        <div className="space-y-2.5">
-                          <div>
-                            <label className="text-[10px] uppercase tracking-wider text-stone-400 block mb-1">
-                              Número de Tarjeta *
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="4000 1234 5678 9010"
-                              value={cardNumber}
-                              onChange={(e) => handleCardNumberChange(e.target.value)}
-                              maxLength={19}
-                              className={`w-full px-3 py-2 bg-black/60 border text-xs text-white font-mono focus:outline-none ${
-                                formErrors.cardNumber ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
-                              }`}
-                            />
-                            {formErrors.cardNumber && (
-                              <p className="text-[10px] text-rose-400 mt-1">{formErrors.cardNumber}</p>
-                            )}
-                          </div>
-
-                          <div>
-                            <label className="text-[10px] uppercase tracking-wider text-stone-400 block mb-1">
-                              Nombre del Titular (en la tarjeta) *
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="ROBERTO DE LA ESPRIELLA"
-                              value={cardHolder}
-                              onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
-                              className={`w-full px-3 py-2 bg-black/60 border text-xs text-white uppercase focus:outline-none ${
-                                formErrors.cardHolder ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
-                              }`}
-                            />
-                            {formErrors.cardHolder && (
-                              <p className="text-[10px] text-rose-400 mt-1">{formErrors.cardHolder}</p>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="text-[10px] uppercase tracking-wider text-stone-400 block mb-1">
-                                Vencimiento (MM/AA) *
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="12/28"
-                                value={cardExpiry}
-                                onChange={(e) => handleCardExpiryChange(e.target.value)}
-                                maxLength={5}
-                                className={`w-full px-3 py-2 bg-black/60 border text-xs text-white font-mono focus:outline-none ${
-                                  formErrors.cardExpiry ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
-                                }`}
-                              />
-                              {formErrors.cardExpiry && (
-                                <p className="text-[10px] text-rose-400 mt-1">{formErrors.cardExpiry}</p>
-                              )}
-                            </div>
-
-                            <div>
-                              <label className="text-[10px] uppercase tracking-wider text-stone-400 block mb-1">
-                                CVV *
-                              </label>
-                              <input
-                                type="password"
-                                placeholder="123"
-                                value={cardCvv}
-                                onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                                maxLength={4}
-                                className={`w-full px-3 py-2 bg-black/60 border text-xs text-white font-mono focus:outline-none ${
-                                  formErrors.cardCvv ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
-                                }`}
-                              />
-                              {formErrors.cardCvv && (
-                                <p className="text-[10px] text-rose-400 mt-1">{formErrors.cardCvv}</p>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1.5 pt-1 text-[10px] text-stone-500">
-                            <Lock size={10} className="text-[#c5a059]" />
-                            <span>Cifrado SSL 256-bit. Tus datos viajan protegidos bajo estrictos protocolos bancarios.</span>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -1360,88 +1251,6 @@ Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yapp
                   <ShieldCheck size={14} className="text-[#c5a059]" />
                   <span>Transacción protegida. Registro automático en Supabase.</span>
                 </div>
-              </div>
-            </div>
-          </div>
-        )}
-        {/* IN-APP PAGUELOFACIL EMBEDDED MODAL */}
-        {isPagueloFacilOpen && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-2 sm:p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
-            <div className="relative w-full max-w-2xl bg-[#0e0e12] border border-[#c5a059]/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
-              {/* Header */}
-              <div className="p-3.5 sm:p-4 border-b border-white/10 flex items-center justify-between bg-black/80">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-[#c5a059]/20 border border-[#c5a059]/40 flex items-center justify-center text-[#c5a059]">
-                    <CreditCard size={16} />
-                  </div>
-                  <div>
-                    <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
-                      <span>Pasarela PagueloFacil Integrada</span>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
-                        Seguro SSL
-                      </span>
-                    </h3>
-                    <p className="text-[10px] text-stone-400 font-light">
-                      Monto total: <strong className="text-[#c5a059] font-mono">${total.toFixed(2)} USD</strong> • Pretty-Store
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <a
-                    href={pagueloFacilUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 text-[10px] font-medium border border-white/10 flex items-center gap-1 transition-colors"
-                    title="Abrir en pantalla completa o navegador externo"
-                  >
-                    <span className="hidden sm:inline">Nueva Ventana</span>
-                    <ExternalLink size={12} />
-                  </a>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsPagueloFacilOpen(false)}
-                    className="p-1.5 rounded-lg text-stone-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] transition-colors cursor-pointer"
-                    aria-label="Cerrar pasarela"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-              </div>
-
-              {/* iFrame con https://checkout.paguelofacil.com/gorras */}
-              <div className="flex-1 bg-white relative min-h-[460px] sm:min-h-[560px] overflow-hidden">
-                <iframe
-                  src={pagueloFacilUrl}
-                  title="Pasarela de Pago PagueloFacil"
-                  className="w-full h-full min-h-[460px] sm:min-h-[560px] border-0"
-                  allow="payment *; clipboard-write *"
-                />
-              </div>
-
-              {/* Footer con confirmación de pago */}
-              <div className="p-3 sm:p-4 border-t border-white/10 bg-black/90 flex flex-col sm:flex-row items-center justify-between gap-2.5">
-                <div className="text-[11px] text-stone-300 text-center sm:text-left">
-                  <span>¿Realizaste tu pago en PagueloFacil?</span>
-                  <span className="text-[10px] text-stone-400 block font-light">
-                    Pulsa el botón para regresar a la tienda y finalizar tu pedido.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsPagueloFacilOpen(false);
-                    if (!pagueloFacilRef) {
-                      setPagueloFacilRef('Pago completado en PagueloFacil');
-                      setComprobantePago('Pago completado en PagueloFacil');
-                    }
-                  }}
-                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-lg transition-all"
-                >
-                  <CheckCircle2 size={14} />
-                  <span>Ya realicé mi pago en PagueloFacil</span>
-                </button>
               </div>
             </div>
           </div>
