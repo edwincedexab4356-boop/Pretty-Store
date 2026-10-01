@@ -1585,6 +1585,7 @@ export interface InventoryItemRow {
   nombre_producto: string;
   imagen_url: string | null;
   categoria_nombre: string;
+  categoria_id?: string;
   stock_actual: number;
   stock_minimo: number;
   precio: number;
@@ -1624,6 +1625,7 @@ export async function getAdminInventory(): Promise<InventoryItemRow[]> {
       nombre_producto: p.nombre,
       imagen_url: p.imagen_url,
       categoria_nombre: catMap.get(p.categoria_id) || 'Sin categoría',
+      categoria_id: p.categoria_id || '',
       stock_actual: inv ? inv.stock_actual : (p.stock || 0),
       stock_minimo: inv ? inv.stock_minimo : 5,
       precio: p.precio,

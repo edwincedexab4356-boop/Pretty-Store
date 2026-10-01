@@ -199,14 +199,26 @@ export const ClientsView: React.FC<ClientsViewProps> = ({ onOpenSqlFix }) => {
           </p>
         </div>
 
-        <button
-          onClick={loadData}
-          disabled={isLoading}
-          className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-200 hover:text-white text-xs font-medium border border-white/[0.08] flex items-center gap-2 cursor-pointer transition-all self-start md:self-auto"
-        >
-          <RefreshCw size={14} className={isLoading ? 'animate-spin text-[#c5a059]' : 'text-stone-400'} />
-          <span>Actualizar Clientes</span>
-        </button>
+        <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+          {onOpenSqlFix && (
+            <button
+              onClick={() => onOpenSqlFix('Desbloquear permisos de eliminación en Supabase')}
+              className="px-3.5 py-2.5 rounded-xl bg-[#c5a059]/15 hover:bg-[#c5a059]/25 text-[#c5a059] hover:text-white text-xs font-semibold border border-[#c5a059]/40 flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+              title="Ver instrucciones y script SQL para autorizar eliminación en Supabase"
+            >
+              <span>Desbloquear Borrados (SQL)</span>
+            </button>
+          )}
+
+          <button
+            onClick={loadData}
+            disabled={isLoading}
+            className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-200 hover:text-white text-xs font-medium border border-white/[0.08] flex items-center gap-2 cursor-pointer transition-all"
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin text-[#c5a059]' : 'text-stone-400'} />
+            <span>Actualizar Clientes</span>
+          </button>
+        </div>
       </div>
 
       {/* Search */}
