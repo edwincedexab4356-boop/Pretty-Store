@@ -55,7 +55,7 @@ export interface Inventario {
   producto?: Producto;
 }
 
-export type MetodoPago = 'efectivo' | 'tarjeta' | 'yappy';
+export type MetodoPago = 'tarjeta' | 'yappy' | 'transferencia' | 'efectivo';
 export type TipoEntrega = 'delivery' | 'retiro';
 export type CourierOption = 'Uno Express' | 'Ferguson' | 'Servientrega';
 

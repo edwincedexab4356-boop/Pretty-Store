@@ -91,11 +91,12 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     throw new Error('Por favor ingresa un número de teléfono válido (al menos 7 dígitos).');
   }
 
-  if (tipoEntrega === 'delivery' && (!cleanDireccion || cleanDireccion.length < 5)) {
-    throw new Error('Por favor especifica una dirección de entrega completa.');
+  let safeDireccion = cleanDireccion;
+  if (tipoEntrega === 'delivery' && (!safeDireccion || safeDireccion.length < 2)) {
+    safeDireccion = `Sucursal ${courier || 'Courier'} (Agencia Principal)`;
   }
 
-  const validMetodos: MetodoPago[] = ['yappy', 'tarjeta', 'efectivo'];
+  const validMetodos: MetodoPago[] = ['yappy', 'tarjeta', 'transferencia', 'efectivo'];
   if (!validMetodos.includes(metodoPago)) {
     throw new Error('Método de pago no reconocido.');
   }
@@ -195,7 +196,9 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
   const resolvedAddress =
     tipoEntrega === 'retiro'
       ? 'Retiro en el Local / Tienda física (Pretty-Store)'
-      : `${cleanDireccion} (Envío vía: ${courier || 'Uno Express'})`;
+      : safeDireccion.includes('Sucursal') || safeDireccion.includes('Envío')
+        ? safeDireccion
+        : `${safeDireccion} (Envío vía: ${courier || 'Uno Express'})`;
 
   // 5. Registrar o vincular cliente en public.clientes
   let clienteId: string | null = null;

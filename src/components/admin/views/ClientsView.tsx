@@ -13,10 +13,12 @@ import {
   AlertTriangle,
   CheckCircle2,
   X,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { getAdminClients, deleteAdminClient } from '../../../services/adminService';
 import { Cliente } from '../../../types/database';
-import { isPermissionError } from '../../../utils/supabaseSqlFix';
+import { isPermissionError, SUPABASE_UNLOCK_DELETE_SQL } from '../../../utils/supabaseSqlFix';
 import { PermissionErrorBanner } from '../PermissionErrorBanner';
 
 interface ClientsViewProps {
@@ -30,7 +32,18 @@ export const ClientsView: React.FC<ClientsViewProps> = ({ onOpenSqlFix }) => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Cliente | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [feedback, setFeedback] = useState<{
+    type: 'success' | 'error';
+    text: string;
+    showSqlTip?: boolean;
+  } | null>(null);
+  const [copiedSql, setCopiedSql] = useState(false);
+
+  const copySqlToClipboard = () => {
+    navigator.clipboard.writeText(SUPABASE_UNLOCK_DELETE_SQL);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 3000);
+  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -56,17 +69,27 @@ export const ClientsView: React.FC<ClientsViewProps> = ({ onOpenSqlFix }) => {
     setIsDeleting(true);
     setFeedback(null);
     try {
-      await deleteAdminClient(clientToDelete.id);
-      setFeedback({
-        type: 'success',
-        text: `El cliente "${clientToDelete.nombre}" ha sido eliminado exitosamente.`,
-      });
+      const res = await deleteAdminClient(clientToDelete.id);
+      setClients((prev) => prev.filter((c) => String(c.id) !== String(clientToDelete.id)));
+      if (res?.localOnly) {
+        setFeedback({
+          type: 'error',
+          text: `Supabase bloqueó el borrado de "${clientToDelete.nombre}" en la base de datos (Error 42501: Falta permiso DELETE en PostgreSQL). Se ocultó temporalmente en este navegador. Para que se borre directamente en Supabase, ejecuta el comando SQL abajo.`,
+          showSqlTip: true,
+        });
+      } else {
+        setFeedback({
+          type: 'success',
+          text: `El cliente "${clientToDelete.nombre}" ha sido eliminado exitosamente y directamente de la base de datos de Supabase.`,
+        });
+      }
       setClientToDelete(null);
       await loadData();
     } catch (err: any) {
       setFeedback({
         type: 'error',
         text: err?.message || 'No se pudo eliminar el cliente.',
+        showSqlTip: true,
       });
     } finally {
       setIsDeleting(false);
@@ -100,26 +123,56 @@ export const ClientsView: React.FC<ClientsViewProps> = ({ onOpenSqlFix }) => {
       {/* Feedback banner */}
       {feedback && (
         <div
-          className={`p-4 rounded-xl border flex items-center justify-between text-xs transition-all ${
+          className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs transition-all ${
             feedback.type === 'success'
               ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
               : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
           }`}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-start sm:items-center gap-2.5">
             {feedback.type === 'success' ? (
-              <CheckCircle2 size={16} className="text-emerald-400" />
+              <CheckCircle2 size={16} className="text-emerald-400 shrink-0 mt-0.5 sm:mt-0" />
             ) : (
-              <AlertTriangle size={16} className="text-rose-400" />
+              <AlertTriangle size={16} className="text-rose-400 shrink-0 mt-0.5 sm:mt-0" />
             )}
-            <span>{feedback.text}</span>
+            <div className="space-y-1">
+              <span>{feedback.text}</span>
+              {feedback.showSqlTip && (
+                <p className="text-[11px] text-stone-300 font-light leading-relaxed">
+                  Para que Supabase borre físicamente el cliente en la base de datos sin error 42501, presiona <strong className="text-white">"Copiar Comando SQL"</strong> y ejecútalo en tu <strong>Supabase Dashboard ➔ SQL Editor</strong>.
+                </p>
+              )}
+            </div>
           </div>
-          <button
-            onClick={() => setFeedback(null)}
-            className="text-stone-400 hover:text-white p-1 rounded cursor-pointer"
-          >
-            <X size={14} />
-          </button>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            {feedback.showSqlTip && (
+              <button
+                type="button"
+                onClick={copySqlToClipboard}
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium text-[11px] flex items-center gap-1.5 transition-all cursor-pointer border border-white/15"
+                title="Copiar comando GRANT ALL para Supabase SQL Editor"
+              >
+                {copiedSql ? (
+                  <>
+                    <Check size={12} className="text-emerald-400" />
+                    <span>¡Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={12} className="text-[#c5a059]" />
+                    <span>Copiar Comando SQL</span>
+                  </>
+                )}
+              </button>
+            )}
+            <button
+              onClick={() => setFeedback(null)}
+              className="text-stone-400 hover:text-white p-1 rounded cursor-pointer"
+            >
+              <X size={14} />
+            </button>
+          </div>
         </div>
       )}
 

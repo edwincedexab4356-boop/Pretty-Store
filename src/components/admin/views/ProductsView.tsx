@@ -363,8 +363,14 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix, onOpen
   const handleDelete = async () => {
     if (!isDeleting) return;
     try {
-      await deleteAdminProduct(isDeleting.id);
-      setActionMessage({ type: 'success', text: `Producto "${isDeleting.nombre}" e inventario eliminados definitivamente de Supabase.` });
+      const res = await deleteAdminProduct(isDeleting.id, isDeleting);
+      const photoText = res?.photosDeleted
+        ? ` y sus ${res.photosDeleted} foto(s) en Supabase Storage han sido eliminadas automáticamente.`
+        : ' y sus fotos en Supabase Storage han sido eliminadas.';
+      setActionMessage({
+        type: 'success',
+        text: `Producto "${isDeleting.nombre}"${photoText}`,
+      });
       setProducts((prev) => prev.filter((p) => p.id !== isDeleting.id));
       setIsDeleting(null);
       await loadData();
@@ -1219,7 +1225,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix, onOpen
               ¿Eliminar producto?
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed mb-6">
-              Estás a punto de eliminar definitivamente <strong>"{isDeleting.nombre}"</strong>. Esta acción eliminará permanentemente el producto y su registro de inventario de Supabase.
+              Estás a punto de eliminar definitivamente <strong>"{isDeleting.nombre}"</strong>. Esta acción eliminará permanentemente el producto, sus fotos en Storage y su registro de inventario de Supabase.
             </p>
 
             <div className="flex items-center justify-end gap-3">

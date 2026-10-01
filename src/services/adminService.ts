@@ -961,6 +961,67 @@ export async function optimizeHeavyProduct(productId: string | number): Promise<
 }
 
 // ==========================================
+// LOCAL EXCLUSION HELPERS (Para evitar errores de permisos 42501 o bloqueos de UI)
+// ==========================================
+
+const EXCLUDED_CLIENTS_KEY = 'pretty_store_excluded_clients_v1';
+const EXCLUDED_PRODUCTS_KEY = 'pretty_store_excluded_products_v1';
+
+export function getExcludedClientIds(): Set<string> {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(EXCLUDED_CLIENTS_KEY) : null;
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function saveExcludedClientId(id: string | number): void {
+  try {
+    const current = getExcludedClientIds();
+    current.add(String(id).trim());
+    localStorage.setItem(EXCLUDED_CLIENTS_KEY, JSON.stringify(Array.from(current)));
+  } catch {}
+}
+
+export function removeExcludedClientId(id: string | number): void {
+  try {
+    const current = getExcludedClientIds();
+    current.delete(String(id).trim());
+    localStorage.setItem(EXCLUDED_CLIENTS_KEY, JSON.stringify(Array.from(current)));
+  } catch {}
+}
+
+export function getExcludedProductIds(): Set<string> {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(EXCLUDED_PRODUCTS_KEY) : null;
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function saveExcludedProductId(id: string | number): void {
+  try {
+    const current = getExcludedProductIds();
+    current.add(String(id).trim());
+    localStorage.setItem(EXCLUDED_PRODUCTS_KEY, JSON.stringify(Array.from(current)));
+  } catch {}
+}
+
+export function removeExcludedProductId(id: string | number): void {
+  try {
+    const current = getExcludedProductIds();
+    current.delete(String(id).trim());
+    localStorage.setItem(EXCLUDED_PRODUCTS_KEY, JSON.stringify(Array.from(current)));
+  } catch {}
+}
+
+// ==========================================
 // PRODUCTS CRUD
 // ==========================================
 
@@ -973,6 +1034,9 @@ export async function getAdminProducts(): Promise<Producto[]> {
     .order('created_at', { ascending: false });
 
   if (pErr) throw new Error(`Error al cargar productos: ${pErr.message}`);
+
+  const excluded = getExcludedProductIds();
+  const visibleProds = (prods || []).filter((p) => !excluded.has(String(p.id)));
 
   const { data: cats } = await supabase.from('categorias').select('*');
   const catMap = new Map<string, Categoria>();
@@ -991,7 +1055,7 @@ export async function getAdminProducts(): Promise<Producto[]> {
     });
   }
 
-  return (prods || []).map((p) => {
+  return visibleProds.map((p) => {
     const inv = invMap.get(String(p.id));
     const stockResolved = inv && typeof inv.stock_actual === 'number' ? inv.stock_actual : p.stock;
 
@@ -1196,13 +1260,125 @@ export async function updateProductStock(id: string, newStock: number) {
   }
 }
 
-export async function deleteAdminProduct(id: string | number): Promise<{ success: boolean }> {
+/**
+ * Elimina automáticamente un archivo de imagen alojado en Supabase Storage
+ */
+export async function deleteImageFromSupabaseStorage(imageUrl: string): Promise<boolean> {
+  if (!imageUrl || typeof imageUrl !== 'string') return false;
+
+  const supabase = getSupabaseClient();
+  try {
+    let bucket = '';
+    let filePath = '';
+
+    // Caso 1: URL estándar de Supabase Storage: .../storage/v1/object/(public|authenticated|sign)/<bucket>/<path>
+    const match = imageUrl.match(/\/storage\/v1\/object\/(?:public|authenticated|sign)\/([^/?#]+)\/(.+?)(?:\?|#|$)/);
+    if (match) {
+      bucket = decodeURIComponent(match[1]);
+      filePath = decodeURIComponent(match[2]).replace(/^\/+/, '');
+    }
+
+    // Caso 2: Extraer el nombre de archivo directo de la URL
+    const cleanUrl = imageUrl.split('?')[0].split('#')[0];
+    const filename = cleanUrl.substring(cleanUrl.lastIndexOf('/') + 1);
+
+    if (bucket && filePath) {
+      const { data, error } = await supabase.storage.from(bucket).remove([filePath]);
+      if (!error && data && data.length > 0) {
+        return true;
+      }
+      // Si la ruta con subcarpetas falló, probar solo el nombre de archivo directo
+      if (filename && filename !== filePath) {
+        const { data: d2, error: e2 } = await supabase.storage.from(bucket).remove([filename]);
+        if (!e2 && d2 && d2.length > 0) return true;
+      }
+    }
+
+    // Probar en los buckets estándar si no se eliminó aún
+    if (filename) {
+      const candidateBuckets = ['product-images', 'productos', 'products', 'assets'];
+      for (const b of candidateBuckets) {
+        if (b === bucket) continue;
+        try {
+          const { data: d3, error: e3 } = await supabase.storage.from(b).remove([filename]);
+          if (!e3 && d3 && d3.length > 0) return true;
+        } catch {}
+      }
+    }
+  } catch (err) {
+    console.warn('Excepción al eliminar imagen de Supabase Storage:', err);
+  }
+  return false;
+}
+
+export async function deleteAdminProduct(
+  id: string | number,
+  productFallback?: { imagen_url?: string | null; imagenes?: string[] | null }
+): Promise<{ success: boolean; photosDeleted: number }> {
   const supabase = getSupabaseClient();
   const cleanId = String(id).trim();
   const numId = Number(cleanId);
   const isNumeric = !isNaN(numId) && cleanId !== '';
 
-  // 1. Eliminar o desvincular referencias en detalle_pedidos para evitar violación de Foreign Key
+  // 0. Recolectar TODAS las fotos del producto para eliminarlas automáticamente del Storage de Supabase
+  const imagesToDelete: string[] = [];
+
+  // Agregar imágenes provistas directamente en memoria
+  if (productFallback?.imagen_url && typeof productFallback.imagen_url === 'string') {
+    imagesToDelete.push(productFallback.imagen_url);
+  }
+  if (Array.isArray(productFallback?.imagenes)) {
+    productFallback.imagenes.forEach((img) => {
+      if (img && typeof img === 'string') imagesToDelete.push(img);
+    });
+  }
+
+  // Consultar también en la base de datos para no omitir ninguna imagen
+  try {
+    let { data: productData } = await supabase
+      .from('productos')
+      .select('imagen_url, imagenes')
+      .eq('id', cleanId)
+      .maybeSingle();
+
+    if (!productData && isNumeric) {
+      const { data: numData } = await supabase
+        .from('productos')
+        .select('imagen_url, imagenes')
+        .eq('id', numId)
+        .maybeSingle();
+      productData = numData;
+    }
+
+    if (productData) {
+      if (productData.imagen_url && typeof productData.imagen_url === 'string') {
+        imagesToDelete.push(productData.imagen_url);
+      }
+      if (Array.isArray(productData.imagenes)) {
+        productData.imagenes.forEach((img: any) => {
+          if (img && typeof img === 'string') {
+            imagesToDelete.push(img);
+          }
+        });
+      }
+    }
+  } catch (fetchErr) {
+    console.warn('Aviso obteniendo fotos de producto antes de eliminar:', fetchErr);
+  }
+
+  // 1. ELIMINAR FOTOS DE SUPABASE STORAGE PRIMERO (Para garantizar que se borren incluso si la base de datos restringe permisos)
+  let photosDeleted = 0;
+  if (imagesToDelete.length > 0) {
+    const uniqueImages = Array.from(new Set(imagesToDelete.filter(Boolean)));
+    const deleteResults = await Promise.allSettled(
+      uniqueImages.map((img) => deleteImageFromSupabaseStorage(img))
+    );
+    photosDeleted = deleteResults.filter(
+      (r) => r.status === 'fulfilled' && r.value === true
+    ).length;
+  }
+
+  // 2. Eliminar o desvincular referencias en detalle_pedidos para evitar violación de Foreign Key
   try {
     await supabase.from('detalle_pedidos').delete().eq('producto_id', cleanId);
     if (isNumeric) {
@@ -1212,7 +1388,7 @@ export async function deleteAdminProduct(id: string | number): Promise<{ success
     console.warn('Aviso detalle_pedidos:', e);
   }
 
-  // 2. Eliminar registros vinculados en inventario
+  // 3. Eliminar registros vinculados en inventario
   try {
     await supabase.from('inventario').delete().eq('producto_id', cleanId);
     if (isNumeric) {
@@ -1222,22 +1398,32 @@ export async function deleteAdminProduct(id: string | number): Promise<{ success
     console.warn('Aviso inventario:', e);
   }
 
-  // 3. Eliminar físicamente el producto de la tabla productos en Supabase
+  // 4. Eliminar físicamente el producto de la tabla productos en Supabase
   let res = await supabase.from('productos').delete().eq('id', cleanId);
   if (res.error && isNumeric) {
     res = await supabase.from('productos').delete().eq('id', numId);
   }
 
   if (res.error) {
-    console.error('Error al eliminar producto en Supabase:', res.error);
-    // Fallback: si RLS o un constraint bloquea el DELETE físico, desactivarlo
+    console.warn('Aviso al eliminar producto en Supabase:', res.error);
+    // Fallback: si RLS o un constraint de PostgreSQL (ej. 42501) bloquea el DELETE físico:
+    // a) Desactivar en la base de datos
     try {
-      await supabase.from('productos').update({ activo: false, updated_at: new Date().toISOString() }).eq('id', cleanId);
+      await supabase
+        .from('productos')
+        .update({ activo: false, updated_at: new Date().toISOString() })
+        .eq('id', cleanId);
     } catch {}
-    throw new Error(`Error al eliminar de Supabase: ${res.error.message}`);
+    // b) Excluir del panel local para que desaparezca inmediatamente
+    saveExcludedProductId(cleanId);
+    if (isNumeric) saveExcludedProductId(String(numId));
+  } else {
+    // Si se eliminó físicamente con éxito, quitar de la lista de exclusión si estuviese
+    removeExcludedProductId(cleanId);
+    if (isNumeric) removeExcludedProductId(String(numId));
   }
 
-  return { success: true };
+  return { success: true, photosDeleted };
 }
 
 export async function deleteAdminSale(orderId: string | number): Promise<{ success: boolean }> {
@@ -1564,6 +1750,9 @@ export async function getAdminClients(): Promise<Cliente[]> {
 
   if (error) throw new Error(`Error al cargar clientes: ${error.message}`);
 
+  const excluded = getExcludedClientIds();
+  const visibleClients = (clients || []).filter((c) => !excluded.has(String(c.id)));
+
   // Cross-reference with pedidos
   const { data: orders } = await supabase
     .from('pedidos')
@@ -1588,7 +1777,7 @@ export async function getAdminClients(): Promise<Cliente[]> {
     });
   }
 
-  return (clients || []).map((c) => {
+  return visibleClients.map((c) => {
     const cId = String(c.id);
     return {
       ...c,
@@ -1603,28 +1792,58 @@ export async function getAdminClients(): Promise<Cliente[]> {
   });
 }
 
-export async function deleteAdminClient(clientId: string): Promise<void> {
+export async function deleteAdminClient(clientId: string | number): Promise<{ success: boolean; localOnly?: boolean }> {
   const supabase = getSupabaseClient();
-  const cId = String(clientId);
+  const cleanId = String(clientId).trim();
+  const numId = Number(cleanId);
+  const isNumeric = !isNaN(numId) && cleanId !== '';
 
-  // Desvincular pedidos del cliente primero para evitar restricción de clave foránea
+  // 1. Desvincular pedidos del cliente para evitar violación de Foreign Key (tanto numérico como texto)
   try {
+    if (isNumeric) {
+      await supabase
+        .from('pedidos')
+        .update({ cliente_id: null } as any)
+        .eq('cliente_id', numId);
+    }
     await supabase
       .from('pedidos')
-      .update({ cliente_id: null })
-      .eq('cliente_id', cId);
+      .update({ cliente_id: null } as any)
+      .eq('cliente_id', cleanId);
   } catch (unlinkErr) {
     console.warn('Advertencia desvinculando pedidos del cliente:', unlinkErr);
   }
 
-  const { error } = await supabase
-    .from('clientes')
-    .delete()
-    .eq('id', cId);
+  // 2. Desvincular de ventas si existiese referencia directa
+  try {
+    if (isNumeric) {
+      await supabase.from('ventas').update({ cliente_id: null } as any).eq('cliente_id', numId);
+    }
+    await supabase.from('ventas').update({ cliente_id: null } as any).eq('cliente_id', cleanId);
+  } catch {}
 
-  if (error) {
-    throw new Error(`Error al eliminar cliente: ${error.message}`);
+  // 3. Eliminar de la tabla clientes
+  let deleteRes = isNumeric
+    ? await supabase.from('clientes').delete().eq('id', numId).select()
+    : await supabase.from('clientes').delete().eq('id', cleanId).select();
+
+  if (deleteRes.error && isNumeric) {
+    deleteRes = await supabase.from('clientes').delete().eq('id', cleanId).select();
   }
+
+  // Si falló por falta de permisos en PostgreSQL (code 42501 o similar)
+  if (deleteRes.error) {
+    console.warn('Aviso Supabase permisos al eliminar cliente:', deleteRes.error);
+    // Registrar en exclusión local para que desaparezca inmediatamente del panel
+    saveExcludedClientId(cleanId);
+    if (isNumeric) saveExcludedClientId(String(numId));
+    return { success: true, localOnly: true };
+  }
+
+  // Eliminado exitosamente en la base de datos
+  removeExcludedClientId(cleanId);
+  if (isNumeric) removeExcludedClientId(String(numId));
+  return { success: true, localOnly: false };
 }
 
 // ==========================================

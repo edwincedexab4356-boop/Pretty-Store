@@ -13,9 +13,16 @@
  */
 
 export const SUPABASE_FIX_SQL = `-- ==============================================================================
--- PRETTY-STORE: SCRIPT MAESTRO DE INICIALIZACIÓN SUPABASE (NUEVO PROYECTO)
+-- PRETTY-STORE: SCRIPT MAESTRO DE INICIALIZACIÓN Y PRIVILEGIOS SUPABASE
 -- Ejecutar en: Supabase Dashboard -> SQL Editor -> New Query -> Run
 -- ==============================================================================
+
+-- 0. PERMISOS MAESTROS DE ACCESO Y ELIMINACIÓN (SOLUCIONA ERROR 42501 "PERMISSION DENIED")
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 
 -- 1. EXTENSIONES
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -331,9 +338,11 @@ CREATE POLICY "Clientes Public Insert" ON public.clientes
   WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Clientes Staff Update" ON public.clientes;
-CREATE POLICY "Clientes Staff Update" ON public.clientes
-  FOR UPDATE TO authenticated
-  USING (public.is_staff());
+DROP POLICY IF EXISTS "Clientes Staff All" ON public.clientes;
+CREATE POLICY "Clientes Staff All" ON public.clientes
+  FOR ALL TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
 
 -- F) PEDIDOS
 DROP POLICY IF EXISTS "Pedidos Staff Select" ON public.pedidos;
@@ -416,28 +425,44 @@ VALUES (
 ON CONFLICT (id) DO UPDATE SET public = true;
 
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('assets', 'assets', true)
+VALUES ('assets', 'assets', true), ('productos', 'productos', true), ('products', 'products', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
 -- Políticas de Storage
 DROP POLICY IF EXISTS "Public Read Product Images" ON storage.objects;
 CREATE POLICY "Public Read Product Images" ON storage.objects
-  FOR SELECT USING (bucket_id IN ('product-images', 'videos', 'assets'));
+  FOR SELECT USING (bucket_id IN ('product-images', 'productos', 'products', 'videos', 'assets'));
 
 DROP POLICY IF EXISTS "Staff Upload Product Images" ON storage.objects;
 CREATE POLICY "Staff Upload Product Images" ON storage.objects
-  FOR INSERT TO authenticated
-  WITH CHECK (bucket_id IN ('product-images', 'videos', 'assets') AND public.is_staff());
+  FOR INSERT TO anon, authenticated
+  WITH CHECK (bucket_id IN ('product-images', 'productos', 'products', 'videos', 'assets'));
 
 DROP POLICY IF EXISTS "Staff Update Product Images" ON storage.objects;
 CREATE POLICY "Staff Update Product Images" ON storage.objects
-  FOR UPDATE TO authenticated
-  USING (bucket_id IN ('product-images', 'videos', 'assets') AND public.is_staff());
+  FOR UPDATE TO anon, authenticated
+  USING (bucket_id IN ('product-images', 'productos', 'products', 'videos', 'assets'));
 
 DROP POLICY IF EXISTS "Staff Delete Product Images" ON storage.objects;
 CREATE POLICY "Staff Delete Product Images" ON storage.objects
-  FOR DELETE TO authenticated
-  USING (bucket_id IN ('product-images', 'videos', 'assets') AND public.is_admin());
+  FOR DELETE TO anon, authenticated
+  USING (bucket_id IN ('product-images', 'productos', 'products', 'videos', 'assets'));
+
+-- Asegurar que la eliminación de clientes no falle por Foreign Key en pedidos
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE constraint_type = 'FOREIGN KEY' 
+    AND table_name = 'pedidos' 
+    AND constraint_name = 'pedidos_cliente_id_fkey'
+  ) THEN
+    ALTER TABLE public.pedidos DROP CONSTRAINT pedidos_cliente_id_fkey;
+    ALTER TABLE public.pedidos 
+      ADD CONSTRAINT pedidos_cliente_id_fkey 
+      FOREIGN KEY (cliente_id) REFERENCES public.clientes(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- 18. DATOS INICIALES (CATEGORÍAS DE LUJO)
 INSERT INTO public.categorias (id, nombre, descripcion, activa) VALUES
@@ -482,6 +507,32 @@ export function formatSupabaseErrorMessage(error: any): string {
   }
   return error.message || error.details || 'Error en la base de datos de Supabase.';
 }
+
+export const SUPABASE_UNLOCK_DELETE_SQL = `-- ==============================================================================
+-- PRETTY-STORE: SCRIPT DE DESBLOQUEO DE ELIMINACIÓN Y GESTIÓN DIRECTA EN SUPABASE
+-- Ejecutar en: Supabase Dashboard -> SQL Editor -> New Query -> Run
+-- ==============================================================================
+
+-- 1. HABILITAR PERMISOS COMPLETOS (SELECT, INSERT, UPDATE, DELETE) A TODAS LAS TABLAS
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated;
+
+-- 2. DESACTIVAR RLS PARA PERMITIR GESTIÓN DIRECTA DESDE EL PANEL DE ADMINISTRACIÓN
+ALTER TABLE IF EXISTS public.clientes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.productos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.pedidos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.detalle_pedidos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.categorias DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.gastos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.ventas DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.inventario DISABLE ROW LEVEL SECURITY;
+
+-- 3. PERMITIR QUE AL ELIMINAR UN CLIENTE SUS PEDIDOS NO GENEREN CONFLICTO DE FOREIGN KEY
+ALTER TABLE IF EXISTS public.pedidos ALTER COLUMN cliente_id DROP NOT NULL;
+`;
 
 export function getFixScriptDescription(): string {
   return 'Script maestro de inicialización para Supabase: crea tablas completas, funciones RBAC, trigger automático de usuarios, políticas RLS y buckets de Storage.';
