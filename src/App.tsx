@@ -246,6 +246,7 @@ function StoreApp({ onOpenAdmin, onOpenTerms, onOpenPrivacy }: StoreAppProps) {
 }
 
 function MainRoot() {
+  const { config } = useStoreConfig();
   const {
     route,
     navigateToAdmin,
@@ -253,6 +254,20 @@ function MainRoot() {
     navigateToTerms,
     navigateToPrivacy,
   } = useAppNavigation();
+
+  useEffect(() => {
+    if (route.type === 'store') {
+      document.title = 'prettystroe.store';
+    }
+    const logoUrl = config.logo_url || '/images/logo/logotipo.jpeg';
+    let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = logoUrl;
+  }, [config.logo_url, route.type]);
 
   if (route.type === 'admin') {
     return (
