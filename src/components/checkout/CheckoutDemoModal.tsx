@@ -2,25 +2,19 @@ import React, { useState, useMemo } from 'react';
 import {
   X,
   CreditCard,
-  Banknote,
   Smartphone,
   CheckCircle2,
   ArrowRight,
   ShieldCheck,
   User,
   MapPin,
-  Phone,
   Truck,
   Store,
   Home,
   Lock,
-  Calendar,
   AlertCircle,
   ExternalLink,
   MessageSquare,
-  Send,
-  ChevronDown,
-  ChevronUp,
   Landmark,
   Copy,
   Check,
@@ -30,6 +24,12 @@ import { useCart } from '../../context/CartContext';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 import { MetodoPago, TipoEntrega, CourierOption } from '../../types/database';
 import { createRealOrder, CreatedOrderResult } from '../../services/checkoutService';
+
+// NÚMEROS OFICIALES ESPECIFICADOS POR EL USUARIO:
+// 1. Número EXCLUSIVO para pagar por Yappy: 6402-8245
+export const YAPPY_PAY_PHONE = '6402-8245';
+// 2. Número oficial de WhatsApp para enviar el pedido y recibo de compra: 6215-0251
+export const WHATSAPP_ORDERS_PHONE = '50762150251';
 
 export type PanamaProvince =
   | 'Panamá Oeste'
@@ -63,50 +63,61 @@ export const PANAMA_PROVINCES: {
   { id: 'Comarcas', name: 'Comarcas', zone: 'lejos', tag: 'Guna Yala · Ngäbe-Buglé' },
 ];
 
-export const COURIER_SUCURSALES: Record<PanamaProvince, { ferguson: string[]; unoExpress: string[] }> = {
+export const COURIER_SUCURSALES: Record<PanamaProvince, { ferguson: string[]; unoExpress: string[]; servientrega: string[] }> = {
   'Panamá Oeste': {
     ferguson: ['La Chorrera (Parque Feuillet)', 'Arraiján Cabecera', 'Vista Alegre', 'Capira', 'Coronado'],
     unoExpress: ['La Chorrera (Plaza Italia)', 'Westland Mall', 'Arraiján (Plaza Paseo)', 'Coronado'],
+    servientrega: ['La Chorrera (Av. de las Américas)', 'Westland Mall (Kiosco)', 'Arraiján Cabecera', 'Coronado'],
   },
   'Panamá Capital': {
     ferguson: ['Vía España (Central)', 'Albrook Mall', 'El Dorado', 'Calidonia', 'Los Pueblos', 'Tocumen'],
     unoExpress: ['El Dorado', 'Albrook Terminal', 'Calle 50 / San Francisco', 'Costa del Este', 'Vía Brasil', 'Los Pueblos'],
+    servientrega: ['Vía España (Edif. Dominó)', 'El Dorado (Plaza Golden)', 'Albrook Mall', 'Calle 50 / Marbella', 'Costa del Este', 'Los Pueblos (Juan Díaz)', 'Brisas del Golf'],
   },
   'Chiriquí': {
     ferguson: ['David (Terminal)', 'David (Calle 4ta)', 'Boquete', 'Bugaba', 'Paso Canoas'],
     unoExpress: ['David (Plaza Oteima)', 'David (Centro)', 'Boquete', 'Paso Canoas Frontera'],
+    servientrega: ['David (Calle F Sur)', 'David (Plaza Coquito)', 'Boquete (Bajo Boquete)', 'Paso Canoas'],
   },
   'Veraguas': {
     ferguson: ['Santiago (Terminal)', 'Santiago (Calle Décima)', 'Soná'],
     unoExpress: ['Santiago (Plaza Boulevard)', 'Santiago (Centro)'],
+    servientrega: ['Santiago (Av. Central)', 'Santiago (Terminal de Transporte)'],
   },
   'Herrera': {
     ferguson: ['Chitré (Paseo Enrique Geenzier)', 'Chitré (Terminal)', 'Pesé'],
     unoExpress: ['Chitré (Plaza Moderna)', 'Chitré (Terminal)'],
+    servientrega: ['Chitré (Av. Herrera)', 'Chitré (Plaza Azuero)'],
   },
   'Los Santos': {
     ferguson: ['Las Tablas (Parque Porras)', 'Las Tablas (Terminal)', 'Pedasí'],
     unoExpress: ['Las Tablas (Centro)', 'Guararé'],
+    servientrega: ['Las Tablas (Vía Santo Domingo)', 'Pedasí Centro'],
   },
   'Coclé': {
     ferguson: ['Penonomé (Central)', 'Aguadulce (Vía Interamericana)', 'Antón'],
     unoExpress: ['Penonomé (Plaza Boulevard)', 'Aguadulce (Centro)'],
+    servientrega: ['Penonomé (Interamericana frente al Machetazo)', 'Aguadulce (Av. Rodolfo Chiari)'],
   },
   'Colón': {
     ferguson: ['Colón Centro (Calle 11)', 'Cuatro Altos'],
     unoExpress: ['Colón 2000', 'Cuatro Altos Shopping'],
+    servientrega: ['Colón (Calle 13 y Bolívar)', 'Cuatro Altos (Plaza Millenium)'],
   },
   'Bocas del Toro': {
     ferguson: ['Changuinola (Frente al Parque)', 'Almirante', 'Isla Colón'],
     unoExpress: ['Changuinola (Terminal)', 'Almirante'],
+    servientrega: ['Changuinola (Av. 17 de Abril)', 'Isla Colón (Calle 3ra)'],
   },
   'Darién': {
     ferguson: ['Metetí (Centro)', 'La Palma'],
     unoExpress: ['Metetí (Agencia Principal)'],
+    servientrega: ['Metetí (Plaza Darién)'],
   },
   'Comarcas': {
     ferguson: ['Agencia Principal / Más Cercana'],
     unoExpress: ['Agencia Principal / Más Cercana'],
+    servientrega: ['Agencia Principal / Más Cercana'],
   },
 };
 
@@ -115,28 +126,46 @@ export const CheckoutDemoModal: React.FC = () => {
   const {
     items,
     subtotal,
-    shipping,
-    total,
     isCheckoutOpen,
     setIsCheckoutOpen,
     clearCart,
   } = useCart();
 
-  // Tipo de Entrega: 'delivery' o 'retiro'
+  // 1. Tipo de Entrega: 'delivery' o 'retiro'
   const [tipoEntrega, setTipoEntrega] = useState<TipoEntrega>('delivery');
+
+  // 2. Courier de Envíos: Ferguson, Uno Express o Servientrega
+  const [courier, setCourier] = useState<CourierOption>('Ferguson');
+
+  // 3. Si eligió Servientrega: modalidad sucursal o domicilio
+  const [servientregaModalidad, setServientregaModalidad] = useState<'sucursal' | 'domicilio'>('sucursal');
+
+  // 4. Provincia seleccionada
   const [provincia, setProvincia] = useState<PanamaProvince>('Panamá Oeste');
-  const [courier, setCourier] = useState<CourierOption>('Servientrega');
-  const [servientregaModalidad, setServientregaModalidad] = useState<'sucursal' | 'domicilio'>('domicilio');
-  const [sucursalRetiro, setSucursalRetiro] = useState('');
+
+  // 5. Sucursal de retiro o dirección
+  const [sucursalRetiro, setSucursalRetiro] = useState('La Chorrera (Parque Feuillet)');
+  const [direccion, setDireccion] = useState('');
 
   // Contact Details
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
   const [email, setEmail] = useState('');
-  const [direccion, setDireccion] = useState('');
   const [notas, setNotas] = useState('');
 
-  // Helper para avanzar automáticamente a la siguiente sección
+  // Payment Method (Yappy, Transferencia, Tarjeta)
+  const [metodoPago, setMetodoPago] = useState<MetodoPago>('yappy');
+  const [copiedBank, setCopiedBank] = useState(false);
+  const [copiedYappy, setCopiedYappy] = useState(false);
+
+  // Submission & Confirmation
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [confirmedOrder, setConfirmedOrder] = useState<CreatedOrderResult | null>(null);
+  const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
+
+  // Helper para avanzar suavemente a la siguiente sección
   const scrollToSection = (id: string) => {
     setTimeout(() => {
       const el = document.getElementById(id);
@@ -146,38 +175,36 @@ export const CheckoutDemoModal: React.FC = () => {
     }, 80);
   };
 
-  // Determinar si la provincia es lejana de La Chorrera
+  // Determinar si la provincia es zona lejana / interior
   const isFarProvince = useMemo(() => {
     const found = PANAMA_PROVINCES.find((p) => p.id === provincia);
     return found ? found.zone === 'lejos' : false;
   }, [provincia]);
 
-  // Texto descriptivo de la tarifa estimada
-  const shippingCostEstimate = useMemo(() => {
-    if (tipoEntrega === 'retiro') return 'Gratis ($0.00)';
-    if (courier === 'Ferguson') return '$5.00 - $6.50 (Solo retiro en sucursal)';
-    if (courier === 'Uno Express') return '$6.50 - $7.50 (Solo retiro en sucursal)';
-    // Servientrega
-    if (servientregaModalidad === 'sucursal') {
-      return isFarProvince ? '$5.00 (Retiro en sucursal)' : '$3.86 (Retiro en sucursal cercana)';
+  // Lista de sucursales según courier y provincia
+  const currentBranchList = useMemo(() => {
+    const provData = COURIER_SUCURSALES[provincia];
+    if (!provData) return [`Agencia Principal (${provincia})`];
+    if (courier === 'Ferguson') return provData.ferguson || [];
+    if (courier === 'Uno Express') return provData.unoExpress || [];
+    if (courier === 'Servientrega') return provData.servientrega || [`Servi Entrega ${provincia} Central`];
+    return [];
+  }, [provincia, courier]);
+
+  // Tarifa exacta del envío según opciones
+  const shippingCost = useMemo(() => {
+    if (tipoEntrega === 'retiro') return 0;
+    if (courier === 'Ferguson') return isFarProvince ? 6.50 : 5.00;
+    if (courier === 'Uno Express') return isFarProvince ? 7.50 : 6.50;
+    if (courier === 'Servientrega') {
+      return servientregaModalidad === 'sucursal' ? (isFarProvince ? 5.00 : 3.86) : 7.03;
     }
-    return isFarProvince
-      ? '$7.03 (Delivery a domicilio - sujeto a cobertura)'
-      : '$7.03 (Delivery a domicilio)';
+    return 5.00;
   }, [tipoEntrega, courier, servientregaModalidad, isFarProvince]);
 
-  // Payment Method (Efectivo eliminado por completo, Yappy por defecto)
-  const [metodoPago, setMetodoPago] = useState<MetodoPago>('yappy');
-  const [comprobantePago, setComprobantePago] = useState('');
-  const [copiedBank, setCopiedBank] = useState(false);
-
-  // Submission & Confirmation
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submissionError, setSubmissionError] = useState<string | null>(null);
-  const [confirmedOrder, setConfirmedOrder] = useState<CreatedOrderResult | null>(null);
-  const [yappyRedirectUrl, setYappyRedirectUrl] = useState<string | null>(null);
-  const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
+  const finalTotal = useMemo(() => {
+    return subtotal + shippingCost;
+  }, [subtotal, shippingCost]);
 
   if (!isCheckoutOpen) return null;
 
@@ -187,95 +214,98 @@ export const CheckoutDemoModal: React.FC = () => {
     setTimeout(() => setCopiedBank(false), 2500);
   };
 
-  const generateYappyWhatsAppUrl = (
-    orderNum: string,
-    orderIdVal: string,
-    orderItems: { product: { nombre: string; precio: number }; quantity: number }[]
-  ) => {
-    const rawTarget = config.whatsapp || config.yappy_numero || '+507 6890-1234';
-    const digitsOnly = rawTarget.replace(/\D/g, '') || '50768901234';
-    const finalPhone = digitsOnly.length === 8 ? `507${digitsOnly}` : digitsOnly;
-
-    const itemsSummary =
-      orderItems && orderItems.length > 0
-        ? orderItems
-            .map(
-              (it) =>
-                `• ${it.quantity}x ${it.product.nombre} ($${(it.product.precio * it.quantity).toFixed(2)})`
-            )
-            .join('\n')
-        : '• Productos de la orden';
-
-    const deliveryDetail =
-      tipoEntrega === 'retiro'
-        ? '🏢 *Modalidad:* Retiro en el Local / Tienda física'
-        : `🚚 *Modalidad:* Envío con ${courier}\n📍 *Provincia:* ${provincia} (${isFarProvince ? 'Interior / Zona Lejana' : 'Zona Central'})\n📦 *Tipo de Entrega:* ${
-            courier === 'Servientrega' && servientregaModalidad === 'domicilio'
-              ? `Delivery hasta la casa (${direccion.trim()})`
-              : `Retiro en Sucursal ${courier} (${sucursalRetiro.trim() || direccion.trim() || 'Por definir'})`
-          }\n💵 *Tarifa Estimada de Envío:* ${shippingCostEstimate} *(Sujeto al tamaño y peso del paquete)*`;
-
-    const textMessage = `✨ *NUEVO PEDIDO - ${config.nombre_tienda || 'PRETTY-STORE'}* ✨
-
-📋 *Pedido:* ${orderNum || '#' + orderIdVal}
-👤 *Cliente:* ${nombre.trim()}
-📱 *Teléfono:* ${telefono.trim()}
-${deliveryDetail}
-
-🛒 *Detalle del Pedido:*
-${itemsSummary}
-
-💰 *Total Productos:* $${total.toFixed(2)}
-${comprobantePago.trim() ? `🧾 *Comprobante / Referencia:* ${comprobantePago.trim()}\n` : ''}
-Hola, acabo de registrar mi pedido en la tienda y realizar el pago mediante Yappy. Adjunto aquí la captura / comprobante de mi pago para su verificación y envío. ¡Muchas gracias!`;
-
-    return `https://wa.me/${finalPhone}?text=${encodeURIComponent(textMessage)}`;
+  const copyYappyNumber = (phone: string) => {
+    navigator.clipboard.writeText(phone);
+    setCopiedYappy(true);
+    setTimeout(() => setCopiedYappy(false), 2500);
   };
 
-  const generateTransferenciaWhatsAppUrl = (
+  // Generador del Recibo Oficial de Compra formateado con el diseño exacto solicitado
+  const generateOfficialReceiptWhatsAppUrl = (
     orderNum: string,
     orderIdVal: string,
-    orderItems: { product: { nombre: string; precio: number }; quantity: number }[]
+    orderItems: { product: { nombre: string; precio: number }; quantity: number }[],
+    orderSubtotal: number,
+    orderShipping: number,
+    orderTotal: number,
+    orderPaymentMethod: MetodoPago,
+    orderDeliveryType: TipoEntrega,
+    orderCourier: CourierOption,
+    orderServiModality: 'sucursal' | 'domicilio',
+    orderProvincia: PanamaProvince,
+    orderAddress: string,
+    orderSucursal: string
   ) => {
-    const rawTarget = config.whatsapp || config.telefono || '+507 6890-1234';
-    const digitsOnly = rawTarget.replace(/\D/g, '') || '50768901234';
-    const finalPhone = digitsOnly.length === 8 ? `507${digitsOnly}` : digitsOnly;
+    const now = new Date();
+    const months = [
+      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+    ];
+    const dateFormatted = `${now.getDate()} de ${months[now.getMonth()]} de ${now.getFullYear()} a las ${now.toLocaleTimeString('es-PA', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
 
-    const itemsSummary =
-      orderItems && orderItems.length > 0
-        ? orderItems
-            .map(
-              (it) =>
-                `• ${it.quantity}x ${it.product.nombre} ($${(it.product.precio * it.quantity).toFixed(2)})`
-            )
-            .join('\n')
-        : '• Productos de la orden';
+    const paymentLabel =
+      orderPaymentMethod === 'yappy'
+        ? 'Yappy'
+        : orderPaymentMethod === 'transferencia'
+        ? 'Transferencia Bancaria'
+        : 'Tarjeta (PagueloFacil)';
 
-    const deliveryDetail =
-      tipoEntrega === 'retiro'
-        ? '🏢 *Modalidad:* Retiro en el Local / Tienda física'
-        : `🚚 *Modalidad:* Envío con ${courier}\n📍 *Provincia:* ${provincia} (${isFarProvince ? 'Interior / Zona Lejana' : 'Zona Central'})\n📦 *Tipo de Entrega:* ${
-            courier === 'Servientrega' && servientregaModalidad === 'domicilio'
-              ? `Delivery hasta la casa (${direccion.trim()})`
-              : `Retiro en Sucursal ${courier} (${sucursalRetiro.trim() || direccion.trim() || 'Por definir'})`
-          }\n💵 *Tarifa Estimada de Envío:* ${shippingCostEstimate}`;
+    let entregaLabel = '';
+    let direccionLabel = '';
 
-    const textMessage = `✨ *NUEVO PEDIDO POR TRANSFERENCIA BANCARIA - ${config.nombre_tienda || 'PRETTY-STORE'}* ✨
+    if (orderDeliveryType === 'retiro') {
+      entregaLabel = 'Retiro en el Local';
+      direccionLabel = 'Sede Pretty-Store (La Chorrera, Panamá Oeste)';
+    } else {
+      entregaLabel = `Delivery (${orderCourier})`;
+      if (orderCourier === 'Servientrega' && orderServiModality === 'domicilio') {
+        direccionLabel = `Entrega a Domicilio: ${orderAddress.trim()} (${orderProvincia})`;
+      } else {
+        direccionLabel = `Sucursal ${orderCourier}: ${orderSucursal.trim() || orderAddress.trim()} (${orderProvincia})`;
+      }
+    }
 
-📋 *Pedido:* ${orderNum || '#' + orderIdVal}
-👤 *Cliente:* ${nombre.trim()}
-📱 *Teléfono:* ${telefono.trim()}
-${deliveryDetail}
+    const itemsCount = (orderItems || []).reduce((acc, it) => acc + it.quantity, 0);
+    const itemsHeader = `(${itemsCount} ${itemsCount === 1 ? 'artículo' : 'artículos'})`;
 
-🛒 *Detalle del Pedido:*
-${itemsSummary}
+    const itemsText = (orderItems || []).map((it) => {
+      const lineTotal = (it.quantity * it.product.precio).toFixed(2);
+      return `${it.product.nombre}\n\nCant: ${it.quantity} × $${it.product.precio.toFixed(2)}\n\n$${lineTotal}`;
+    }).join('\n\n');
 
-💰 *Total a Transferir:* $${total.toFixed(2)} USD
-🏦 *Banco Destino:* Banco General
-${comprobantePago.trim() ? `🧾 *Comprobante / Referencia:* ${comprobantePago.trim()}\n` : ''}
-Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto aquí la captura / comprobante de mi transferencia bancaria para verificar mi orden y coordinar el despacho. ¡Muchas gracias!`;
+    const receiptMessage = `Recibo Oficial de Compra
+${orderNum || '#' + orderIdVal}
 
-    return `https://wa.me/${finalPhone}?text=${encodeURIComponent(textMessage)}`;
+Fecha
+${dateFormatted}
+
+Cliente:
+${nombre.trim()}
+${telefono.trim()}
+
+Método de Pago:
+${paymentLabel}
+
+Entrega:
+${entregaLabel}
+
+Dirección de Entrega:
+${direccionLabel}
+
+Productos Comprados
+${itemsHeader}
+${itemsText}
+
+Subtotal
+$${orderSubtotal.toFixed(2)}
+
+Envío / Entrega
+$${orderShipping.toFixed(2)}
+
+Total:
+$${orderTotal.toFixed(2)} USD`;
+
+    return `https://wa.me/${WHATSAPP_ORDERS_PHONE}?text=${encodeURIComponent(receiptMessage)}`;
   };
 
   const validateForm = () => {
@@ -297,10 +327,9 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
           errors.direccion = 'Ingresa la dirección para el delivery hasta la casa';
         }
       } else {
-        // Para Ferguson, Uno Express o retiro en sucursal Servientrega:
-        // Si no se especificó sucursal, se asigna la Agencia Principal de la provincia para garantizar que la orden se procese siempre sin fallos.
         if (!sucursalRetiro.trim()) {
-          setSucursalRetiro(`Agencia Principal (${provincia})`);
+          const defaultSuc = currentBranchList[0] || `Agencia Principal (${provincia})`;
+          setSucursalRetiro(defaultSuc);
         }
       }
     }
@@ -321,20 +350,19 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
     setIsSubmitting(true);
 
     try {
-      // Resolver la dirección exacta para garantizar aceptación sin bloqueos
-      const branchClean = sucursalRetiro.trim() || `Agencia Principal (${provincia})`;
+      const branchClean = sucursalRetiro.trim() || currentBranchList[0] || `Agencia Principal (${provincia})`;
       const resolvedAddress =
         tipoEntrega === 'retiro'
           ? 'Retiro en el Local / Tienda física (Pretty-Store)'
           : (courier === 'Servientrega' && servientregaModalidad === 'domicilio')
             ? (direccion.trim() || `Entrega a Domicilio (${provincia})`)
-            : `Sucursal ${courier}: ${branchClean}`;
+            : `Sucursal ${courier}: ${branchClean} (${provincia})`;
 
       const orderSummary = await createRealOrder({
         items,
         subtotal,
-        shipping,
-        total,
+        shipping: shippingCost,
+        total: finalTotal,
         nombre: nombre.trim(),
         telefono: telefono.trim(),
         email: email.trim(),
@@ -342,435 +370,240 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
         metodoPago,
         tipoEntrega,
         courier: tipoEntrega === 'delivery' ? courier : undefined,
-        comprobantePago: metodoPago === 'tarjeta' ? 'PagueloFacil Checkout' : comprobantePago.trim() || undefined,
-        tarjetaInfo:
-          metodoPago === 'tarjeta'
-            ? {
-                numeroEnmascarado: 'PagueloFacil Checkout',
-                titular: nombre.trim() || 'Cliente PagueloFacil',
-              }
-            : undefined,
-        notas: notas.trim() || undefined,
+        comprobantePago: metodoPago === 'tarjeta' ? 'PagueloFacil Checkout' : undefined,
       });
 
       setConfirmedOrder(orderSummary);
       clearCart();
-
-      // Si pagó con Tarjeta (PagueloFacil), abrir automáticamente el link de pago sin ventanas emergentes
-      if (metodoPago === 'tarjeta') {
-        const pagueloUrl = config.link_pago_tarjeta || 'https://checkout.paguelofacil.com/gorras';
-        setTimeout(() => {
-          try {
-            const anchor = document.createElement('a');
-            anchor.href = pagueloUrl;
-            anchor.target = '_blank';
-            anchor.rel = 'noopener noreferrer';
-            document.body.appendChild(anchor);
-            anchor.click();
-            document.body.removeChild(anchor);
-          } catch (e) {
-            console.warn('Could not auto-open PagueloFacil link:', e);
-          }
-        }, 500);
-      } else if (metodoPago === 'yappy') {
-        const waUrl = generateYappyWhatsAppUrl(
-          orderSummary.orderNumber,
-          orderSummary.orderId,
-          orderSummary.items || items
-        );
-        setYappyRedirectUrl(waUrl);
-        // NO auto-redirect! El usuario verá su factura oficial en pantalla y abajo presiona el botón verde de WhatsApp
-      } else if (metodoPago === 'transferencia') {
-        const waUrl = generateTransferenciaWhatsAppUrl(
-          orderSummary.orderNumber,
-          orderSummary.orderId,
-          orderSummary.items || items
-        );
-        setYappyRedirectUrl(waUrl);
-        // NO auto-redirect! El usuario verá su factura con datos bancarios en grande y abajo el botón de WhatsApp
-      }
     } catch (err: any) {
-      console.error('Error al registrar pedido:', err);
-      setSubmissionError(
-        err?.message || 'No se pudo procesar el pedido en este momento. Por favor verifica tus datos e inténtalo nuevamente.'
-      );
+      setSubmissionError(err?.message || 'Error al procesar el pedido. Por favor intenta de nuevo.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleFinish = () => {
-    setConfirmedOrder(null);
-    setYappyRedirectUrl(null);
     setIsCheckoutOpen(false);
-    setNombre('');
-    setTelefono('');
-    setEmail('');
-    setDireccion('');
-    setNotas('');
-    setComprobantePago('');
+    setConfirmedOrder(null);
   };
 
-  const courierOptions: { id: CourierOption; name: string; desc: string }[] = [
-    {
-      id: 'Uno Express',
-      name: 'Uno Express',
-      desc: 'Envíos rápidos a sucursal o domicilio en todo Panamá',
-    },
-    {
-      id: 'Ferguson',
-      name: 'Ferguson',
-      desc: 'Transporte y logística nacional de encomiendas',
-    },
-    {
-      id: 'Servientrega',
-      name: 'Servi Entrega',
-      desc: 'Red nacional de entregas y paquetería segura',
-    },
-  ];
-
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-4xl bg-[#0c0c0f] border border-white/10 shadow-2xl overflow-hidden my-4 sm:my-6 max-h-[92vh] flex flex-col">
-        {/* Close Button */}
-        <button
-          onClick={() => {
-            if (confirmedOrder) handleFinish();
-            else setIsCheckoutOpen(false);
-          }}
-          className="absolute top-5 right-5 z-30 p-2 text-stone-400 hover:text-white transition-colors cursor-pointer bg-black/70 hover:bg-black rounded-full border border-white/10"
-          aria-label="Cerrar checkout"
-        >
-          <X size={18} />
-        </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="bg-[#09090b] border border-white/10 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden relative">
+        {/* Header Bar */}
+        <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-black/40">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#c5a059]" />
+            <span className="text-xs uppercase tracking-[0.25em] text-[#c5a059] font-medium">
+              Pretty-Store · Checkout
+            </span>
+          </div>
+          <button
+            onClick={() => setIsCheckoutOpen(false)}
+            className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+          >
+            <X size={18} />
+          </button>
+        </div>
 
+        {/* Modal Body */}
         {confirmedOrder ? (
-          /* ================= ORDER CONFIRMATION SCREEN ================= */
-          <div className="p-8 sm:p-14 text-center overflow-y-auto">
-            <div className="w-16 h-16 border border-[#c5a059]/40 text-[#c5a059] flex items-center justify-center mx-auto mb-6 bg-stone-900/50">
-              <CheckCircle2 size={32} className="stroke-[1.5]" />
+          /* ================= ORDER CONFIRMATION & RECEIPT SCREEN ================= */
+          <div className="p-6 sm:p-10 overflow-y-auto text-center space-y-6">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400 shadow-xl shadow-emerald-500/10">
+              <CheckCircle2 size={32} />
             </div>
 
-            <span className="text-[10px] uppercase font-medium tracking-[0.3em] text-[#c5a059] block mb-2">
-              Pedido Registrado con Éxito
-            </span>
-            <h2 className="text-2xl sm:text-4xl font-serif-luxury font-light text-white mb-3">
-              Gracias por su compra, {confirmedOrder.nombre}
-            </h2>
-            <p className="text-xs sm:text-sm text-stone-400 max-w-md mx-auto mb-8 font-light">
-              Su orden se guardó en nuestro sistema de pedidos. Nos pondremos en contacto vía WhatsApp o teléfono para coordinar la entrega.
-            </p>
+            <div>
+              <span className="text-[10px] uppercase tracking-[0.3em] text-[#c5a059] font-medium block mb-1">
+                Orden Registrada con Éxito
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-serif-luxury font-light text-white tracking-wide">
+                ¡Gracias por tu compra, {confirmedOrder.nombre}!
+              </h2>
+              <p className="text-xs text-stone-400 font-light mt-1">
+                Tu pedido{' '}
+                <strong className="text-white font-mono font-semibold">
+                  #{confirmedOrder.orderNumber || confirmedOrder.orderId}
+                </strong>{' '}
+                ha sido procesado y guardado.
+              </p>
+            </div>
 
-            {/* Receipt Summary Card */}
-            <div className="bg-stone-900/60 border border-white/10 p-6 sm:p-8 max-w-xl mx-auto text-left mb-6 space-y-5 rounded-2xl shadow-2xl">
-              {/* Header del Recibo */}
-              <div className="flex items-center justify-between pb-4 border-b border-white/10">
+            {/* AVISO IMPORTANTE DE 48 HORAS CONDICIONAL */}
+            <div className="max-w-xl mx-auto p-4 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-200 text-xs flex items-start gap-3 text-left shadow-lg">
+              <Clock size={20} className="text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <strong className="text-amber-300 font-semibold block text-xs uppercase tracking-wider">
+                  ⚠️ Aviso Importante: Plazo de 48 Horas
+                </strong>
+                <p className="text-[11px] text-stone-200 font-light leading-relaxed">
+                  {confirmedOrder.tipoEntrega === 'retiro'
+                    ? 'Dispones de un plazo máximo de 48 horas para retirar tu entrega en la tienda con tu comprobante.'
+                    : 'Dispones de un plazo máximo de 48 horas para coordinar tu entrega con tu comprobante de pago.'}
+                </p>
+              </div>
+            </div>
+
+            {/* RECIBO OFICIAL DE COMPRA (DISEÑO LIMPIO EXACTO) */}
+            <div className="max-w-xl mx-auto p-6 sm:p-7 rounded-2xl bg-black/80 border border-white/15 text-left space-y-4 shadow-2xl font-sans">
+              <div className="border-b border-white/10 pb-3 flex items-start justify-between">
                 <div>
-                  <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] block font-semibold">
+                  <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
                     Recibo Oficial de Compra
-                  </span>
-                  <span className="text-lg font-mono tabular-nums text-white font-bold">
+                  </h3>
+                  <p className="text-sm font-mono text-[#c5a059] font-semibold mt-0.5">
                     #{confirmedOrder.orderNumber || confirmedOrder.orderId}
-                  </span>
+                  </p>
                 </div>
-                <div className="text-right">
-                  <span className="text-[10px] uppercase tracking-[0.2em] text-stone-400 block">Fecha</span>
-                  <span className="text-xs text-stone-300 font-mono">
-                    {confirmedOrder.date}
-                  </span>
-                </div>
+                <span className="px-2.5 py-1 rounded bg-[#c5a059]/15 text-[#c5a059] border border-[#c5a059]/30 text-[10px] font-mono uppercase">
+                  Comprobante
+                </span>
               </div>
 
-              {/* Datos del Cliente y Entrega */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-black/40 p-4 rounded-xl border border-white/5">
+              {/* Fecha y Datos del Cliente */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs border-b border-white/10 pb-3">
                 <div>
-                  <span className="text-stone-400 font-light block text-[11px]">Cliente:</span>
+                  <span className="text-stone-400 text-[11px] block font-light">Fecha:</span>
+                  <span className="text-white font-medium block">
+                    {new Date().toLocaleDateString('es-PA', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })}{' '}
+                    a las{' '}
+                    {new Date().toLocaleTimeString('es-PA', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false,
+                    })}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-stone-400 text-[11px] block font-light">Cliente:</span>
                   <span className="text-white font-medium block">{confirmedOrder.nombre}</span>
                   <span className="text-stone-300 font-mono text-[11px] block">{confirmedOrder.telefono}</span>
                 </div>
+              </div>
+
+              {/* Método de Pago y Entrega */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs border-b border-white/10 pb-3">
                 <div>
-                  <span className="text-stone-400 font-light block text-[11px]">Método de Pago:</span>
-                  <span className="text-[#c5a059] font-medium uppercase text-[11px] tracking-wider block">
-                    {confirmedOrder.metodoPago === 'tarjeta'
-                      ? 'Tarjeta (PagueloFacil)'
-                      : confirmedOrder.metodoPago === 'yappy'
+                  <span className="text-stone-400 text-[11px] block font-light">Método de Pago:</span>
+                  <span className="text-[#c5a059] font-semibold block capitalize">
+                    {confirmedOrder.metodoPago === 'yappy'
                       ? 'Yappy'
                       : confirmedOrder.metodoPago === 'transferencia'
                       ? 'Transferencia Bancaria'
-                      : 'Digital'}
+                      : 'Tarjeta'}
                   </span>
-                  <span className="text-stone-400 font-light block text-[11px] mt-1">Entrega:</span>
+                </div>
+                <div>
+                  <span className="text-stone-400 text-[11px] block font-light">Entrega:</span>
                   <span className="text-white font-medium block">
                     {confirmedOrder.tipoEntrega === 'retiro'
-                      ? 'Retiro en Boutique'
+                      ? 'Retiro en el Local'
                       : `Delivery (${confirmedOrder.courier})`}
                   </span>
                 </div>
-                {confirmedOrder.tipoEntrega === 'delivery' ? (
-                  <div className="sm:col-span-2 pt-2 border-t border-white/5 text-[11px]">
-                    <span className="text-stone-400 font-light block">Dirección de Entrega:</span>
-                    <span className="text-white font-medium">{confirmedOrder.direccion}</span>
-                  </div>
-                ) : (
-                  <div className="sm:col-span-2 pt-2 border-t border-white/5 text-[11px]">
-                    <span className="text-stone-400 font-light block">Lugar de Retiro:</span>
-                    <a
-                      href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[#c5a059] font-medium hover:underline inline-flex items-center gap-1"
-                    >
-                      Boutique Pretty-Store (Ver en Google Maps)
-                    </a>
-                  </div>
-                )}
+                <div className="sm:col-span-2 pt-1">
+                  <span className="text-stone-400 text-[11px] block font-light">Dirección de Entrega:</span>
+                  <span className="text-white font-medium block text-xs">{confirmedOrder.direccion}</span>
+                </div>
               </div>
 
-              {/* DETALLE DE LO QUE COMPRASTE (Artículos adquiridos) */}
-              <div className="space-y-2.5">
-                <span className="text-xs uppercase tracking-[0.16em] text-white font-semibold flex items-center gap-1.5">
-                  <span>Productos Comprados</span>
-                  <span className="text-[10px] text-stone-400 font-normal">
-                    ({(confirmedOrder.items || items).length} { (confirmedOrder.items || items).length === 1 ? 'artículo' : 'artículos'})
-                  </span>
+              {/* Productos Comprados */}
+              <div className="space-y-2 border-b border-white/10 pb-3 text-xs">
+                <span className="text-white font-semibold block text-xs">
+                  Productos Comprados ({(confirmedOrder.items || items).length}{' '}
+                  {(confirmedOrder.items || items).length === 1 ? 'artículo' : 'artículos'})
                 </span>
-
-                <div className="divide-y divide-white/5 border border-white/10 rounded-xl overflow-hidden bg-black/40">
-                  {(confirmedOrder.items || items).map((item, idx) => (
-                    <div key={idx} className="p-3 flex items-center justify-between gap-3 text-xs">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <img
-                          src={item.product.imagen_url || '/images/products/gorra-1.webp'}
-                          alt={item.product.nombre}
-                          className="w-12 h-12 object-cover rounded-lg border border-white/10 shrink-0 bg-stone-900"
-                        />
-                        <div className="min-w-0">
-                          <p className="text-white font-medium truncate text-xs">{item.product.nombre}</p>
-                          <p className="text-[11px] text-stone-400 font-mono mt-0.5">
-                            Cant: <strong className="text-white">{item.quantity}</strong> × ${item.product.precio.toFixed(2)}
-                          </p>
-                        </div>
+                <div className="space-y-3 pt-1">
+                  {(confirmedOrder.items || items).map((it, idx) => (
+                    <div key={idx} className="flex justify-between items-start gap-3">
+                      <div>
+                        <p className="text-white font-medium">{it.product.nombre}</p>
+                        <p className="text-stone-400 text-[11px] font-mono mt-0.5">
+                          Cant: {it.quantity} × ${it.product.precio.toFixed(2)}
+                        </p>
                       </div>
-                      <span className="font-mono text-white font-semibold text-xs shrink-0">
-                        ${(item.quantity * item.product.precio).toFixed(2)}
+                      <span className="font-mono text-white font-semibold">
+                        ${(it.quantity * it.product.precio).toFixed(2)}
                       </span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Desglose de Precios */}
-              <div className="pt-3 border-t border-white/10 space-y-2 text-xs">
-                <div className="flex justify-between text-stone-400 font-light">
+              {/* Desglose Financiero */}
+              <div className="space-y-1.5 text-xs">
+                <div className="flex justify-between text-stone-300">
                   <span>Subtotal</span>
                   <span className="font-mono text-white">${confirmedOrder.subtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-stone-400 font-light">
+                <div className="flex justify-between text-stone-300">
                   <span>Envío / Entrega</span>
                   <span className="font-mono text-white">
-                    {confirmedOrder.shipping > 0 ? `$${confirmedOrder.shipping.toFixed(2)}` : 'Gratis ($0.00)'}
+                    {confirmedOrder.shipping > 0
+                      ? `$${confirmedOrder.shipping.toFixed(2)}`
+                      : 'Gratis ($0.00)'}
                   </span>
                 </div>
                 <div className="pt-2 border-t border-white/10 flex justify-between items-center text-sm">
-                  <span className="font-semibold text-white uppercase tracking-wider text-xs">Total:</span>
-                  <span className="text-xl font-mono tabular-nums font-bold text-[#c5a059]">
+                  <span className="font-bold text-white uppercase tracking-wider text-xs">Total:</span>
+                  <span className="text-xl font-mono font-bold text-[#c5a059]">
                     ${confirmedOrder.total.toFixed(2)} USD
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* AVISO IMPORTANTE: 48 HORAS PARA RETIRAR EL PEDIDO (OBLIGATORIO PARA TODAS LAS OPCIONES) */}
-            <div className="max-w-xl mx-auto mb-6 p-4 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-200 text-xs flex items-start gap-3 text-left shadow-lg">
-              <Clock size={20} className="text-amber-400 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <strong className="text-amber-300 font-semibold block text-xs uppercase tracking-wider">
-                  ⚠️ Aviso Importante: Plazo de 48 Horas para Retirar
-                </strong>
-                <p className="text-[11px] text-stone-300 font-light leading-relaxed">
-                  Dispones de un plazo máximo de <strong className="text-white font-semibold">48 horas</strong> para retirar tu pedido o coordinar tu entrega con tu comprobante. Pasadas las 48 horas, la orden se cancelará y los artículos se devolverán al catálogo general.
-                </p>
-              </div>
+            {/* BOTÓN WHATSAPP OFICIAL AL NÚMERO 6215-0251 */}
+            <div className="max-w-xl mx-auto space-y-3 pt-2">
+              <a
+                href={generateOfficialReceiptWhatsAppUrl(
+                  confirmedOrder.orderNumber || '',
+                  confirmedOrder.orderId,
+                  confirmedOrder.items || items,
+                  confirmedOrder.subtotal,
+                  confirmedOrder.shipping,
+                  confirmedOrder.total,
+                  confirmedOrder.metodoPago,
+                  confirmedOrder.tipoEntrega || tipoEntrega,
+                  confirmedOrder.courier || courier,
+                  servientregaModalidad,
+                  provincia,
+                  direccion,
+                  sucursalRetiro
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-4 px-6 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-black font-bold uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2.5 transition-all shadow-xl shadow-[#25D366]/20 cursor-pointer"
+              >
+                <MessageSquare size={20} className="fill-black" />
+                <span>Enviar Recibo Oficial por WhatsApp (6215-0251)</span>
+              </a>
+              <p className="text-[11px] text-stone-400 font-light">
+                Presiona el botón para abrir WhatsApp en el número oficial <strong>+507 6215-0251</strong> con tu recibo listo para adjuntar comprobante.
+              </p>
             </div>
 
-            {/* ACTION CARD: PAGUELOFACIL (TARJETA) */}
-            {confirmedOrder.metodoPago === 'tarjeta' && (
-              <div className="max-w-xl mx-auto mb-8 p-6 rounded-2xl bg-gradient-to-br from-[#c5a059]/15 via-[#0e0e12] to-black border border-[#c5a059]/40 text-left space-y-4 shadow-2xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-[#c5a059]/20 border border-[#c5a059]/40 flex items-center justify-center shrink-0 text-[#c5a059]">
-                    <CreditCard size={24} />
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold tracking-widest text-[#c5a059] block">
-                      Pagar con Tarjeta · PagueloFacil
-                    </span>
-                    <h3 className="text-base font-semibold text-white">
-                      Completar Pago en PagueloFacil
-                    </h3>
-                  </div>
-                </div>
-
-                <p className="text-xs text-stone-300 leading-relaxed font-light">
-                  Tu pedido <strong className="text-white">#{confirmedOrder.orderNumber || confirmedOrder.orderId}</strong> ha sido registrado en el sistema. Se abrió la pasarela oficial de PagueloFacil en tu navegador para realizar el pago. Si no se abrió automáticamente, presiona el botón a continuación para pagar tus <strong className="text-[#c5a059] font-mono">${confirmedOrder.total.toFixed(2)} USD</strong> con Visa, Mastercard o Clave:
-                </p>
-
-                <div className="pt-1">
-                  <a
-                    href={config.link_pago_tarjeta || 'https://checkout.paguelofacil.com/gorras'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d4af37] hover:from-[#d4af37] hover:to-[#c5a059] text-black font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-[#c5a059]/20 cursor-pointer"
-                  >
-                    <CreditCard size={18} />
-                    <span>Pagar ${confirmedOrder.total.toFixed(2)} USD en PagueloFacil</span>
-                  </a>
-                </div>
-              </div>
-            )}
-
-            {/* ACTION CARD: TRANSFERENCIA BANCARIA */}
-            {confirmedOrder.metodoPago === 'transferencia' && (
-              <div className="max-w-xl mx-auto mb-8 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#c5a059]/15 via-[#0e0e12] to-black border border-[#c5a059]/40 text-left space-y-4 shadow-2xl">
-                <div className="flex items-center gap-3 border-b border-white/10 pb-4">
-                  <div className="w-12 h-12 rounded-2xl bg-[#c5a059]/20 border border-[#c5a059]/40 flex items-center justify-center shrink-0 text-[#c5a059]">
-                    <Landmark size={24} />
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold tracking-widest text-[#c5a059] block">
-                      ¡Gracias por su compra!
-                    </span>
-                    <h3 className="text-base font-semibold text-white">
-                      Datos para Transferencia Bancaria
-                    </h3>
-                  </div>
-                </div>
-
-                <p className="text-xs text-stone-300 leading-relaxed font-light">
-                  Tu orden <strong className="text-white">#{confirmedOrder.orderNumber || confirmedOrder.orderId}</strong> ha sido guardada. Realiza la transferencia o depósito bancario por <strong className="text-[#c5a059] font-mono font-bold text-sm">${confirmedOrder.total.toFixed(2)} USD</strong> con los siguientes datos oficiales:
-                </p>
-
-                {/* Cuenta Bancaria Destacada con Botón Copiar */}
-                <div className="p-4 rounded-xl bg-black/80 border border-[#c5a059]/50 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] uppercase tracking-widest text-stone-400 font-medium">
-                      Cuenta Bancaria Oficial
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono">
-                      Banco General
-                    </span>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-stone-900/90 border border-[#c5a059]/40 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <span className="text-[11px] text-stone-400 block font-light">Número de Cuenta para Transferir:</span>
-                      <strong className="text-[#c5a059] font-mono text-lg sm:text-2xl font-bold tracking-widest block truncate py-1">
-                        {config.banco_datos?.match(/#([0-9-]+)/)?.[1] || '03-01-01-123456-7'}
-                      </strong>
-                      <span className="text-[11px] text-stone-300 font-light block">
-                        Banco General • Cuenta Corriente • Titular: <strong>Pretty-Store Inc.</strong>
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => copyBankDetails(config.banco_datos?.match(/#([0-9-]+)/)?.[1] || '03-01-01-123456-7')}
-                      className="px-3.5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#d4af37] text-black font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-lg shadow-[#c5a059]/20"
-                    >
-                      {copiedBank ? <Check size={15} className="text-black stroke-[3]" /> : <Copy size={15} className="stroke-[2.5]" />}
-                      <span>{copiedBank ? '¡Copiado!' : 'Copiar Cuenta'}</span>
-                    </button>
-                  </div>
-
-                  {config.banco_datos && (
-                    <p className="text-[10px] text-stone-400 font-light leading-relaxed">
-                      {config.banco_datos}
-                    </p>
-                  )}
-                </div>
-
-                <div className="pt-2">
-                  <a
-                    href={
-                      yappyRedirectUrl ||
-                      generateTransferenciaWhatsAppUrl(
-                        confirmedOrder.orderNumber,
-                        confirmedOrder.orderId,
-                        confirmedOrder.items || items
-                      )
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full py-4 px-6 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-black font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-emerald-950/60 cursor-pointer"
-                  >
-                    <MessageSquare size={18} className="fill-black" />
-                    <span>Enviar Comprobante de Transferencia por WhatsApp</span>
-                  </a>
-                </div>
-
-                <p className="text-[10px] text-stone-400 text-center font-light">
-                  Una vez realices la transferencia, presiona el botón verde para enviar la captura a nuestro WhatsApp.
-                </p>
-              </div>
-            )}
-
-            {/* ACTION CARD: YAPPY */}
-            {confirmedOrder.metodoPago === 'yappy' && (
-              <div className="max-w-xl mx-auto mb-8 p-6 rounded-2xl bg-gradient-to-br from-emerald-950/80 via-[#0e0e12] to-emerald-950/40 border border-emerald-500/40 text-left space-y-4 shadow-2xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-[#25D366]/20 border border-[#25D366]/40 flex items-center justify-center shrink-0">
-                    <MessageSquare size={24} className="text-[#25D366]" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold tracking-widest text-[#25D366] block">
-                      Paso Final · Validación Yappy
-                    </span>
-                    <h3 className="text-base font-semibold text-white">
-                      Envía tu Comprobante por WhatsApp
-                    </h3>
-                  </div>
-                </div>
-
-                <p className="text-xs text-stone-300 leading-relaxed font-light">
-                  Tu pedido <strong className="text-white">#{confirmedOrder.orderNumber || confirmedOrder.orderId}</strong> ha sido registrado en el sistema. Para procesar tu despacho, envía la captura o comprobante de tu pago por Yappy al WhatsApp oficial del comercio tocando el botón verde abajo. El mensaje ya ha sido redactado con todos los detalles de tu orden.
-                </p>
-
-                <div className="pt-2">
-                  <a
-                    href={
-                      yappyRedirectUrl ||
-                      generateYappyWhatsAppUrl(
-                        confirmedOrder.orderNumber,
-                        confirmedOrder.orderId,
-                        confirmedOrder.items || items
-                      )
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full py-4 px-6 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-black font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-emerald-950/60 cursor-pointer"
-                  >
-                    <MessageSquare size={18} className="fill-black" />
-                    <span>Abrir WhatsApp & Enviar Comprobante</span>
-                  </a>
-                </div>
-
-                <p className="text-[10px] text-stone-400 text-center font-light">
-                  Presiona el botón verde de arriba para adjuntar la captura del pago en WhatsApp.
-                </p>
-              </div>
-            )}
-
-            <button
-              onClick={handleFinish}
-              className="px-8 py-3.5 bg-white hover:bg-stone-200 text-stone-950 text-xs uppercase tracking-[0.2em] font-medium transition-colors cursor-pointer"
-            >
-              Volver a la Tienda
-            </button>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleFinish}
+                className="px-8 py-3 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 text-white text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Volver a la Tienda
+              </button>
+            </div>
           </div>
         ) : (
           /* ================= MAIN CHECKOUT FORM ================= */
           <div className="grid grid-cols-1 lg:grid-cols-12 overflow-y-auto">
-            {/* Left Column: Delivery Type, Customer Data & Payment Form */}
-            <div className="lg:col-span-7 p-6 sm:p-10 border-b lg:border-b-0 lg:border-r border-white/10">
-              <div className="mb-6">
+            {/* Left Column: Form Steps */}
+            <div className="lg:col-span-7 p-5 sm:p-8 border-b lg:border-b-0 lg:border-r border-white/10 space-y-6">
+              <div>
                 <span className="text-[10px] uppercase tracking-[0.3em] text-[#c5a059] font-medium block mb-1">
                   Finalizar Compra
                 </span>
@@ -792,181 +625,103 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
                   </div>
                 )}
 
-                {/* 1. SELECTOR: DELIVERY O RETIRO EN EL LOCAL */}
+                {/* ============================================================== */}
+                {/* 1. PRIMERO: RETIRO EN SUCURSAL / LOCAL O ENVÍO POR COURIER */}
+                {/* ============================================================== */}
                 <div id="section-delivery-type" className="space-y-2">
-                  <label className="text-[11px] uppercase tracking-[0.16em] text-stone-300 font-light block">
-                    ¿Cómo deseas recibir tu compra? *
+                  <label className="text-[11px] uppercase tracking-[0.16em] text-white font-medium block flex items-center gap-1.5">
+                    <Truck size={13} className="text-[#c5a059]" />
+                    <span>1. ¿Cómo deseas recibir tu compra? *</span>
                   </label>
                   <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTipoEntrega('delivery');
-                        scrollToSection('section-provincias');
-                      }}
-                      className={`p-3.5 border text-left cursor-pointer transition-all flex items-center gap-3 ${
-                        tipoEntrega === 'delivery'
-                          ? 'border-[#c5a059] bg-[#c5a059]/10 text-white ring-1 ring-[#c5a059]'
-                          : 'border-white/10 bg-stone-900/40 text-stone-400 hover:border-white/20'
-                      }`}
-                    >
-                      <Truck size={20} className={tipoEntrega === 'delivery' ? 'text-[#c5a059]' : 'text-stone-400'} />
-                      <div>
-                        <p className="text-xs font-semibold text-white">Envío / Delivery</p>
-                        <p className="text-[10px] text-stone-400 font-light">A domicilio o sucursal</p>
-                      </div>
-                    </button>
-
+                    {/* Retiro en el Local (Tienda Física) */}
                     <button
                       type="button"
                       onClick={() => {
                         setTipoEntrega('retiro');
                         scrollToSection('section-customer-info');
                       }}
-                      className={`p-3.5 border text-left cursor-pointer transition-all flex items-center gap-3 ${
+                      className={`p-3.5 border text-left cursor-pointer transition-all flex items-center gap-3 rounded-xl ${
                         tipoEntrega === 'retiro'
-                          ? 'border-[#c5a059] bg-[#c5a059]/10 text-white ring-1 ring-[#c5a059]'
+                          ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-2 ring-[#c5a059] shadow-lg shadow-[#c5a059]/15'
                           : 'border-white/10 bg-stone-900/40 text-stone-400 hover:border-white/20'
                       }`}
                     >
-                      <Store size={20} className={tipoEntrega === 'retiro' ? 'text-[#c5a059]' : 'text-stone-400'} />
+                      <Store size={22} className={tipoEntrega === 'retiro' ? 'text-[#c5a059]' : 'text-stone-400'} />
                       <div>
                         <p className="text-xs font-semibold text-white">Retirar en el Local</p>
-                        <p className="text-[10px] text-stone-400 font-light">En tienda física</p>
+                        <p className="text-[10px] text-stone-400 font-light">En tienda física · Gratis</p>
+                      </div>
+                    </button>
+
+                    {/* Envío por Courier a Nivel Nacional */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTipoEntrega('delivery');
+                        scrollToSection('section-courier-choice');
+                      }}
+                      className={`p-3.5 border text-left cursor-pointer transition-all flex items-center gap-3 rounded-xl ${
+                        tipoEntrega === 'delivery'
+                          ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-2 ring-[#c5a059] shadow-lg shadow-[#c5a059]/15'
+                          : 'border-white/10 bg-stone-900/40 text-stone-400 hover:border-white/20'
+                      }`}
+                    >
+                      <Truck size={22} className={tipoEntrega === 'delivery' ? 'text-[#c5a059]' : 'text-stone-400'} />
+                      <div>
+                        <p className="text-xs font-semibold text-white">Envío por Courier</p>
+                        <p className="text-[10px] text-stone-400 font-light">A nivel nacional</p>
                       </div>
                     </button>
                   </div>
                 </div>
 
-                {/* 2. SI ELIGE DELIVERY: PROVINCIAS EN GRID DIRECTO & COURIER */}
-                {tipoEntrega === 'delivery' ? (
-                  <div className="space-y-5 p-4 rounded-xl bg-stone-900/40 border border-white/10 animate-in fade-in duration-200">
-                    {/* Apartado visual: Selecciona tu Provincia (Grid Directo como estaba antes) */}
-                    <div id="section-provincias" className="space-y-2.5">
-                      <div className="flex items-center justify-between border-b border-white/[0.08] pb-1.5">
-                        <label className="text-[11px] uppercase tracking-[0.16em] text-white font-medium flex items-center gap-1.5">
-                          <MapPin size={13} className="text-[#c5a059]" />
-                          <span>1. Elige tu Provincia de Entrega *</span>
-                        </label>
-                        <span className="text-[10px] text-stone-400 font-mono">
-                          {provincia}
-                        </span>
-                      </div>
-
-                      {/* Grid directo de todas las Provincias de Panamá */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {PANAMA_PROVINCES.map((prov) => {
-                          const isSelected = provincia === prov.id;
-                          return (
-                            <button
-                              key={prov.id}
-                              type="button"
-                              onClick={() => {
-                                setProvincia(prov.id);
-                                scrollToSection('section-courier');
-                              }}
-                              className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between min-h-[58px] ${
-                                isSelected
-                                  ? 'border-[#c5a059] bg-[#c5a059]/20 text-white ring-1 ring-[#c5a059] shadow-md shadow-[#c5a059]/15'
-                                  : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/25 hover:text-stone-200 hover:bg-stone-800/60'
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-1">
-                                <span className="font-semibold text-xs text-white leading-tight">
-                                  {prov.name}
-                                </span>
-                                {isSelected && (
-                                  <span className="w-2 h-2 rounded-full bg-[#c5a059] shrink-0 mt-0.5" />
-                                )}
-                              </div>
-                              <div className="mt-1 flex items-center justify-between gap-1 text-[9px]">
-                                <span className="text-stone-400 truncate font-light">
-                                  {prov.tag}
-                                </span>
-                                <span
-                                  className={`px-1 py-0.2 rounded font-mono shrink-0 ${
-                                    prov.zone === 'cerca'
-                                      ? 'text-emerald-400 bg-emerald-500/10'
-                                      : 'text-amber-300 bg-amber-500/10'
-                                  }`}
-                                >
-                                  {prov.zone === 'cerca' ? 'Cerca' : 'Interior'}
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Indicador de cercanía de la provincia */}
-                      <div className="p-2.5 rounded-lg bg-black/40 border border-white/[0.06] text-[10px] text-stone-300 flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-stone-400">Provincia seleccionada:</span>
-                          <strong className="text-white font-semibold">{provincia}</strong>
-                        </div>
-                        {isFarProvince ? (
-                          <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/20 text-amber-300 font-medium">
-                            Zona Interior / Lejana a La Chorrera
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 font-medium">
-                            Zona Cercana a La Chorrera
-                          </span>
-                        )}
-                      </div>
+                {/* SI ELIGE RETIRO EN EL LOCAL: MOSTRAR DETALLES */}
+                {tipoEntrega === 'retiro' && (
+                  <div className="p-4 rounded-xl bg-stone-900/60 border border-[#c5a059]/30 text-xs space-y-2 animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2 text-white font-medium">
+                      <Store size={16} className="text-[#c5a059]" />
+                      <span>Retiro en Tienda Física Pretty-Store</span>
                     </div>
+                    <p className="text-[11px] text-stone-300 font-light">
+                      Sede oficial La Chorrera, Panamá Oeste (<a href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7" target="_blank" rel="noreferrer" className="text-[#c5a059] underline">Ver en Google Maps</a>).
+                    </p>
+                  </div>
+                )}
 
-                    {/* Selector de Empresa de Envíos */}
-                    <div id="section-courier" className="space-y-2 pt-2 border-t border-white/[0.08]">
+                {/* ============================================================== */}
+                {/* SI ELIGE ENVÍO POR COURIER: NUEVO ORDEN SOLICITADO */}
+                {/* 2. POR DÓNDE DESEA RECIBIRLO: FERGUSON, UNO EXPRESS O SERVIENTREGA */}
+                {/* ============================================================== */}
+                {tipoEntrega === 'delivery' && (
+                  <div className="space-y-5 p-4 sm:p-5 rounded-2xl bg-stone-900/40 border border-white/10 animate-in fade-in duration-200">
+                    <div id="section-courier-choice" className="space-y-2">
                       <label className="text-[11px] uppercase tracking-[0.16em] text-white font-medium block flex items-center gap-1.5">
                         <Truck size={13} className="text-[#c5a059]" />
                         <span>2. ¿Por cuál empresa deseas recibirlo? *</span>
                       </label>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                        {/* Servientrega */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCourier('Servientrega');
-                            scrollToSection('section-servientrega-mode');
-                          }}
-                          className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
-                            courier === 'Servientrega'
-                              ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-1 ring-[#c5a059]'
-                              : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold text-xs text-white">Servi Entrega</span>
-                            {courier === 'Servientrega' && <span className="w-2 h-2 rounded-full bg-[#c5a059]" />}
-                          </div>
-                          <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-medium">
-                            Delivery a Casa o Sucursal
-                          </span>
-                          <span className="text-[10px] text-[#c5a059] block mt-1 font-mono font-medium">
-                            Desde $3.86
-                          </span>
-                        </button>
-
                         {/* Ferguson */}
                         <button
                           type="button"
                           onClick={() => {
                             setCourier('Ferguson');
-                            scrollToSection('section-courier-sucursal');
+                            const defaultSuc = COURIER_SUCURSALES[provincia]?.ferguson?.[0] || 'Agencia Principal';
+                            setSucursalRetiro(defaultSuc);
+                            scrollToSection('section-provincias-grid');
                           }}
                           className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
                             courier === 'Ferguson'
-                              ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-1 ring-[#c5a059]'
+                              ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-2 ring-[#c5a059] shadow-md shadow-[#c5a059]/15'
                               : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <span className="font-semibold text-xs text-white">Ferguson</span>
+                            <span className="font-bold text-xs text-white">Ferguson</span>
                             {courier === 'Ferguson' && <span className="w-2 h-2 rounded-full bg-[#c5a059]" />}
                           </div>
-                          <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-stone-800 text-stone-300 text-[9px]">
-                            Solo retiro en sucursal
+                          <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-white/5 text-stone-300 text-[9px]">
+                            Retiro en sucursal
                           </span>
                           <span className="text-[10px] text-[#c5a059] block mt-1 font-mono font-medium">
                             $5.00 - $6.50
@@ -978,82 +733,80 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
                           type="button"
                           onClick={() => {
                             setCourier('Uno Express');
-                            scrollToSection('section-courier-sucursal');
+                            const defaultSuc = COURIER_SUCURSALES[provincia]?.unoExpress?.[0] || 'Agencia Principal';
+                            setSucursalRetiro(defaultSuc);
+                            scrollToSection('section-provincias-grid');
                           }}
                           className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
                             courier === 'Uno Express'
-                              ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-1 ring-[#c5a059]'
+                              ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-2 ring-[#c5a059] shadow-md shadow-[#c5a059]/15'
                               : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <span className="font-semibold text-xs text-white">Uno Express</span>
+                            <span className="font-bold text-xs text-white">Uno Express</span>
                             {courier === 'Uno Express' && <span className="w-2 h-2 rounded-full bg-[#c5a059]" />}
                           </div>
-                          <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-stone-800 text-stone-300 text-[9px]">
-                            Solo retiro en sucursal
+                          <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-white/5 text-stone-300 text-[9px]">
+                            Retiro en sucursal
                           </span>
                           <span className="text-[10px] text-[#c5a059] block mt-1 font-mono font-medium">
                             $6.50 - $7.50
                           </span>
                         </button>
+
+                        {/* Servi Entrega */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCourier('Servientrega');
+                            scrollToSection('section-servientrega-mode');
+                          }}
+                          className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                            courier === 'Servientrega'
+                              ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-2 ring-[#c5a059] shadow-md shadow-[#c5a059]/15'
+                              : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs text-white">Servi Entrega</span>
+                            {courier === 'Servientrega' && <span className="w-2 h-2 rounded-full bg-[#c5a059]" />}
+                          </div>
+                          <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px]">
+                            Sucursal o Domicilio
+                          </span>
+                          <span className="text-[10px] text-[#c5a059] block mt-1 font-mono font-medium">
+                            Desde $3.86
+                          </span>
+                        </button>
                       </div>
                     </div>
 
-                    {/* Modalidad específica si eligió Servientrega: Preguntar envío a la casa o retiro en sucursal */}
+                    {/* ============================================================== */}
+                    {/* 3. SI APRETA SERVIENTREGA: PRIMERO RETIRO EN SUCURSAL Y AL LADO ENVÍO A LA CASA */}
+                    {/* ============================================================== */}
                     {courier === 'Servientrega' && (
-                      <div id="section-servientrega-mode" className="p-4 rounded-xl bg-black/60 border border-[#c5a059]/40 space-y-3 shadow-lg animate-in fade-in duration-200">
+                      <div id="section-servientrega-mode" className="p-4 rounded-xl bg-black/70 border border-[#c5a059]/40 space-y-3 shadow-lg animate-in fade-in duration-200">
                         <div className="flex items-center justify-between pb-1 border-b border-white/[0.08]">
                           <label className="text-xs uppercase tracking-wider text-white font-medium flex items-center gap-1.5">
                             <Truck size={14} className="text-[#c5a059]" />
-                            <span>¿Cómo deseas recibir tu pedido con Servi Entrega? *</span>
+                            <span>Modalidad con Servi Entrega: *</span>
                           </label>
                           <span className="text-[10px] text-[#c5a059] font-mono font-semibold">
-                            {servientregaModalidad === 'domicilio' ? 'Envío a la Casa' : 'Retiro en Sucursal'}
+                            {servientregaModalidad === 'sucursal' ? 'Retiro en Sucursal' : 'Envío a la Casa'}
                           </span>
                         </div>
 
+                        {/* AL LADO: RETIRO EN SUCURSAL Y ENVÍO A LA CASA */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {/* Opción 1: Envío a la Casa */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setServientregaModalidad('domicilio');
-                              scrollToSection('section-servientrega-address');
-                            }}
-                            className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all flex items-start gap-3 ${
-                              servientregaModalidad === 'domicilio'
-                                ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-2 ring-[#c5a059] shadow-lg shadow-[#c5a059]/15'
-                                : 'border-white/10 bg-stone-900/60 text-stone-400 hover:border-white/25 hover:text-white'
-                            }`}
-                          >
-                            <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
-                              servientregaModalidad === 'domicilio'
-                                ? 'bg-[#c5a059] text-black'
-                                : 'bg-white/5 text-stone-400'
-                            }`}>
-                              <Home size={18} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-bold text-white">Envío a la Casa</span>
-                                <span className="text-xs font-mono font-bold text-[#c5a059]">$7.03</span>
-                              </div>
-                              <p className="text-[10px] text-stone-300 font-light mt-0.5 leading-tight">
-                                Delivery directo hasta la puerta de tu casa o local comercial.
-                              </p>
-                              <span className="inline-block mt-1.5 px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-medium">
-                                Entrega a Domicilio
-                              </span>
-                            </div>
-                          </button>
-
-                          {/* Opción 2: Retiro en Sucursal */}
+                          {/* Opción 1: Retiro en Sucursal */}
                           <button
                             type="button"
                             onClick={() => {
                               setServientregaModalidad('sucursal');
-                              scrollToSection('section-servientrega-address');
+                              const defaultSuc = COURIER_SUCURSALES[provincia]?.servientrega?.[0] || 'Agencia Principal';
+                              setSucursalRetiro(defaultSuc);
+                              scrollToSection('section-provincias-grid');
                             }}
                             className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all flex items-start gap-3 ${
                               servientregaModalidad === 'sucursal'
@@ -1087,145 +840,228 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
                               </span>
                             </div>
                           </button>
+
+                          {/* Opción 2: Envío a la Casa */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setServientregaModalidad('domicilio');
+                              scrollToSection('section-provincias-grid');
+                            }}
+                            className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all flex items-start gap-3 ${
+                              servientregaModalidad === 'domicilio'
+                                ? 'border-[#c5a059] bg-[#c5a059]/15 text-white ring-2 ring-[#c5a059] shadow-lg shadow-[#c5a059]/15'
+                                : 'border-white/10 bg-stone-900/60 text-stone-400 hover:border-white/25 hover:text-white'
+                            }`}
+                          >
+                            <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+                              servientregaModalidad === 'domicilio'
+                                ? 'bg-[#c5a059] text-black'
+                                : 'bg-white/5 text-stone-400'
+                            }`}>
+                              <Home size={18} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-white">Envío a la Casa</span>
+                                <span className="text-xs font-mono font-bold text-[#c5a059]">$7.03</span>
+                              </div>
+                              <p className="text-[10px] text-stone-300 font-light mt-0.5 leading-tight">
+                                Delivery directo hasta la puerta de tu casa o local comercial.
+                              </p>
+                              <span className="inline-block mt-1.5 px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-medium">
+                                Entrega a Domicilio ($7.03)
+                              </span>
+                            </div>
+                          </button>
                         </div>
                       </div>
                     )}
 
-                    {/* Dirección o Sucursal según modalidad */}
-                    {courier === 'Servientrega' && servientregaModalidad === 'domicilio' ? (
-                      <div id="section-servientrega-address" className="space-y-1.5 p-3.5 rounded-xl bg-stone-900/60 border border-white/10">
-                        <label className="text-[11px] uppercase tracking-[0.16em] text-white font-medium block flex items-center gap-1.5">
-                          <Home size={13} className="text-[#c5a059]" />
-                          <span>Dirección completa para el Envío a tu Casa *</span>
+                    {/* ============================================================== */}
+                    {/* 4. PROVINCIAS DE PANAMÁ CON EL PRECIO DEL ENVÍO DEBAJO DE CADA UNA */}
+                    {/* ============================================================== */}
+                    <div id="section-provincias-grid" className="space-y-2.5 pt-2 border-t border-white/[0.08]">
+                      <div className="flex items-center justify-between border-b border-white/[0.08] pb-1.5">
+                        <label className="text-[11px] uppercase tracking-[0.16em] text-white font-medium flex items-center gap-1.5">
+                          <MapPin size={13} className="text-[#c5a059]" />
+                          <span>3. Elige tu Provincia de Entrega *</span>
                         </label>
-                        <input
-                          type="text"
-                          placeholder="Barriada, calle, número de casa/apto o punto de referencia"
-                          value={direccion}
-                          onChange={(e) => setDireccion(e.target.value)}
-                          onBlur={() => {
-                            if (direccion.trim().length > 3) {
-                              scrollToSection('section-customer-info');
-                            }
-                          }}
-                          className={`w-full px-3.5 py-2.5 bg-black/60 border text-xs text-white placeholder-stone-600 focus:outline-none transition-colors rounded-lg ${
-                            formErrors.direccion ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
-                          }`}
-                        />
-                        {formErrors.direccion && (
-                          <p className="text-[10px] text-rose-400">{formErrors.direccion}</p>
-                        )}
-                        <p className="text-[10px] text-stone-400 font-light">
-                          Servi Entrega entregará tu pedido directamente en esta dirección en {provincia}.
-                        </p>
+                        <span className="text-[10px] text-stone-400 font-mono">
+                          {provincia}
+                        </span>
                       </div>
-                    ) : (
-                      /* Ferguson, Uno Express o Retiro en Sucursal Servientrega */
-                      <div id="section-courier-sucursal" className="space-y-3 p-3.5 rounded-xl bg-stone-900/60 border border-white/10">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[11px] uppercase tracking-[0.16em] text-white font-medium block flex items-center gap-1.5">
-                            <Store size={13} className="text-[#c5a059]" />
-                            <span>Sucursal de {courier} para Retiro Personal *</span>
-                          </label>
-                          <span className="text-[10px] text-emerald-400 font-mono">
-                            {provincia}
-                          </span>
-                        </div>
 
-                        {/* Sucursales sugeridas en la provincia para selección inmediata con un solo toque */}
-                        {(() => {
-                          const sucursalList =
-                            courier === 'Ferguson'
-                              ? COURIER_SUCURSALES[provincia]?.ferguson || []
-                              : courier === 'Uno Express'
-                              ? COURIER_SUCURSALES[provincia]?.unoExpress || []
-                              : [`Sucursal ${provincia} Central`];
+                      {/* Grid de Provincias con el precio calculado para cada una */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {PANAMA_PROVINCES.map((prov) => {
+                          const isSelected = provincia === prov.id;
+                          const isFar = prov.zone === 'lejos';
+
+                          let priceForThisProv = 5.00;
+                          if (courier === 'Ferguson') {
+                            priceForThisProv = isFar ? 6.50 : 5.00;
+                          } else if (courier === 'Uno Express') {
+                            priceForThisProv = isFar ? 7.50 : 6.50;
+                          } else if (courier === 'Servientrega') {
+                            priceForThisProv = servientregaModalidad === 'sucursal' ? (isFar ? 5.00 : 3.86) : 7.03;
+                          }
 
                           return (
-                            <div className="space-y-1.5">
-                              <span className="text-[10px] text-stone-400 font-light block">
-                                Toca una sucursal para seleccionarla rápidamente:
-                              </span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {sucursalList.map((suc) => {
-                                  const isSelected = sucursalRetiro === suc;
-                                  return (
-                                    <button
-                                      key={suc}
-                                      type="button"
-                                      onClick={() => {
-                                        setSucursalRetiro(suc);
-                                        scrollToSection('section-customer-info');
-                                      }}
-                                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-all cursor-pointer ${
-                                        isSelected
-                                          ? 'border-[#c5a059] bg-[#c5a059]/25 text-white ring-1 ring-[#c5a059]'
-                                          : 'border-white/10 bg-black/50 text-stone-300 hover:border-white/20 hover:text-white'
-                                      }`}
-                                    >
-                                      📍 {suc}
-                                    </button>
-                                  );
-                                })}
+                            <button
+                              key={prov.id}
+                              type="button"
+                              onClick={() => {
+                                setProvincia(prov.id);
+                                const branches = COURIER_SUCURSALES[prov.id];
+                                const defaultBranch =
+                                  courier === 'Ferguson'
+                                    ? branches?.ferguson?.[0]
+                                    : courier === 'Uno Express'
+                                    ? branches?.unoExpress?.[0]
+                                    : branches?.servientrega?.[0];
+                                if (defaultBranch) setSucursalRetiro(defaultBranch);
+                                scrollToSection('section-sucursal-choice');
+                              }}
+                              className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between min-h-[68px] ${
+                                isSelected
+                                  ? 'border-[#c5a059] bg-[#c5a059]/20 text-white ring-2 ring-[#c5a059] shadow-md shadow-[#c5a059]/15'
+                                  : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/25 hover:text-stone-200 hover:bg-stone-800/60'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-1">
+                                <span className="font-semibold text-xs text-white leading-tight">
+                                  {prov.name}
+                                </span>
+                                {isSelected && (
+                                  <span className="w-2 h-2 rounded-full bg-[#c5a059] shrink-0 mt-0.5" />
+                                )}
                               </div>
-                            </div>
-                          );
-                        })()}
 
-                        {/* Entrada de texto libre por si prefiere escribir otra agencia */}
-                        <div className="space-y-1 pt-1">
-                          <span className="text-[10px] text-stone-400 font-light block">
-                            O escribe el nombre de la sucursal o agencia:
-                          </span>
+                              <div className="mt-1 flex items-center justify-between gap-1 text-[9px]">
+                                <span className="text-stone-400 truncate font-light">
+                                  {prov.tag}
+                                </span>
+                                <span
+                                  className={`px-1 py-0.2 rounded font-mono shrink-0 ${
+                                    prov.zone === 'cerca'
+                                      ? 'text-emerald-400 bg-emerald-500/10'
+                                      : 'text-amber-300 bg-amber-500/10'
+                                  }`}
+                                >
+                                  {prov.zone === 'cerca' ? 'Cerca' : 'Interior'}
+                                </span>
+                              </div>
+
+                              {/* PRECIO DEL ENVÍO HASTA AHÍ */}
+                              <div className="mt-1 pt-1 border-t border-white/5 flex items-center justify-between text-[10px] font-mono">
+                                <span className="text-stone-400 text-[9px]">Tarifa:</span>
+                                <span className="text-[#c5a059] font-bold">
+                                  ${priceForThisProv.toFixed(2)}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* ============================================================== */}
+                    {/* 5. LUEGO DE AGARRAR LA PROVINCIA: ABAJO LE APARECE LA SUCURSAL */}
+                    {/* ============================================================== */}
+                    <div id="section-sucursal-choice" className="space-y-3 pt-2 border-t border-white/[0.08]">
+                      {courier === 'Servientrega' && servientregaModalidad === 'domicilio' ? (
+                        /* Si es a la casa: ingresar dirección exacta */
+                        <div className="space-y-1.5 p-3.5 rounded-xl bg-stone-900/60 border border-white/10">
+                          <label className="text-[11px] uppercase tracking-[0.16em] text-white font-medium block flex items-center gap-1.5">
+                            <Home size={13} className="text-[#c5a059]" />
+                            <span>Dirección exacta para el Envío a tu Casa en {provincia} *</span>
+                          </label>
                           <input
                             type="text"
-                            placeholder={`Ej. Sucursal ${courier} ${provincia === 'Chiriquí' ? 'David' : provincia === 'Herrera' ? 'Chitré' : 'Central'}...`}
-                            value={sucursalRetiro}
-                            onChange={(e) => setSucursalRetiro(e.target.value)}
+                            placeholder="Barriada, calle, número de casa/apto o punto de referencia"
+                            value={direccion}
+                            onChange={(e) => setDireccion(e.target.value)}
                             onBlur={() => {
-                              if (sucursalRetiro.trim()) {
+                              if (direccion.trim().length > 3) {
                                 scrollToSection('section-customer-info');
                               }
                             }}
                             className={`w-full px-3.5 py-2.5 bg-black/60 border text-xs text-white placeholder-stone-600 focus:outline-none transition-colors rounded-lg ${
-                              formErrors.sucursalRetiro ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
+                              formErrors.direccion ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
                             }`}
                           />
+                          {formErrors.direccion && (
+                            <p className="text-[10px] text-rose-400">{formErrors.direccion}</p>
+                          )}
+                          <p className="text-[10px] text-stone-400 font-light">
+                            Servi Entrega entregará tu pedido directamente en esta dirección en {provincia}.
+                          </p>
                         </div>
+                      ) : (
+                        /* Si es Ferguson, Uno Express o Servientrega Sucursal: mostrar sucursales de la provincia */
+                        <div className="space-y-3 p-3.5 rounded-xl bg-stone-900/60 border border-white/10">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] uppercase tracking-[0.16em] text-white font-medium block flex items-center gap-1.5">
+                              <Store size={13} className="text-[#c5a059]" />
+                              <span>Sucursal de {courier} para Retiro en {provincia} *</span>
+                            </label>
+                            <span className="text-[10px] text-[#c5a059] font-mono font-medium">
+                              {provincia}
+                            </span>
+                          </div>
 
-                        <p className="text-[10px] text-stone-400 font-light leading-relaxed">
-                          💡 <em>Si dejas este campo en blanco, tu paquete se enviará de forma segura a la <strong>Agencia Principal de {courier} en {provincia}</strong> y podrás retirarlo presentando tu cédula.</em>
-                        </p>
-                      </div>
-                    )}
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] text-stone-400 font-light block">
+                              Toca una sucursal para seleccionarla rápidamente:
+                            </span>
+                            <div className="flex flex-wrap gap-2">
+                              {currentBranchList.map((suc) => {
+                                const isSelected = sucursalRetiro === suc;
+                                return (
+                                  <button
+                                    key={suc}
+                                    type="button"
+                                    onClick={() => {
+                                      setSucursalRetiro(suc);
+                                      scrollToSection('section-customer-info');
+                                    }}
+                                    className={`px-3 py-2 rounded-xl text-xs font-medium border transition-all cursor-pointer flex items-center gap-1.5 ${
+                                      isSelected
+                                        ? 'border-[#c5a059] bg-[#c5a059]/25 text-white ring-1 ring-[#c5a059] shadow-sm'
+                                        : 'border-white/10 bg-black/50 text-stone-300 hover:border-white/20 hover:text-white'
+                                    }`}
+                                  >
+                                    <Store size={12} className={isSelected ? 'text-[#c5a059]' : 'text-stone-500'} />
+                                    <span>{suc}</span>
+                                    {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#c5a059] ml-1" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
 
-                    {/* NOTA OBLIGATORIA DEL TAMAÑO DEL PAQUETE */}
-                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-200 text-xs flex items-start gap-2">
-                      <AlertCircle size={15} className="text-amber-400 shrink-0 mt-0.5" />
-                      <div className="text-[11px] leading-relaxed">
-                        <strong className="block font-semibold text-amber-300">
-                          Tarifa Estimada: {shippingCostEstimate}
-                        </strong>
-                        <span className="text-stone-300 font-light">
-                          Nota: El costo final del envío depende del tamaño y peso del paquete.
-                        </span>
-                      </div>
+                          <div className="space-y-1 pt-1">
+                            <span className="text-[10px] text-stone-400 font-light block">
+                              O especifica otra agencia:
+                            </span>
+                            <input
+                              type="text"
+                              placeholder={`Ej. Sucursal ${courier} ${provincia}...`}
+                              value={sucursalRetiro}
+                              onChange={(e) => setSucursalRetiro(e.target.value)}
+                              className="w-full px-3.5 py-2.5 bg-black/60 border border-white/10 text-xs text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] transition-colors rounded-lg"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ) : (
-                  /* SI ELIGE RETIRO EN EL LOCAL: AVISO ELEGANTE */
-                  <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs space-y-1 animate-in fade-in duration-200">
-                    <div className="flex items-center gap-2 font-medium">
-                      <Store size={15} />
-                      <span>Retiro directo en Tienda física</span>
-                    </div>
-                    <p className="text-[11px] text-stone-300 font-light">
-                      Boutique Pretty-Store (<a href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7" target="_blank" rel="noreferrer" className="text-[#c5a059] underline underline-offset-2">Ver ubicación en Google Maps</a>). Tu pedido se apartará de inmediato a tu nombre y teléfono sin costo de envío.
-                    </p>
                   </div>
                 )}
 
-                {/* 3. CAMPOS DE CONTACTO (Nombre y Teléfono siempre requeridos) */}
+                {/* ============================================================== */}
+                {/* 3. CAMPOS DE CONTACTO (NOMBRE Y TELÉFONO) */}
+                {/* ============================================================== */}
                 <div id="section-customer-info" className="space-y-4 pt-2">
                   <div className="flex items-center justify-between pb-1 border-b border-white/[0.08]">
                     <span className="text-[11px] uppercase tracking-[0.16em] text-white font-medium flex items-center gap-1.5">
@@ -1244,11 +1080,11 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
                       </label>
                       <input
                         type="text"
-                        placeholder="Ej. Roberto De La Espriella"
+                        placeholder="Ej. Roberto Cedeño"
                         value={nombre}
                         onChange={(e) => setNombre(e.target.value)}
-                        className={`w-full px-3.5 py-2.5 bg-stone-900/60 border text-xs text-white placeholder-stone-600 focus:outline-none transition-colors ${
-                          formErrors.nombre ? 'border-rose-500' : 'border-white/10 focus:border-white/30'
+                        className={`w-full px-3.5 py-2.5 bg-stone-900/60 border text-xs text-white placeholder-stone-600 focus:outline-none transition-colors rounded-xl ${
+                          formErrors.nombre ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
                         }`}
                       />
                       {formErrors.nombre && (
@@ -1270,8 +1106,8 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
                             scrollToSection('section-payment-method');
                           }
                         }}
-                        className={`w-full px-3.5 py-2.5 bg-stone-900/60 border text-xs text-white placeholder-stone-600 focus:outline-none transition-colors ${
-                          formErrors.telefono ? 'border-rose-500' : 'border-white/10 focus:border-white/30'
+                        className={`w-full px-3.5 py-2.5 bg-stone-900/60 border text-xs text-white placeholder-stone-600 focus:outline-none transition-colors rounded-xl ${
+                          formErrors.telefono ? 'border-rose-500' : 'border-white/10 focus:border-[#c5a059]'
                         }`}
                       />
                       {formErrors.telefono && (
@@ -1282,19 +1118,21 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
 
                   <div className="space-y-1.5">
                     <label className="text-[11px] uppercase tracking-[0.16em] text-stone-400 font-light block">
-                      Notas Especiales / Indicaciones (Opcional)
+                      Notas Especiales / Observaciones (Opcional)
                     </label>
                     <textarea
                       rows={2}
-                      placeholder="Horario preferido o alguna observación..."
+                      placeholder="Horario de entrega o indicaciones adicionales..."
                       value={notas}
                       onChange={(e) => setNotas(e.target.value)}
-                      className="w-full px-3.5 py-2 bg-stone-900/60 border border-white/10 text-xs text-white placeholder-stone-600 focus:outline-none focus:border-white/30 transition-colors resize-none"
+                      className="w-full px-3.5 py-2 bg-stone-900/60 border border-white/10 text-xs text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] transition-colors resize-none rounded-xl"
                     />
                   </div>
                 </div>
 
-                {/* 4. MÉTODO DE PAGO (SOLO DIGITAL / BANCARIO: YAPPY, TRANSFERENCIA Y TARJETA - SIN EFECTIVO) */}
+                {/* ============================================================== */}
+                {/* 4. MÉTODO DE PAGO (YAPPY, TRANSFERENCIA, TARJETA) */}
+                {/* ============================================================== */}
                 <div id="section-payment-method" className="space-y-3 pt-4 border-t border-white/10">
                   <div className="flex items-center justify-between">
                     <label className="text-[11px] uppercase tracking-[0.16em] text-white font-medium block">
@@ -1305,20 +1143,7 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
                     </span>
                   </div>
 
-                  {/* AVISO OBLIGATORIO DE 48 HORAS PARA RETIRAR EN CUALQUIER OPCIÓN */}
-                  <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-200 text-xs flex items-start gap-2.5 shadow-md">
-                    <Clock size={18} className="text-amber-400 shrink-0 mt-0.5" />
-                    <div className="space-y-0.5">
-                      <strong className="text-amber-300 font-semibold block text-xs uppercase tracking-wider">
-                        ⚠️ Aviso Importante: Plazo de 48 Horas para Retirar
-                      </strong>
-                      <p className="text-[11px] text-stone-300 font-light leading-relaxed">
-                        Para cualquier opción seleccionada (<span className="text-white font-medium">Yappy, Transferencia o Tarjeta</span>), solo tienes <strong className="text-amber-300 font-semibold">48 horas</strong> para retirar tu pedido o coordinar tu entrega; de lo contrario tu orden se cancelará y perderás tu pedido.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Selector de 3 métodos: Yappy, Transferencia y Tarjeta */}
+                  {/* Selector de Métodos de Pago */}
                   <div className="grid grid-cols-3 gap-2">
                     {/* Yappy */}
                     <button
@@ -1337,7 +1162,7 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
                       <span className="text-xs font-semibold">Yappy</span>
                     </button>
 
-                    {/* Transferencia Bancaria */}
+                    {/* Transferencia */}
                     <button
                       type="button"
                       onClick={() => {
@@ -1372,30 +1197,57 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
                     </button>
                   </div>
 
-                  {/* DETALLE SEGÚN MÉTODO DE PAGO */}
+                  {/* DETALLE 1: YAPPY CON NÚMERO 6402-8245 Y BOTÓN COPIAR */}
                   {metodoPago === 'yappy' && (
-                    <div className="p-4 rounded-xl bg-stone-900/80 border border-[#c5a059]/30 space-y-3 text-xs animate-in fade-in duration-200">
+                    <div className="p-4 sm:p-5 rounded-xl bg-gradient-to-br from-[#c5a059]/15 via-stone-900/90 to-black border border-[#c5a059]/40 space-y-3.5 text-xs animate-in fade-in duration-200 shadow-xl">
                       <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                        <span className="text-stone-300 font-medium">Pagar vía Yappy Comercial o Celular:</span>
-                        <span className="text-[#c5a059] font-mono font-bold text-sm">
-                          {config.yappy_numero || '+507 6890-1234'}
+                        <div className="flex items-center gap-2">
+                          <Smartphone size={18} className="text-[#c5a059]" />
+                          <span className="text-white font-semibold text-xs">Pagar vía Yappy Comercial o Celular:</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono">
+                          Pago Rápido
                         </span>
                       </div>
-                      <p className="text-[11px] text-stone-300 leading-relaxed font-light">
-                        Envía el total de <strong className="text-white">${total.toFixed(2)} USD</strong> desde tu banca en línea al número{' '}
-                        <strong className="text-[#c5a059]">{config.yappy_numero || '+507 6890-1234'}</strong>.
-                      </p>
 
-                      <div className="p-3 rounded-xl bg-black/60 border border-emerald-500/25 text-emerald-300 flex items-start gap-2.5 text-[11px] leading-relaxed">
-                        <MessageSquare size={16} className="text-[#25D366] shrink-0 mt-0.5" />
-                        <div>
-                          <strong className="text-white block font-medium">Factura Inmediata & WhatsApp:</strong>
-                          Al presionar <span className="text-white font-semibold">"Confirmar Pedido"</span> se te mostrará primero tu factura oficial y recibo de compra en pantalla, y abajo encontrarás el botón directo de WhatsApp para adjuntar tu captura o comprobante de pago con comodidad.
+                      {/* Caja con botón para copiar el número 6402-8245 */}
+                      <div className="p-3.5 rounded-xl bg-black/85 border border-[#c5a059]/60 space-y-2 shadow-inner">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] uppercase font-bold tracking-widest text-[#c5a059]">
+                            Número Telefónico para Yappy (Solo Pago)
+                          </span>
+                          <span className="text-[10px] text-stone-400 font-mono">Pretty-Store</span>
                         </div>
+
+                        <div className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-stone-900/90 border border-white/10">
+                          <div>
+                            <span className="text-[10px] text-stone-400 block font-light">Enviar el pago al número:</span>
+                            <span className="text-white font-mono text-lg sm:text-xl font-bold tracking-wider text-[#c5a059] block">
+                              {YAPPY_PAY_PHONE}
+                            </span>
+                            <span className="text-[10px] text-stone-300 block font-light">
+                              Monto a transferir: <strong className="text-white font-mono">${finalTotal.toFixed(2)} USD</strong>
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => copyYappyNumber(YAPPY_PAY_PHONE)}
+                            className="px-3.5 py-2 rounded-lg bg-[#c5a059] hover:bg-[#b5914a] text-black text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-md shadow-[#c5a059]/20"
+                          >
+                            {copiedYappy ? <Check size={14} /> : <Copy size={14} />}
+                            <span>{copiedYappy ? '¡Copiado!' : `Copiar ${YAPPY_PAY_PHONE}`}</span>
+                          </button>
+                        </div>
+
+                        <p className="text-[10px] text-amber-300/90 font-light leading-relaxed">
+                          * <strong>Importante:</strong> El número <strong>{YAPPY_PAY_PHONE}</strong> es solo para enviar el dinero por Yappy. Al confirmar tu pedido abajo, se generará tu <strong>Recibo Oficial de Compra</strong> y podrás enviarlo junto con tu captura al WhatsApp oficial de la tienda (<strong>6215-0251</strong>).
+                        </p>
                       </div>
                     </div>
                   )}
 
+                  {/* DETALLE 2: TRANSFERENCIA BANCARIA CON BOTÓN COPIAR CUENTA */}
                   {metodoPago === 'transferencia' && (
                     <div className="p-4 sm:p-5 rounded-xl bg-gradient-to-br from-[#c5a059]/15 via-stone-900/90 to-black border border-[#c5a059]/40 space-y-3.5 text-xs animate-in fade-in duration-200 shadow-xl">
                       <div className="flex items-center gap-2.5 pb-2 border-b border-white/10">
@@ -1407,12 +1259,12 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
                             ¡Gracias por su compra!
                           </strong>
                           <span className="text-[10px] text-stone-300 font-light">
-                            Datos oficiales para realizar tu transferencia o depósito bancario:
+                            Datos para realizar tu transferencia bancaria:
                           </span>
                         </div>
                       </div>
 
-                      {/* Caja Destacada del Número de Cuenta para visualización inmediata */}
+                      {/* Caja con botón para copiar la cuenta */}
                       <div className="p-3.5 rounded-xl bg-black/85 border border-[#c5a059]/60 space-y-2.5 shadow-inner">
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] uppercase font-bold tracking-widest text-[#c5a059]">
@@ -1427,7 +1279,7 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
                           <div>
                             <span className="text-[10px] text-stone-400 block font-light">Número de Cuenta:</span>
                             <span className="text-white font-mono text-base sm:text-lg font-bold tracking-wider text-[#c5a059] block">
-                              {config.banco_datos?.match(/#([0-9-]+)/)?.[1] || '03-01-01-123456-7'}
+                              03-01-01-123456-7
                             </span>
                             <span className="text-[10px] text-stone-300 block font-light">
                               A nombre de: <strong>Pretty-Store Inc.</strong>
@@ -1436,189 +1288,211 @@ Hola, acabo de tramitar mi pedido por Transferencia Bancaria en la web. Adjunto 
 
                           <button
                             type="button"
-                            onClick={() => copyBankDetails(config.banco_datos?.match(/#([0-9-]+)/)?.[1] || '03-01-01-123456-7')}
-                            className="px-3 py-2 rounded-lg bg-[#c5a059]/25 hover:bg-[#c5a059]/35 border border-[#c5a059]/50 text-[#c5a059] hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+                            onClick={() => copyBankDetails('03-01-01-123456-7')}
+                            className="px-3.5 py-2 rounded-lg bg-[#c5a059]/25 hover:bg-[#c5a059]/35 border border-[#c5a059]/50 text-[#c5a059] hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
                           >
                             {copiedBank ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
                             <span>{copiedBank ? '¡Copiado!' : 'Copiar Cuenta'}</span>
                           </button>
                         </div>
-                      </div>
 
-                      <p className="text-[11px] text-stone-300 font-light leading-relaxed">
-                        Transfiere el total de <strong className="text-white font-semibold">${total.toFixed(2)} USD</strong>. Al presionar <strong>"Confirmar Pedido"</strong> abajo, verás tu recibo detallado con el botón directo de WhatsApp para mandar la captura del comprobante.
-                      </p>
+                        <p className="text-[10px] text-stone-400 font-light">
+                          Transfiere el total de <strong className="text-white font-mono">${finalTotal.toFixed(2)} USD</strong>. Al presionar confirmar, se generará tu Recibo Oficial para enviar la captura de tu transferencia a nuestro WhatsApp (<strong>6215-0251</strong>).
+                        </p>
+                      </div>
                     </div>
                   )}
 
+                  {/* DETALLE 3: TARJETA (PAGUELOFACIL) CON BOTÓN "IR A PAGAR" PRIMERO */}
                   {metodoPago === 'tarjeta' && (
-                    <div className="p-4 rounded-xl bg-stone-900/80 border border-white/10 space-y-3.5 text-xs animate-in fade-in duration-200">
+                    <div className="p-4 sm:p-5 rounded-xl bg-gradient-to-br from-[#c5a059]/15 via-stone-900/90 to-black border border-[#c5a059]/40 space-y-4 text-xs animate-in fade-in duration-200 shadow-xl">
                       <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                        <span className="text-stone-300 font-medium flex items-center gap-1.5">
-                          <Lock size={12} className="text-[#c5a059]" />
-                          <span>Pago Seguro con Tarjeta</span>
-                        </span>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-2 text-white font-medium text-xs">
+                          <CreditCard size={18} className="text-[#c5a059]" />
+                          <span>Pago Seguro con Tarjeta (PagueloFacil)</span>
+                        </div>
+                        <div className="flex items-center gap-1">
                           <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] font-mono text-stone-300 font-medium">Visa</span>
                           <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] font-mono text-stone-300 font-medium">Mastercard</span>
                           <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] font-mono text-stone-300 font-medium">Clave</span>
                         </div>
                       </div>
 
-                      <div className="p-4 rounded-xl bg-black/60 border border-[#c5a059]/40 space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-white font-medium text-xs">
-                            <CreditCard size={15} className="text-[#c5a059]" />
-                            <span>Pasarela Oficial PagueloFacil Panamá</span>
-                          </div>
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-mono">
-                            Cobro Real Verificado
-                          </span>
+                      {/* 1. PRIMERO: BOTÓN "IR A PAGAR" */}
+                      <div className="space-y-2">
+                        <a
+                          href={config.link_pago_tarjeta || 'https://checkout.paguelofacil.com/gorras'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d4af37] hover:from-[#d4af37] hover:to-[#c5a059] text-black font-bold uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2.5 transition-all shadow-xl shadow-[#c5a059]/25 cursor-pointer text-center"
+                        >
+                          <CreditCard size={18} />
+                          <span>Ir a Pagar ${finalTotal.toFixed(2)} USD en PagueloFacil</span>
+                          <ExternalLink size={16} />
+                        </a>
+                        <span className="text-[10px] text-stone-400 block text-center font-light">
+                          Se abrirá la pasarela segura de PagueloFacil para procesar tu tarjeta.
+                        </span>
+                      </div>
+
+                      {/* 2. DEBAJO: EL AVISO */}
+                      <div className="p-3.5 rounded-xl bg-black/70 border border-white/10 space-y-2">
+                        <div className="flex items-center gap-2 text-[#c5a059] font-medium text-[11px]">
+                          <Clock size={14} className="shrink-0" />
+                          <span>Aviso de Coordinación y Plazo (48 Horas):</span>
                         </div>
                         <p className="text-[11px] text-stone-300 leading-relaxed font-light">
-                          Al presionar <strong className="text-white">"Confirmar Pedido"</strong> abajo, se generará tu recibo detallado con lo que compraste y te enviaremos directamente al enlace oficial de PagueloFacil para pagar tus <strong className="text-[#c5a059] font-mono">${total.toFixed(2)} USD</strong> con tus tarjetas Visa, Mastercard o Clave (con acreditación directa a la cuenta de la tienda).
+                          {tipoEntrega === 'retiro'
+                            ? 'Dispones de un plazo máximo de 48 horas para retirar tu entrega en la tienda con tu comprobante.'
+                            : 'Dispones de un plazo máximo de 48 horas para coordinar tu entrega con tu comprobante de pago.'}
                         </p>
-                        <div className="flex items-center gap-2 pt-1 text-[10px] text-emerald-400 font-mono">
-                          <ShieldCheck size={12} />
-                          <span>Conexión cifrada sin ingresar datos bancarios en esta página</span>
-                        </div>
+                        <p className="text-[10px] text-stone-400 font-light">
+                          Una vez realizado el pago, presiona <strong>"Confirmar Pedido"</strong> abajo para generar tu <strong>Recibo Oficial de Compra</strong> y enviar los detalles al WhatsApp de la tienda (<strong>6215-0251</strong>).
+                        </p>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* 5. ACEPTACIÓN LEGAL Y CONFIRMAR PEDIDO */}
-                <div id="section-confirm-order" className="pt-4 border-t border-white/[0.08] space-y-3">
-                  <label className="flex items-start gap-2.5 cursor-pointer text-xs select-none group">
+                {/* ============================================================== */}
+                {/* AVISO IMPORTANTE DE 48 HORAS CONDICIONAL ANTES DE CONFIRMAR */}
+                {/* ============================================================== */}
+                <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2.5 text-left">
+                  <Clock size={18} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <strong className="text-amber-300 font-semibold block text-[11px] uppercase tracking-wider">
+                      Plazo de 48 Horas
+                    </strong>
+                    <p className="text-[11px] text-stone-200 font-light leading-relaxed">
+                      {tipoEntrega === 'retiro'
+                        ? 'Dispones de un plazo máximo de 48 horas para retirar tu entrega en la tienda con tu comprobante.'
+                        : 'Dispones de un plazo máximo de 48 horas para coordinar tu entrega con tu comprobante de pago.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Aceptación Legal */}
+                <div className="space-y-2 pt-2 border-t border-white/10">
+                  <label className="flex items-start gap-3 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={acceptedTerms}
-                      onChange={(e) => {
-                        setAcceptedTerms(e.target.checked);
-                        if (formErrors.terms) {
-                          setFormErrors((prev) => {
-                            const updated = { ...prev };
-                            delete updated.terms;
-                            return updated;
-                          });
-                        }
-                      }}
-                      className="mt-0.5 w-4 h-4 rounded border border-white/20 bg-black/60 text-[#c5a059] focus:ring-1 focus:ring-[#c5a059] focus:ring-offset-0 cursor-pointer accent-[#c5a059]"
+                      onChange={(e) => setAcceptedTerms(e.target.checked)}
+                      className="mt-0.5 rounded border-stone-700 bg-stone-900 text-[#c5a059] focus:ring-0 focus:ring-offset-0 cursor-pointer"
                     />
-                    <span className="leading-snug text-[11px] text-stone-300 font-light">
+                    <span className="text-[11px] text-stone-400 leading-relaxed font-light">
                       He leído y acepto los{' '}
-                      <a
-                        href="/terminos-y-condiciones"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#c5a059] hover:underline underline-offset-2 font-medium"
-                      >
-                        Términos y Condiciones
-                      </a>{' '}
-                      y la{' '}
-                      <a
-                        href="/politica-de-privacidad"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#c5a059] hover:underline underline-offset-2 font-medium"
-                      >
-                        Política de Privacidad
-                      </a>
-                      .*
+                      <span className="text-[#c5a059] underline">Términos y Condiciones</span> y la{' '}
+                      <span className="text-[#c5a059] underline">Política de Privacidad</span> de Pretty-Store.
                     </span>
                   </label>
                   {formErrors.terms && (
-                    <p className="text-[10px] text-rose-400 pl-6.5 font-medium leading-tight">
-                      {formErrors.terms}
-                    </p>
+                    <p className="text-[10px] text-rose-400">{formErrors.terms}</p>
                   )}
                 </div>
 
-                {/* Submit button on mobile/desktop */}
-                <div className="pt-2">
+                {/* BOTÓN CONFIRMAR PEDIDO */}
+                <div id="section-confirm-order" className="pt-2">
                   <button
                     type="submit"
-                    disabled={isSubmitting || items.length === 0}
-                    className="w-full py-4 bg-white hover:bg-stone-200 text-stone-950 font-semibold uppercase tracking-[0.2em] text-xs transition-colors cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                    disabled={isSubmitting}
+                    className="w-full py-4 px-6 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-xl shadow-[#c5a059]/20"
                   >
                     {isSubmitting ? (
-                      <span>Registrando Pedido...</span>
+                      <span>Generando Recibo Oficial...</span>
                     ) : (
                       <>
-                        <span>Confirmar Pedido · ${total.toFixed(2)}</span>
-                        <ArrowRight size={14} className="stroke-[2]" />
+                        <span>Confirmar Pedido · ${finalTotal.toFixed(2)} USD</span>
+                        <ArrowRight size={16} />
                       </>
                     )}
                   </button>
+                  <p className="text-[10px] text-stone-400 text-center font-light mt-2">
+                    Al confirmar, verás tu <strong>Recibo Oficial de Compra</strong> y podrás enviarlo con 1 clic al WhatsApp oficial <strong>6215-0251</strong>.
+                  </p>
                 </div>
               </form>
             </div>
 
             {/* Right Column: Order Summary */}
-            <div className="lg:col-span-5 p-6 sm:p-10 bg-stone-950/60 flex flex-col justify-between">
-              <div>
-                <h3 className="text-xs uppercase tracking-[0.2em] font-medium text-stone-300 mb-6">
-                  Resumen de la Orden ({items.reduce((acc, i) => acc + i.quantity, 0)})
-                </h3>
+            <div className="lg:col-span-5 p-5 sm:p-8 bg-black/40 space-y-5">
+              <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block">
+                Resumen de la Orden
+              </span>
 
-                <div className="space-y-4 max-h-[340px] overflow-y-auto pr-1 divide-y divide-white/[0.06]">
-                  {items.map((item) => (
-                    <div key={item.product.id} className="pt-4 first:pt-0 flex gap-3">
-                      <div className="w-14 h-16 bg-stone-900 border border-white/10 overflow-hidden shrink-0">
-                        <img
-                          src={item.product.imagen_url || '/images/logo/logotipo.jpeg'}
-                          alt={item.product.nombre}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0 flex flex-col justify-between">
-                        <div>
-                          <h4 className="text-xs font-serif-luxury text-white truncate">
-                            {item.product.nombre}
-                          </h4>
-                          <span className="text-[10px] text-stone-400 font-light">
-                            Cant: {item.quantity}
-                          </span>
-                        </div>
-                        <span className="text-xs font-mono tabular-nums text-white">
-                          ${(item.product.precio * item.quantity).toFixed(2)}
-                        </span>
+              {/* Items List */}
+              <div className="divide-y divide-white/5 max-h-64 overflow-y-auto pr-1">
+                {items.map((it) => (
+                  <div key={it.product.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <img
+                        src={it.product.imagen_url || '/images/products/gorra-1.webp'}
+                        alt={it.product.nombre}
+                        className="w-10 h-10 object-cover rounded-lg border border-white/10 shrink-0 bg-stone-900"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-white font-medium truncate text-xs">{it.product.nombre}</p>
+                        <p className="text-[10px] text-stone-400 font-mono">
+                          {it.quantity} × ${it.product.precio.toFixed(2)}
+                        </p>
                       </div>
                     </div>
-                  ))}
+                    <span className="font-mono text-white text-xs font-semibold shrink-0">
+                      ${(it.quantity * it.product.precio).toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Cost Breakdown */}
+              <div className="space-y-2 pt-3 border-t border-white/10 text-xs">
+                <div className="flex justify-between text-stone-400 font-light">
+                  <span>Subtotal</span>
+                  <span className="font-mono text-white">${subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-stone-400 font-light">
+                  <span>Envío ({tipoEntrega === 'retiro' ? 'Retiro en Local' : `${courier} · ${provincia}`})</span>
+                  <span className="font-mono text-white">
+                    {shippingCost > 0 ? `$${shippingCost.toFixed(2)}` : 'Gratis ($0.00)'}
+                  </span>
+                </div>
+                <div className="pt-2 border-t border-white/10 flex justify-between items-center text-sm">
+                  <span className="font-bold text-white uppercase tracking-wider text-xs">Total a Pagar:</span>
+                  <span className="text-xl font-mono font-bold text-[#c5a059]">
+                    ${finalTotal.toFixed(2)} USD
+                  </span>
                 </div>
               </div>
 
-              {/* Price Breakdown */}
-              <div className="pt-6 border-t border-white/10 space-y-2.5 text-xs mt-6">
-                <div className="flex justify-between text-stone-400 font-light">
-                  <span>Subtotal</span>
-                  <span className="font-mono tabular-nums text-white">${subtotal.toFixed(2)}</span>
+              {/* Resumen de Modalidad de Entrega */}
+              <div className="p-3.5 rounded-xl bg-stone-900/60 border border-white/10 text-xs space-y-1.5">
+                <div className="flex items-center gap-1.5 text-stone-300 font-medium">
+                  <Truck size={14} className="text-[#c5a059]" />
+                  <span>Entrega Seleccionada:</span>
                 </div>
-                <div className="flex justify-between text-stone-400 font-light gap-2">
-                  <span>
-                    {tipoEntrega === 'retiro' ? 'Retiro en Local' : `Envío (${courier})`}
-                  </span>
-                  <span className="font-mono text-xs text-right text-white">
-                    {tipoEntrega === 'retiro' ? (
-                      <span className="text-emerald-400">Gratis ($0.00)</span>
-                    ) : (
-                      <span className="text-[#c5a059] font-medium text-[11px] block">
-                        {shippingCostEstimate}
-                      </span>
-                    )}
-                  </span>
-                </div>
-                <div className="pt-3 border-t border-white/10 flex justify-between text-sm">
-                  <span className="uppercase tracking-[0.16em] text-xs font-medium text-white">Total</span>
-                  <span className="text-lg font-mono tabular-nums font-semibold text-white">
-                    ${total.toFixed(2)}
-                  </span>
-                </div>
+                <p className="text-[11px] text-white font-semibold">
+                  {tipoEntrega === 'retiro'
+                    ? 'Retiro en Tienda Física (La Chorrera)'
+                    : `Envío con ${courier} a ${provincia}`}
+                </p>
+                {tipoEntrega === 'delivery' && (
+                  <p className="text-[10px] text-stone-400 font-light">
+                    {courier === 'Servientrega' && servientregaModalidad === 'domicilio'
+                      ? 'Entrega a domicilio hasta tu casa'
+                      : `Sucursal: ${sucursalRetiro || 'Agencia Principal'}`}
+                  </p>
+                )}
+              </div>
 
-                <div className="pt-4 flex items-center gap-2 text-[10px] text-stone-400 font-light">
-                  <ShieldCheck size={14} className="text-[#c5a059]" />
-                  <span>Transacción protegida. Registro automático en Supabase.</span>
+              {/* Garantías y Seguridad */}
+              <div className="space-y-1.5 pt-2 text-[10px] text-stone-400 font-light">
+                <div className="flex items-center gap-2 text-emerald-400">
+                  <ShieldCheck size={13} />
+                  <span>Atención directa y personalizada por WhatsApp</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Lock size={13} className="text-[#c5a059]" />
+                  <span>Pagos verificados y recibo oficial inmediato</span>
                 </div>
               </div>
             </div>

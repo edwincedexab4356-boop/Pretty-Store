@@ -25,6 +25,15 @@ export const StoreConfigProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!local.link_pago_tarjeta) {
       local.link_pago_tarjeta = 'https://checkout.paguelofacil.com/gorras';
     }
+    if (!local.yappy_numero || local.yappy_numero.includes('6890-1234')) {
+      local.yappy_numero = '6402-8245';
+    }
+    if (!local.whatsapp || local.whatsapp.includes('6890-1234')) {
+      local.whatsapp = '+507 6215-0251';
+    }
+    if (!local.telefono || local.telefono.includes('6890-1234')) {
+      local.telefono = '+507 6215-0251';
+    }
     return local;
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -57,6 +66,15 @@ export const StoreConfigProvider: React.FC<{ children: React.ReactNode }> = ({ c
           }
           if (!merged.link_pago_tarjeta) {
             merged.link_pago_tarjeta = 'https://checkout.paguelofacil.com/gorras';
+          }
+          if (!merged.yappy_numero || merged.yappy_numero.includes('6890-1234')) {
+            merged.yappy_numero = '6402-8245';
+          }
+          if (!merged.whatsapp || merged.whatsapp.includes('6890-1234')) {
+            merged.whatsapp = '+507 6215-0251';
+          }
+          if (!merged.telefono || merged.telefono.includes('6890-1234')) {
+            merged.telefono = '+507 6215-0251';
           }
           merged.hero_poster_url = '';
           setConfig(merged);

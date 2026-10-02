@@ -37,13 +37,21 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
     return () => window.removeEventListener('resize', checkScroll);
   }, [categories]);
 
-  // Scroll active item into view when selected
+  // Scroll active item inside horizontal container only on user interaction (not initial mount, and never scroll the window)
+  const isInitialMount = useRef(true);
   useEffect(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const activeBtn = el.querySelector<HTMLButtonElement>('[data-active="true"]');
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const activeBtn = container.querySelector<HTMLButtonElement>('[data-active="true"]');
     if (activeBtn) {
-      activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      const containerRect = container.getBoundingClientRect();
+      const btnRect = activeBtn.getBoundingClientRect();
+      const offset = btnRect.left - containerRect.left - container.clientWidth / 2 + btnRect.width / 2;
+      container.scrollBy({ left: offset, behavior: 'smooth' });
     }
   }, [selectedCategoryId]);
 
