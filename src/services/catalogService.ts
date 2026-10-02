@@ -1,5 +1,6 @@
 import { getSupabaseClient, getSupabaseConfig } from '../lib/supabase';
 import { Categoria, Producto, Inventario } from '../types/database';
+import { sortCategoriesWithOrder } from '../utils/categoryOrderUtils';
 
 export interface CatalogLoadResult {
   isConfigured: boolean;
@@ -45,11 +46,11 @@ export async function fetchCatalogData(): Promise<CatalogLoadResult> {
   const supabase = getSupabaseClient();
 
   // 1. Fetch active categories from public.categorias
-  const { data: rawCategories, error: catError } = await supabase
+  let rawCategories: any[] | null = null;
+  const { data: catData, error: catError } = await supabase
     .from('categorias')
-    .select('id, nombre, descripcion, activa, created_at')
-    .eq('activa', true)
-    .order('nombre', { ascending: true });
+    .select('*')
+    .eq('activa', true);
 
   if (catError) {
     const err: CatalogError = {
@@ -61,11 +62,13 @@ export async function fetchCatalogData(): Promise<CatalogLoadResult> {
     };
     throw err;
   }
+  rawCategories = catData;
 
-  const categories: Categoria[] = (rawCategories || []).map((c) => ({
+  const unsortedCategories: Categoria[] = (rawCategories || []).map((c) => ({
     ...c,
     id: String(c.id),
   }));
+  const categories: Categoria[] = sortCategoriesWithOrder(unsortedCategories);
   const categoryMap = new Map<string, Categoria>();
   categories.forEach((c) => categoryMap.set(String(c.id), c));
 

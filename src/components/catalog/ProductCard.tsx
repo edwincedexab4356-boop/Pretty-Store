@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Check, ChevronLeft, ChevronRight, Play } from 'lucide-react';
+import { ShoppingBag, Check, ChevronLeft, ChevronRight, Play, Sparkles } from 'lucide-react';
 import { Producto } from '../../types/database';
 import { useCart } from '../../context/CartContext';
 import { getProductImages, isVideoMedia } from '../../utils/productImages';
+import { isLegendaryCap } from '../../utils/promoUtils';
 
 interface ProductCardProps {
   product: Producto;
@@ -21,6 +22,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const [imgError, setImgError] = useState(false);
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
 
+  const isLegendary = isLegendaryCap(product, categoryName);
   const images = getProductImages(product);
   const hasMultipleImages = images.length > 1;
   const currentImage = images[currentImgIndex] || product.imagen_url;
@@ -145,6 +147,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </span>
         )}
 
+        {/* Legendary Caps Promo Badge */}
+        {isLegendary && (
+          <span className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded bg-black/85 backdrop-blur-md text-[10px] text-amber-300 flex items-center gap-1.5 border border-[#c5a059]/50 z-10 shadow-lg font-medium tracking-wide">
+            <Sparkles size={11} className="text-[#c5a059]" />
+            <span>2 por $55</span>
+          </span>
+        )}
+
         {/* Carousel Arrow Controls */}
         {hasMultipleImages && (
           <>
@@ -232,9 +242,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <span className="text-[9px] uppercase tracking-[0.2em] text-stone-400 font-light">
               Precio
             </span>
-            <span className="text-lg font-mono tabular-nums font-medium text-white">
-              ${product.precio.toFixed(2)}
-            </span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-lg font-mono tabular-nums font-medium text-white">
+                ${product.precio.toFixed(2)}
+              </span>
+              {isLegendary && (
+                <span className="text-[10px] text-amber-300 font-mono font-medium">
+                  (2x $55)
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Add to Cart Button */}

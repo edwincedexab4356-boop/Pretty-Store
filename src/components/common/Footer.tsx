@@ -213,7 +213,7 @@ export const Footer: React.FC<FooterProps> = ({
             <div className="space-y-2 text-stone-400 font-light text-xs">
               <p className="flex items-center gap-2 text-stone-300">
                 <Smartphone size={13} className="text-[#c5a059]" />
-                <span>{config.whatsapp || '+507 6890-1234'}</span>
+                <span>{config.whatsapp || '+507 6215-0251'}</span>
               </p>
               <p className="flex items-center gap-2 text-stone-300">
                 <Mail size={13} className="text-[#c5a059]" />

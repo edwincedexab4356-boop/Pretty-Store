@@ -182,7 +182,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({
                     <span>WhatsApp & Teléfono</span>
                   </div>
                   <p className="text-xs text-[#c5a059] font-mono">
-                    {config.whatsapp || config.telefono || '+507 6890-1234'}
+                    {config.whatsapp || config.telefono || '+507 6215-0251'}
                   </p>
                   <p className="text-[11px] text-stone-500">Atención personalizada y seguimiento</p>
                 </div>

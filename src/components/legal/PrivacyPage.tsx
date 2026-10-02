@@ -319,7 +319,7 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({
               <Phone size={15} className="text-[#c5a059] shrink-0" />
               <div>
                 <span className="text-stone-400 block text-[10px]">Línea Directa:</span>
-                <span className="text-white font-medium">{config.telefono || '+507 6890-1234'}</span>
+                <span className="text-white font-medium">{config.telefono || '+507 6215-0251'}</span>
               </div>
             </div>
           </div>

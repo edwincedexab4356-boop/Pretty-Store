@@ -63,7 +63,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenQuotaModal }) 
   const [twitter, setTwitter] = useState(config.twitter || '');
 
   // Payment settings state
-  const [yappyNumero, setYappyNumero] = useState(config.yappy_numero || '+507 6890-1234');
+  const [yappyNumero, setYappyNumero] = useState(config.yappy_numero || '6402-8245');
   const [bancoDatos, setBancoDatos] = useState(
     config.banco_datos ||
       'Banco General - Cuenta Corriente #03-01-01-123456-7 a nombre de Pretty-Store Inc.'
@@ -708,7 +708,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenQuotaModal }) 
                 type="text"
                 value={yappyNumero}
                 onChange={(e) => setYappyNumero(e.target.value)}
-                placeholder="+507 6890-1234 o @prettystore"
+                placeholder="6402-8245 o @prettystore"
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono focus:outline-none focus:border-amber-500"
               />
               <span className="text-[10px] text-slate-500 mt-1 block">

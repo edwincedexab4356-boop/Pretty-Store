@@ -13,6 +13,13 @@ import {
   Eye,
   EyeOff,
   Package,
+  GripVertical,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUp,
+  ArrowUpDown,
+  Sparkles,
+  Info,
 } from 'lucide-react';
 import {
   getAdminCategories,
@@ -20,6 +27,7 @@ import {
   updateAdminCategory,
   deleteAdminCategory,
   toggleCategoryActive,
+  saveAdminCategoriesOrder,
 } from '../../../services/adminService';
 import { Categoria } from '../../../types/database';
 import { isPermissionError } from '../../../utils/supabaseSqlFix';
@@ -34,6 +42,12 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Reordering state
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const [orderToast, setOrderToast] = useState<string | null>(null);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Categoria | null>(null);
@@ -46,6 +60,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formActive, setFormActive] = useState(true);
+  const [formPosition, setFormPosition] = useState<'end' | 'start'>('end');
 
   const loadData = async () => {
     setIsLoading(true);
@@ -63,11 +78,121 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
     loadData();
   }, []);
 
+  // Save new categories ordering
+  const applyNewCategoryOrder = async (newOrder: Categoria[], successMessage = '✓ Orden de categorías actualizado') => {
+    setCategories(newOrder);
+    setIsSavingOrder(true);
+    try {
+      const ids = newOrder.map((c) => String(c.id));
+      await saveAdminCategoriesOrder(ids);
+      setOrderToast(successMessage);
+      setTimeout(() => {
+        setOrderToast((prev) => (prev === successMessage ? null : prev));
+      }, 3000);
+    } catch (err: any) {
+      console.warn('Error al guardar orden:', err);
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
+
+  const handleMoveUp = (catId: string) => {
+    const currentIndex = categories.findIndex((c) => c.id === catId);
+    if (currentIndex <= 0) return;
+    const newOrder = [...categories];
+    const temp = newOrder[currentIndex];
+    newOrder[currentIndex] = newOrder[currentIndex - 1];
+    newOrder[currentIndex - 1] = temp;
+    applyNewCategoryOrder(newOrder, `Posición #${currentIndex} asignada a "${temp.nombre}"`);
+  };
+
+  const handleMoveDown = (catId: string) => {
+    const currentIndex = categories.findIndex((c) => c.id === catId);
+    if (currentIndex < 0 || currentIndex >= categories.length - 1) return;
+    const newOrder = [...categories];
+    const temp = newOrder[currentIndex];
+    newOrder[currentIndex] = newOrder[currentIndex + 1];
+    newOrder[currentIndex + 1] = temp;
+    applyNewCategoryOrder(newOrder, `Posición #${currentIndex + 2} asignada a "${temp.nombre}"`);
+  };
+
+  const handleMoveToTop = (catId: string) => {
+    const currentIndex = categories.findIndex((c) => c.id === catId);
+    if (currentIndex <= 0) return;
+    const newOrder = [...categories];
+    const [item] = newOrder.splice(currentIndex, 1);
+    newOrder.unshift(item);
+    applyNewCategoryOrder(newOrder, `"${item.nombre}" movida al primer lugar (#1)`);
+  };
+
+  const handleMoveToPosition = (catId: string, targetPosition: number) => {
+    const currentIndex = categories.findIndex((c) => c.id === catId);
+    if (currentIndex < 0) return;
+    const targetIndex = Math.max(0, Math.min(categories.length - 1, targetPosition - 1));
+    if (currentIndex === targetIndex) return;
+
+    const newOrder = [...categories];
+    const [item] = newOrder.splice(currentIndex, 1);
+    newOrder.splice(targetIndex, 0, item);
+    applyNewCategoryOrder(newOrder, `"${item.nombre}" movida a la posición #${targetPosition}`);
+  };
+
+  const handleResetAlphabetical = () => {
+    if (!window.confirm('¿Deseas restablecer el orden de todas las categorías en orden alfabético (A-Z)?')) {
+      return;
+    }
+    const sorted = [...categories].sort((a, b) =>
+      a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
+    );
+    applyNewCategoryOrder(sorted, '✓ Categorías ordenadas alfabéticamente (A-Z)');
+  };
+
+  // Drag & drop handlers
+  const handleDragStart = (e: React.DragEvent, catId: string) => {
+    const index = categories.findIndex((c) => c.id === catId);
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', catId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, catId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const overIdx = categories.findIndex((c) => c.id === catId);
+    if (dragOverIndex !== overIdx) {
+      setDragOverIndex(overIdx);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetCatId: string) => {
+    e.preventDefault();
+    setDragOverIndex(null);
+    if (draggedIndex === null) return;
+
+    const targetIndex = categories.findIndex((c) => c.id === targetCatId);
+    if (targetIndex < 0 || draggedIndex === targetIndex) {
+      setDraggedIndex(null);
+      return;
+    }
+
+    const newOrder = [...categories];
+    const [item] = newOrder.splice(draggedIndex, 1);
+    newOrder.splice(targetIndex, 0, item);
+    setDraggedIndex(null);
+    applyNewCategoryOrder(newOrder, `"${item.nombre}" movida a la posición #${targetIndex + 1}`);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
   const openCreateModal = () => {
     setEditingCategory(null);
     setFormName('');
     setFormDescription('');
     setFormActive(true);
+    setFormPosition('end');
     setModalError(null);
     setIsModalOpen(true);
     setActionMessage(null);
@@ -101,12 +226,21 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
         });
         setActionMessage({ type: 'success', text: 'Categoría actualizada con éxito.' });
       } else {
-        await createAdminCategory({
+        const created = await createAdminCategory({
           nombre: formName,
           descripcion: formDescription,
           activa: formActive,
         });
-        setActionMessage({ type: 'success', text: 'Categoría creada y visible en la tienda.' });
+
+        // Insertar en la posición deseada
+        if (created) {
+          const updatedList = formPosition === 'start' 
+            ? [created, ...categories]
+            : [...categories, created];
+          await saveAdminCategoriesOrder(updatedList.map((c) => c.id));
+        }
+
+        setActionMessage({ type: 'success', text: 'Categoría creada y colocada en la tienda.' });
       }
 
       setIsModalOpen(false);
@@ -186,39 +320,89 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
         </div>
       ) : null}
 
+      {/* Reordering Notification Toast */}
+      {orderToast && (
+        <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-[#c5a059]/40 text-[#c5a059] flex items-center justify-between gap-3 text-xs animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="shrink-0 text-[#c5a059]" />
+            <span className="font-medium text-white">{orderToast}</span>
+          </div>
+          <button
+            onClick={() => setOrderToast(null)}
+            className="p-1 hover:bg-black/20 rounded cursor-pointer text-stone-400 hover:text-white"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block mb-1">
-            Organización
-          </span>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block">
+              Organización del Catálogo
+            </span>
+            {isSavingOrder && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-300">
+                <RefreshCw size={10} className="animate-spin" /> Guardando orden...
+              </span>
+            )}
+          </div>
           <h2 className="text-xl sm:text-2xl font-serif-luxury font-semibold text-white tracking-wide">
             Categorías ({categories.length})
           </h2>
-          <p className="text-xs text-stone-400 mt-1 font-light">
-            Gestión de secciones del menú desplegable y colecciones en el catálogo de la tienda.
+          <p className="text-xs text-stone-400 mt-1 font-light max-w-2xl">
+            Acomoda las categorías en el orden exacto que prefieras. Usa las flechas (▲ / ▼), arrastra las filas con el icono, o elige el número de posición. El orden se sincroniza al instante en el menú desplegable y en la barra de colecciones de la tienda.
           </p>
         </div>
 
-        <button
-          onClick={openCreateModal}
-          className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors self-start md:self-auto"
-        >
-          <Plus size={16} />
-          <span>Nueva Categoría</span>
-        </button>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={handleResetAlphabetical}
+            title="Ordenar categorías de la A a la Z"
+            className="px-3.5 py-2.5 rounded-xl border border-white/10 hover:border-[#c5a059]/40 bg-white/[0.03] hover:bg-white/[0.06] text-stone-300 hover:text-white font-medium text-xs flex items-center gap-2 cursor-pointer transition-colors"
+          >
+            <ArrowUpDown size={14} className="text-[#c5a059]" />
+            <span>Ordenar A-Z</span>
+          </button>
+
+          <button
+            onClick={openCreateModal}
+            className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-semibold text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors"
+          >
+            <Plus size={16} />
+            <span>Nueva Categoría</span>
+          </button>
+        </div>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
-        <input
-          type="text"
-          placeholder="Buscar categoría..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-[#c5a059] transition-colors"
-        />
+      {/* Search and Helper Info */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="relative max-w-md w-full">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
+          <input
+            type="text"
+            placeholder="Buscar categoría..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-[#c5a059] transition-colors"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-white text-xs cursor-pointer"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 text-[11px] text-stone-400 bg-white/[0.02] border border-white/[0.06] px-3.5 py-2 rounded-xl">
+          <Info size={14} className="text-[#c5a059] shrink-0" />
+          <span>Tip: El orden #1 aparece de primero en la tienda.</span>
+        </div>
       </div>
 
       {/* Table */}
@@ -233,21 +417,33 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
             <Layers size={36} className="mx-auto text-stone-600 mb-2" />
             <p className="font-semibold text-white text-sm">No se encontraron categorías</p>
             <p className="text-stone-500 max-w-sm mx-auto font-light">
-              Crea tu primera categoría para organizar los productos de la tienda.
+              {searchTerm
+                ? 'Ninguna categoría coincide con el término de búsqueda.'
+                : 'Crea tu primera categoría para organizar los productos de la tienda.'}
             </p>
-            <button
-              onClick={openCreateModal}
-              className="mt-2 px-4 py-2 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
-            >
-              <Plus size={14} />
-              <span>Crear Categoría</span>
-            </button>
+            {searchTerm ? (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="mt-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white font-medium text-xs cursor-pointer"
+              >
+                Limpiar búsqueda
+              </button>
+            ) : (
+              <button
+                onClick={openCreateModal}
+                className="mt-2 px-4 py-2 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Plus size={14} />
+                <span>Crear Categoría</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-white/[0.02] text-stone-400 uppercase text-[10px] font-medium border-b border-white/[0.06]">
                 <tr>
+                  <th className="py-3.5 px-4 w-44">Orden en Tienda</th>
                   <th className="py-3.5 px-4">Categoría</th>
                   <th className="py-3.5 px-4">Descripción</th>
                   <th className="py-3.5 px-4">Productos</th>
@@ -256,63 +452,165 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.04]">
-                {filteredCategories.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-4 font-bold text-white">
-                      {c.nombre}
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-400 max-w-xs truncate">
-                      {c.descripcion || '—'}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300">
-                        <Package size={12} className="text-amber-400" />
-                        <span>{c.total_productos ?? 0}</span>
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <button
-                        onClick={() => handleToggleActive(c)}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors cursor-pointer ${
-                          c.activa
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
-                            : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
-                        }`}
-                        title="Haz clic para activar o desactivar"
-                      >
-                        {c.activa ? (
-                          <>
-                            <Eye size={12} />
-                            <span>Activa</span>
-                          </>
-                        ) : (
-                          <>
-                            <EyeOff size={12} />
-                            <span>Inactiva</span>
-                          </>
-                        )}
-                      </button>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                {filteredCategories.map((c) => {
+                  const fullIndex = categories.findIndex((item) => item.id === c.id);
+                  const isFirst = fullIndex === 0;
+                  const isLast = fullIndex === categories.length - 1;
+                  const isBeingDragged = draggedIndex === fullIndex;
+                  const isOver = dragOverIndex === fullIndex;
+
+                  return (
+                    <tr
+                      key={c.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, c.id)}
+                      onDragOver={(e) => handleDragOver(e, c.id)}
+                      onDrop={(e) => handleDrop(e, c.id)}
+                      onDragEnd={handleDragEnd}
+                      className={`transition-colors ${
+                        isBeingDragged
+                          ? 'opacity-40 bg-amber-500/10'
+                          : isOver
+                          ? 'bg-[#c5a059]/15 border-y border-[#c5a059]'
+                          : 'hover:bg-slate-800/40'
+                      }`}
+                    >
+                      {/* ORDEN CONTROLS */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          {/* Drag Handle */}
+                          <div
+                            className="cursor-grab active:cursor-grabbing p-1 text-stone-500 hover:text-[#c5a059] transition-colors"
+                            title="Arrastra para reordenar"
+                          >
+                            <GripVertical size={16} />
+                          </div>
+
+                          {/* Position Badge & Dropdown Selector */}
+                          <div className="relative group">
+                            <select
+                              value={fullIndex + 1}
+                              onChange={(e) => handleMoveToPosition(c.id, Number(e.target.value))}
+                              title="Cambiar posición directa"
+                              className="appearance-none px-2.5 py-1 rounded-lg bg-black/60 border border-white/10 hover:border-[#c5a059]/60 font-mono font-bold text-xs text-[#c5a059] cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#c5a059] pr-6"
+                            >
+                              {categories.map((_, idx) => (
+                                <option key={idx} value={idx + 1} className="bg-stone-900 text-white">
+                                  #{idx + 1}
+                                </option>
+                              ))}
+                            </select>
+                            <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-[#c5a059]">
+                              ▼
+                            </span>
+                          </div>
+
+                          {/* Quick Up / Down Arrows */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleMoveUp(c.id)}
+                              disabled={isFirst}
+                              title="Subir una posición"
+                              className="p-1 rounded-md bg-white/[0.04] hover:bg-[#c5a059]/20 text-stone-300 hover:text-white disabled:opacity-20 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer transition-colors"
+                            >
+                              <ChevronUp size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveDown(c.id)}
+                              disabled={isLast}
+                              title="Bajar una posición"
+                              className="p-1 rounded-md bg-white/[0.04] hover:bg-[#c5a059]/20 text-stone-300 hover:text-white disabled:opacity-20 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer transition-colors"
+                            >
+                              <ChevronDown size={14} />
+                            </button>
+                            {!isFirst && (
+                              <button
+                                type="button"
+                                onClick={() => handleMoveToTop(c.id)}
+                                title="Mover al primer lugar (#1)"
+                                className="p-1 rounded-md bg-white/[0.04] hover:bg-[#c5a059]/20 text-[#c5a059] hover:text-amber-300 cursor-pointer transition-colors"
+                              >
+                                <ChevronsUp size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* NOMBRE */}
+                      <td className="py-3.5 px-4 font-bold text-white">
+                        <div className="flex items-center gap-2">
+                          <span>{c.nombre}</span>
+                          {fullIndex === 0 && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider bg-[#c5a059]/20 text-[#c5a059] border border-[#c5a059]/30">
+                              Principal
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* DESCRIPCION */}
+                      <td className="py-3.5 px-4 text-slate-400 max-w-xs truncate">
+                        {c.descripcion || '—'}
+                      </td>
+
+                      {/* PRODUCTOS */}
+                      <td className="py-3.5 px-4">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300">
+                          <Package size={12} className="text-[#c5a059]" />
+                          <span>{c.total_productos ?? 0}</span>
+                        </span>
+                      </td>
+
+                      {/* ESTADO */}
+                      <td className="py-3.5 px-4">
                         <button
-                          onClick={() => openEditModal(c)}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                          title="Editar categoría"
+                          onClick={() => handleToggleActive(c)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors cursor-pointer ${
+                            c.activa
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
+                              : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
+                          }`}
+                          title="Haz clic para activar o desactivar"
                         >
-                          <Edit2 size={14} />
+                          {c.activa ? (
+                            <>
+                              <Eye size={12} />
+                              <span>Activa</span>
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff size={12} />
+                              <span>Inactiva</span>
+                            </>
+                          )}
                         </button>
-                        <button
-                          onClick={() => setIsDeleting(c)}
-                          className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
-                          title="Eliminar categoría"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+
+                      {/* ACCIONES */}
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => openEditModal(c)}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                            title="Editar categoría"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => setIsDeleting(c)}
+                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
+                            title="Eliminar categoría"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -325,7 +623,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
           <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl relative">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
               <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400 block">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-[#c5a059] block">
                   {editingCategory ? 'Modificar' : 'Nueva Categoría'}
                 </span>
                 <h3 className="text-xl font-bold text-white font-serif-luxury">
@@ -379,7 +677,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
                   placeholder="Ej. Perfumes de Nicho"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-[#c5a059]"
                 />
               </div>
 
@@ -390,9 +688,39 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
                   placeholder="Breve reseña de la categoría..."
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 resize-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-[#c5a059] resize-none"
                 />
               </div>
+
+              {!editingCategory && (
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Posición inicial en el catálogo</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormPosition('start')}
+                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                        formPosition === 'start'
+                          ? 'border-[#c5a059] bg-[#c5a059]/15 text-[#c5a059] font-bold'
+                          : 'border-white/10 bg-slate-950 text-stone-400 hover:text-white'
+                      }`}
+                    >
+                      Al Inicio (Posición #1)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormPosition('end')}
+                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                        formPosition === 'end'
+                          ? 'border-[#c5a059] bg-[#c5a059]/15 text-[#c5a059] font-bold'
+                          : 'border-white/10 bg-slate-950 text-stone-400 hover:text-white'
+                      }`}
+                    >
+                      Al Final (#{categories.length + 1})
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
                 <div>
@@ -405,7 +733,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
                   type="checkbox"
                   checked={formActive}
                   onChange={(e) => setFormActive(e.target.checked)}
-                  className="w-4 h-4 rounded text-amber-500 accent-amber-500 cursor-pointer"
+                  className="w-4 h-4 rounded text-[#c5a059] accent-[#c5a059] cursor-pointer"
                 />
               </div>
 
@@ -420,7 +748,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="px-6 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold shadow-lg shadow-[#c5a059]/20 flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {isSubmitting ? (
                     <>

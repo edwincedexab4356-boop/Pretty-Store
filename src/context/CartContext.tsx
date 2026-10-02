@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { CartItem, Producto } from '../types/database';
+import { calculateLegendaryCapsPromo, PromoCalculationResult } from '../utils/promoUtils';
 
 interface CartNotification {
   id: string;
@@ -16,6 +17,8 @@ interface CartContextType {
   clearCart: () => void;
   totalItems: number;
   subtotal: number;
+  discount: number;
+  promo: PromoCalculationResult;
   shipping: number;
   total: number;
   isCartOpen: boolean;
@@ -158,10 +161,16 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     items.reduce((acc, item) => acc + item.subtotal, 0).toFixed(2)
   );
 
-  // Envío gratis en compras mayores a $100, de lo contrario $5.00
-  const shipping = items.length === 0 ? 0 : subtotal >= 100 ? 0 : 5.0;
+  // Promoción: 2 Gorras Legendarias por $55 USD (-$5.00 de descuento por cada 2 gorras)
+  const promo = calculateLegendaryCapsPromo(items);
+  const discount = promo.discount;
 
-  const total = Number((subtotal + shipping).toFixed(2));
+  const effectiveSubtotal = Math.max(0, subtotal - discount);
+
+  // Envío gratis en compras mayores o iguales a $100, de lo contrario $5.00
+  const shipping = items.length === 0 ? 0 : effectiveSubtotal >= 100 ? 0 : 5.0;
+
+  const total = Number((effectiveSubtotal + shipping).toFixed(2));
 
   return (
     <CartContext.Provider
@@ -173,6 +182,8 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         clearCart,
         totalItems,
         subtotal,
+        discount,
+        promo,
         shipping,
         total,
         isCartOpen,

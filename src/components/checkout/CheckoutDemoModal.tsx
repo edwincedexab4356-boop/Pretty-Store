@@ -19,11 +19,13 @@ import {
   Copy,
   Check,
   Clock,
+  Tag,
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 import { MetodoPago, TipoEntrega, CourierOption } from '../../types/database';
 import { createRealOrder, CreatedOrderResult } from '../../services/checkoutService';
+import { isLegendaryCap } from '../../utils/promoUtils';
 
 // NÚMEROS OFICIALES ESPECIFICADOS POR EL USUARIO:
 // 1. Número EXCLUSIVO para pagar por Yappy: 6402-8245
@@ -126,6 +128,8 @@ export const CheckoutDemoModal: React.FC = () => {
   const {
     items,
     subtotal,
+    discount,
+    promo,
     isCheckoutOpen,
     setIsCheckoutOpen,
     clearCart,
@@ -203,8 +207,8 @@ export const CheckoutDemoModal: React.FC = () => {
   }, [tipoEntrega, courier, servientregaModalidad, isFarProvince]);
 
   const finalTotal = useMemo(() => {
-    return subtotal + shippingCost;
-  }, [subtotal, shippingCost]);
+    return Math.max(0, subtotal - discount) + shippingCost;
+  }, [subtotal, discount, shippingCost]);
 
   if (!isCheckoutOpen) return null;
 
@@ -234,7 +238,9 @@ export const CheckoutDemoModal: React.FC = () => {
     orderServiModality: 'sucursal' | 'domicilio',
     orderProvincia: PanamaProvince,
     orderAddress: string,
-    orderSucursal: string
+    orderSucursal: string,
+    orderDiscount: number = 0,
+    orderPromoTitle: string = 'Promoción 2 Gorras Legendarias ($55)'
   ) => {
     const now = new Date();
     const months = [
@@ -273,6 +279,10 @@ export const CheckoutDemoModal: React.FC = () => {
       return `${it.product.nombre}\n\nCant: ${it.quantity} × $${it.product.precio.toFixed(2)}\n\n$${lineTotal}`;
     }).join('\n\n');
 
+    const discountBlock = orderDiscount > 0
+      ? `\n\n${orderPromoTitle || 'Promoción 2 Gorras Legendarias ($55)'}\n-$${orderDiscount.toFixed(2)}`
+      : '';
+
     const receiptMessage = `Recibo Oficial de Compra
 ${orderNum || '#' + orderIdVal}
 
@@ -297,7 +307,7 @@ ${itemsHeader}
 ${itemsText}
 
 Subtotal
-$${orderSubtotal.toFixed(2)}
+$${orderSubtotal.toFixed(2)}${discountBlock}
 
 Envío / Entrega
 $${orderShipping.toFixed(2)}
@@ -361,6 +371,8 @@ $${orderTotal.toFixed(2)} USD`;
       const orderSummary = await createRealOrder({
         items,
         subtotal,
+        discount,
+        promoTitle: promo.promoTitle,
         shipping: shippingCost,
         total: finalTotal,
         nombre: nombre.trim(),
@@ -541,6 +553,12 @@ $${orderTotal.toFixed(2)} USD`;
                   <span>Subtotal</span>
                   <span className="font-mono text-white">${confirmedOrder.subtotal.toFixed(2)}</span>
                 </div>
+                {Boolean(confirmedOrder.discount && confirmedOrder.discount > 0) && (
+                  <div className="flex justify-between text-emerald-400 font-medium">
+                    <span>{confirmedOrder.promoTitle || 'Promoción 2 Gorras Legendarias ($55)'}</span>
+                    <span className="font-mono">-${confirmedOrder.discount.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-stone-300">
                   <span>Envío / Entrega</span>
                   <span className="font-mono text-white">
@@ -558,6 +576,135 @@ $${orderTotal.toFixed(2)} USD`;
               </div>
             </div>
 
+            {/* ============================================================== */}
+            {/* ACCIÓN DE PAGO DESPUÉS DE CONFIRMAR PEDIDO (SOLICITADO POR EL USUARIO) */}
+            {/* ============================================================== */}
+
+            {/* 1. SI ES YAPPY: NÚMERO Y BOTÓN COPIAR 6402-8245 */}
+            {confirmedOrder.metodoPago === 'yappy' && (
+              <div className="max-w-xl mx-auto p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-[#c5a059]/20 via-black to-[#0e0e12] border border-[#c5a059]/60 text-left space-y-3.5 shadow-2xl animate-in fade-in duration-200">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <Smartphone size={20} className="text-[#c5a059]" />
+                    <span className="text-white font-bold text-sm">Pagar vía Yappy</span>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-medium">
+                    Pago Inmediato
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-black/85 border border-[#c5a059]/60 space-y-2">
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-[#c5a059] block">
+                    Número Telefónico de Yappy (Solo para Enviar el Pago)
+                  </span>
+
+                  <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-stone-900 border border-white/10">
+                    <div>
+                      <span className="text-[10px] text-stone-400 block font-light">Envía el dinero al número:</span>
+                      <span className="text-white font-mono text-xl sm:text-2xl font-bold tracking-wider text-[#c5a059] block">
+                        {YAPPY_PAY_PHONE}
+                      </span>
+                      <span className="text-[11px] text-stone-300 block font-light mt-0.5">
+                        Total exacto a transferir: <strong className="text-white font-mono">${confirmedOrder.total.toFixed(2)} USD</strong>
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => copyYappyNumber(YAPPY_PAY_PHONE)}
+                      className="px-4 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-lg shadow-[#c5a059]/20"
+                    >
+                      {copiedYappy ? <Check size={16} /> : <Copy size={16} />}
+                      <span>{copiedYappy ? '¡Copiado!' : `Copiar ${YAPPY_PAY_PHONE}`}</span>
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-amber-300 font-light leading-relaxed pt-1">
+                    * <strong>Paso a seguir:</strong> Copia el número <strong>{YAPPY_PAY_PHONE}</strong> y realiza el pago desde tu Banca en Línea. Luego pulsa el botón verde a continuación para enviar tu <strong>Recibo Oficial</strong> y la captura del pago a nuestro WhatsApp oficial (<strong>6215-0251</strong>).
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* 2. SI ES TRANSFERENCIA BANCARIA: CUENTA Y BOTÓN COPIAR CUENTA */}
+            {confirmedOrder.metodoPago === 'transferencia' && (
+              <div className="max-w-xl mx-auto p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-[#c5a059]/20 via-black to-[#0e0e12] border border-[#c5a059]/60 text-left space-y-3.5 shadow-2xl animate-in fade-in duration-200">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <Landmark size={20} className="text-[#c5a059]" />
+                    <span className="text-white font-bold text-sm">Datos para Transferencia Bancaria</span>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-medium">
+                    Banco General
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-black/85 border border-[#c5a059]/60 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold tracking-widest text-[#c5a059]">
+                      Banco General · Panamá
+                    </span>
+                    <span className="text-[10px] text-stone-300">Cuenta Corriente</span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-stone-900 border border-white/10">
+                    <div>
+                      <span className="text-[10px] text-stone-400 block font-light">Número de Cuenta:</span>
+                      <span className="text-white font-mono text-lg sm:text-xl font-bold tracking-wider text-[#c5a059] block">
+                        03-01-01-123456-7
+                      </span>
+                      <span className="text-[11px] text-stone-300 block font-light mt-0.5">
+                        A nombre de: <strong>Pretty-Store Inc.</strong> · Total: <strong>${confirmedOrder.total.toFixed(2)} USD</strong>
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => copyBankDetails('03-01-01-123456-7')}
+                      className="px-4 py-2.5 rounded-xl bg-[#c5a059]/25 hover:bg-[#c5a059]/35 border border-[#c5a059]/50 text-[#c5a059] hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+                    >
+                      {copiedBank ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+                      <span>{copiedBank ? '¡Copiado!' : 'Copiar Cuenta'}</span>
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-stone-300 font-light leading-relaxed pt-1">
+                    * Transfiere los <strong>${confirmedOrder.total.toFixed(2)} USD</strong> y pulsa el botón verde abajo para enviar tu comprobante a nuestro WhatsApp oficial (<strong>6215-0251</strong>).
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* 3. SI ES TARJETA: BOTÓN IR A PAGAR EN PAGUELOFACIL */}
+            {confirmedOrder.metodoPago === 'tarjeta' && (
+              <div className="max-w-xl mx-auto p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-[#c5a059]/20 via-black to-[#0e0e12] border border-[#c5a059]/60 text-left space-y-3.5 shadow-2xl animate-in fade-in duration-200">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <div className="flex items-center gap-2 text-white font-medium text-xs">
+                    <CreditCard size={18} className="text-[#c5a059]" />
+                    <span>Pagar con Tarjeta (PagueloFacil)</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-mono">
+                    Pasarela Segura
+                  </span>
+                </div>
+
+                <a
+                  href={config.link_pago_tarjeta || 'https://checkout.paguelofacil.com/gorras'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d4af37] hover:from-[#d4af37] hover:to-[#c5a059] text-black font-bold uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2.5 transition-all shadow-xl shadow-[#c5a059]/25 cursor-pointer text-center"
+                >
+                  <CreditCard size={18} />
+                  <span>Ir a Pagar ${confirmedOrder.total.toFixed(2)} USD en PagueloFacil</span>
+                  <ExternalLink size={16} />
+                </a>
+
+                <p className="text-[11px] text-stone-400 text-center font-light">
+                  Se abrirá la pasarela de PagueloFacil en una pestaña segura para procesar tu tarjeta Visa, Mastercard o Clave.
+                </p>
+              </div>
+            )}
+
             {/* BOTÓN WHATSAPP OFICIAL AL NÚMERO 6215-0251 */}
             <div className="max-w-xl mx-auto space-y-3 pt-2">
               <a
@@ -574,7 +721,9 @@ $${orderTotal.toFixed(2)} USD`;
                   servientregaModalidad,
                   provincia,
                   direccion,
-                  sucursalRetiro
+                  sucursalRetiro,
+                  confirmedOrder.discount || 0,
+                  confirmedOrder.promoTitle || ''
                 )}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -1197,159 +1346,57 @@ $${orderTotal.toFixed(2)} USD`;
                     </button>
                   </div>
 
-                  {/* DETALLE 1: YAPPY CON NÚMERO 6402-8245 Y BOTÓN COPIAR */}
+                  {/* DETALLE 1: YAPPY (INDICACIÓN PREVIA A CONFIRMAR) */}
                   {metodoPago === 'yappy' && (
-                    <div className="p-4 sm:p-5 rounded-xl bg-gradient-to-br from-[#c5a059]/15 via-stone-900/90 to-black border border-[#c5a059]/40 space-y-3.5 text-xs animate-in fade-in duration-200 shadow-xl">
-                      <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                    <div className="p-4 rounded-xl bg-stone-900/60 border border-[#c5a059]/40 space-y-2 text-xs animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-white/10">
                         <div className="flex items-center gap-2">
-                          <Smartphone size={18} className="text-[#c5a059]" />
-                          <span className="text-white font-semibold text-xs">Pagar vía Yappy Comercial o Celular:</span>
+                          <Smartphone size={16} className="text-[#c5a059]" />
+                          <span className="text-white font-medium text-xs">Pago vía Yappy</span>
                         </div>
-                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono">
-                          Pago Rápido
+                        <span className="text-[#c5a059] font-mono text-[11px] font-semibold">
+                          ${finalTotal.toFixed(2)} USD
                         </span>
                       </div>
-
-                      {/* Caja con botón para copiar el número 6402-8245 */}
-                      <div className="p-3.5 rounded-xl bg-black/85 border border-[#c5a059]/60 space-y-2 shadow-inner">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] uppercase font-bold tracking-widest text-[#c5a059]">
-                            Número Telefónico para Yappy (Solo Pago)
-                          </span>
-                          <span className="text-[10px] text-stone-400 font-mono">Pretty-Store</span>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-stone-900/90 border border-white/10">
-                          <div>
-                            <span className="text-[10px] text-stone-400 block font-light">Enviar el pago al número:</span>
-                            <span className="text-white font-mono text-lg sm:text-xl font-bold tracking-wider text-[#c5a059] block">
-                              {YAPPY_PAY_PHONE}
-                            </span>
-                            <span className="text-[10px] text-stone-300 block font-light">
-                              Monto a transferir: <strong className="text-white font-mono">${finalTotal.toFixed(2)} USD</strong>
-                            </span>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => copyYappyNumber(YAPPY_PAY_PHONE)}
-                            className="px-3.5 py-2 rounded-lg bg-[#c5a059] hover:bg-[#b5914a] text-black text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-md shadow-[#c5a059]/20"
-                          >
-                            {copiedYappy ? <Check size={14} /> : <Copy size={14} />}
-                            <span>{copiedYappy ? '¡Copiado!' : `Copiar ${YAPPY_PAY_PHONE}`}</span>
-                          </button>
-                        </div>
-
-                        <p className="text-[10px] text-amber-300/90 font-light leading-relaxed">
-                          * <strong>Importante:</strong> El número <strong>{YAPPY_PAY_PHONE}</strong> es solo para enviar el dinero por Yappy. Al confirmar tu pedido abajo, se generará tu <strong>Recibo Oficial de Compra</strong> y podrás enviarlo junto con tu captura al WhatsApp oficial de la tienda (<strong>6215-0251</strong>).
-                        </p>
-                      </div>
+                      <p className="text-[11px] text-stone-300 font-light leading-relaxed">
+                        Al presionar <strong className="text-white">"Confirmar Pedido"</strong> abajo, se generará tu <strong>Recibo Oficial de Compra</strong> y en la siguiente pantalla aparecerá el número de Yappy (<strong>6402-8245</strong>) con el botón para copiarlo en 1 clic y el botón de WhatsApp (<strong>6215-0251</strong>) para enviar tu comprobante.
+                      </p>
                     </div>
                   )}
 
-                  {/* DETALLE 2: TRANSFERENCIA BANCARIA CON BOTÓN COPIAR CUENTA */}
+                  {/* DETALLE 2: TRANSFERENCIA BANCARIA (INDICACIÓN PREVIA A CONFIRMAR) */}
                   {metodoPago === 'transferencia' && (
-                    <div className="p-4 sm:p-5 rounded-xl bg-gradient-to-br from-[#c5a059]/15 via-stone-900/90 to-black border border-[#c5a059]/40 space-y-3.5 text-xs animate-in fade-in duration-200 shadow-xl">
-                      <div className="flex items-center gap-2.5 pb-2 border-b border-white/10">
-                        <div className="w-8 h-8 rounded-lg bg-[#c5a059]/20 border border-[#c5a059]/30 flex items-center justify-center text-[#c5a059]">
-                          <Landmark size={18} />
+                    <div className="p-4 rounded-xl bg-stone-900/60 border border-[#c5a059]/40 space-y-2 text-xs animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-white/10">
+                        <div className="flex items-center gap-2">
+                          <Landmark size={16} className="text-[#c5a059]" />
+                          <span className="text-white font-medium text-xs">Transferencia Bancaria · Banco General</span>
                         </div>
-                        <div>
-                          <strong className="text-white text-xs block">
-                            ¡Gracias por su compra!
-                          </strong>
-                          <span className="text-[10px] text-stone-300 font-light">
-                            Datos para realizar tu transferencia bancaria:
-                          </span>
-                        </div>
+                        <span className="text-[#c5a059] font-mono text-[11px] font-semibold">
+                          ${finalTotal.toFixed(2)} USD
+                        </span>
                       </div>
-
-                      {/* Caja con botón para copiar la cuenta */}
-                      <div className="p-3.5 rounded-xl bg-black/85 border border-[#c5a059]/60 space-y-2.5 shadow-inner">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] uppercase font-bold tracking-widest text-[#c5a059]">
-                            Banco General · Panamá
-                          </span>
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-mono">
-                            Cuenta Corriente
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-stone-900/90 border border-white/10">
-                          <div>
-                            <span className="text-[10px] text-stone-400 block font-light">Número de Cuenta:</span>
-                            <span className="text-white font-mono text-base sm:text-lg font-bold tracking-wider text-[#c5a059] block">
-                              03-01-01-123456-7
-                            </span>
-                            <span className="text-[10px] text-stone-300 block font-light">
-                              A nombre de: <strong>Pretty-Store Inc.</strong>
-                            </span>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => copyBankDetails('03-01-01-123456-7')}
-                            className="px-3.5 py-2 rounded-lg bg-[#c5a059]/25 hover:bg-[#c5a059]/35 border border-[#c5a059]/50 text-[#c5a059] hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
-                          >
-                            {copiedBank ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                            <span>{copiedBank ? '¡Copiado!' : 'Copiar Cuenta'}</span>
-                          </button>
-                        </div>
-
-                        <p className="text-[10px] text-stone-400 font-light">
-                          Transfiere el total de <strong className="text-white font-mono">${finalTotal.toFixed(2)} USD</strong>. Al presionar confirmar, se generará tu Recibo Oficial para enviar la captura de tu transferencia a nuestro WhatsApp (<strong>6215-0251</strong>).
-                        </p>
-                      </div>
+                      <p className="text-[11px] text-stone-300 font-light leading-relaxed">
+                        Al presionar <strong className="text-white">"Confirmar Pedido"</strong> abajo, se generará tu <strong>Recibo Oficial de Compra</strong> y en la siguiente pantalla aparecerá el número de cuenta de Banco General con el botón para copiarlo en 1 clic y el botón de WhatsApp (<strong>6215-0251</strong>) para enviar tu comprobante.
+                      </p>
                     </div>
                   )}
 
-                  {/* DETALLE 3: TARJETA (PAGUELOFACIL) CON BOTÓN "IR A PAGAR" PRIMERO */}
+                  {/* DETALLE 3: TARJETA (INDICACIÓN PREVIA A CONFIRMAR) */}
                   {metodoPago === 'tarjeta' && (
-                    <div className="p-4 sm:p-5 rounded-xl bg-gradient-to-br from-[#c5a059]/15 via-stone-900/90 to-black border border-[#c5a059]/40 space-y-4 text-xs animate-in fade-in duration-200 shadow-xl">
-                      <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                    <div className="p-4 rounded-xl bg-stone-900/60 border border-[#c5a059]/40 space-y-2 text-xs animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-white/10">
                         <div className="flex items-center gap-2 text-white font-medium text-xs">
-                          <CreditCard size={18} className="text-[#c5a059]" />
-                          <span>Pago Seguro con Tarjeta (PagueloFacil)</span>
+                          <CreditCard size={16} className="text-[#c5a059]" />
+                          <span>Pago con Tarjeta (PagueloFacil)</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] font-mono text-stone-300 font-medium">Visa</span>
-                          <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] font-mono text-stone-300 font-medium">Mastercard</span>
-                          <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] font-mono text-stone-300 font-medium">Clave</span>
-                        </div>
-                      </div>
-
-                      {/* 1. PRIMERO: BOTÓN "IR A PAGAR" */}
-                      <div className="space-y-2">
-                        <a
-                          href={config.link_pago_tarjeta || 'https://checkout.paguelofacil.com/gorras'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d4af37] hover:from-[#d4af37] hover:to-[#c5a059] text-black font-bold uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2.5 transition-all shadow-xl shadow-[#c5a059]/25 cursor-pointer text-center"
-                        >
-                          <CreditCard size={18} />
-                          <span>Ir a Pagar ${finalTotal.toFixed(2)} USD en PagueloFacil</span>
-                          <ExternalLink size={16} />
-                        </a>
-                        <span className="text-[10px] text-stone-400 block text-center font-light">
-                          Se abrirá la pasarela segura de PagueloFacil para procesar tu tarjeta.
+                        <span className="text-[#c5a059] font-mono text-[11px] font-semibold">
+                          ${finalTotal.toFixed(2)} USD
                         </span>
                       </div>
-
-                      {/* 2. DEBAJO: EL AVISO */}
-                      <div className="p-3.5 rounded-xl bg-black/70 border border-white/10 space-y-2">
-                        <div className="flex items-center gap-2 text-[#c5a059] font-medium text-[11px]">
-                          <Clock size={14} className="shrink-0" />
-                          <span>Aviso de Coordinación y Plazo (48 Horas):</span>
-                        </div>
-                        <p className="text-[11px] text-stone-300 leading-relaxed font-light">
-                          {tipoEntrega === 'retiro'
-                            ? 'Dispones de un plazo máximo de 48 horas para retirar tu entrega en la tienda con tu comprobante.'
-                            : 'Dispones de un plazo máximo de 48 horas para coordinar tu entrega con tu comprobante de pago.'}
-                        </p>
-                        <p className="text-[10px] text-stone-400 font-light">
-                          Una vez realizado el pago, presiona <strong>"Confirmar Pedido"</strong> abajo para generar tu <strong>Recibo Oficial de Compra</strong> y enviar los detalles al WhatsApp de la tienda (<strong>6215-0251</strong>).
-                        </p>
-                      </div>
+                      <p className="text-[11px] text-stone-300 font-light leading-relaxed">
+                        Al presionar <strong className="text-white">"Confirmar Pedido"</strong> abajo, se generará tu <strong>Recibo Oficial de Compra</strong> y te aparecerá el enlace directo a la pasarela segura de PagueloFacil para pagar tus <strong className="text-[#c5a059] font-mono">${finalTotal.toFixed(2)} USD</strong> con Visa, Mastercard o Clave.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1432,9 +1479,16 @@ $${orderTotal.toFixed(2)} USD`;
                       />
                       <div className="min-w-0">
                         <p className="text-white font-medium truncate text-xs">{it.product.nombre}</p>
-                        <p className="text-[10px] text-stone-400 font-mono">
-                          {it.quantity} × ${it.product.precio.toFixed(2)}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-[10px] text-stone-400 font-mono">
+                            {it.quantity} × ${it.product.precio.toFixed(2)}
+                          </p>
+                          {isLegendaryCap(it.product, it.product?.categoria?.nombre) && (
+                            <span className="text-[8px] text-amber-300 font-semibold px-1 py-0.5 rounded bg-amber-500/15 border border-amber-500/30">
+                              Promo 2x $55
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <span className="font-mono text-white text-xs font-semibold shrink-0">
@@ -1450,6 +1504,15 @@ $${orderTotal.toFixed(2)} USD`;
                   <span>Subtotal</span>
                   <span className="font-mono text-white">${subtotal.toFixed(2)}</span>
                 </div>
+                {discount > 0 && (
+                  <div className="flex justify-between text-emerald-400 font-medium bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">
+                    <span className="flex items-center gap-1.5 text-[11px]">
+                      <Tag size={12} className="shrink-0" />
+                      <span>{promo.promoTitle}</span>
+                    </span>
+                    <span className="font-mono font-semibold">-${discount.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-stone-400 font-light">
                   <span>Envío ({tipoEntrega === 'retiro' ? 'Retiro en Local' : `${courier} · ${provincia}`})</span>
                   <span className="font-mono text-white">

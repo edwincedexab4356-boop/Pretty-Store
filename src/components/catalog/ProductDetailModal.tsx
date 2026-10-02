@@ -10,10 +10,12 @@ import {
   Play,
   Volume2,
   VolumeX,
+  Sparkles,
 } from 'lucide-react';
 import { Producto, Categoria } from '../../types/database';
 import { useCart } from '../../context/CartContext';
 import { getProductImages, isVideoMedia, getVideoEmbedUrl } from '../../utils/productImages';
+import { isLegendaryCap } from '../../utils/promoUtils';
 
 interface ProductDetailModalProps {
   product: Producto | null;
@@ -48,6 +50,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const embedUrl = isCurrentVideo && currentMediaUrl ? getVideoEmbedUrl(currentMediaUrl) : null;
 
   const category = categories.find((c) => c.id === product.categoria_id);
+  const isLegendary = isLegendaryCap(product, category?.nombre);
   const cartItem = items.find((item) => item.product.id === product.id);
   const inCartQty = cartItem ? cartItem.quantity : 0;
   const availableToAdd = Math.max(0, product.stock - inCartQty);
@@ -324,6 +327,21 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   USD
                 </span>
               </div>
+
+              {/* Promo Callout: 2 Gorras Legendarias por $55 */}
+              {isLegendary && (
+                <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#c5a059]/20 via-amber-500/10 to-transparent border border-[#c5a059]/40 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={15} className="text-[#c5a059] animate-pulse shrink-0" />
+                    <span className="text-white text-xs font-bold tracking-wide">
+                      ¡Promo Exclusiva: 2 Gorras Legendarias por $55 USD!
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-stone-300 font-light leading-relaxed">
+                    Lleva 2 gorras de esta colección (sean del mismo modelo o combinadas) y te quedan en <strong className="text-[#c5a059] font-mono font-semibold">$55.00 USD</strong>. El descuento de <strong className="text-emerald-400 font-mono">-$5.00 USD</strong> se aplica automáticamente en tu bolsa.
+                  </p>
+                </div>
+              )}
 
               {/* Description */}
               <div className="pt-2 border-t border-white/[0.08]">

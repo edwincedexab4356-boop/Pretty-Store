@@ -125,8 +125,12 @@ CREATE TABLE IF NOT EXISTS public.categorias (
   descripcion text,
   imagen_url text,
   activa boolean NOT NULL DEFAULT true,
+  orden integer DEFAULT 0,
   created_at timestamp with time zone DEFAULT now()
 );
+
+-- Asegurar columna orden en tablas ya creadas
+ALTER TABLE public.categorias ADD COLUMN IF NOT EXISTS orden integer DEFAULT 0;
 
 -- 6. TABLA: productos
 CREATE TABLE IF NOT EXISTS public.productos (
@@ -223,18 +227,18 @@ CREATE TABLE IF NOT EXISTS public.configuracion (
   hero_video_url text DEFAULT '/videos/hero.mp4',
   hero_poster_url text DEFAULT '',
   catalog_video_url text DEFAULT '',
-  telefono text DEFAULT '+507 6890-1234',
-  whatsapp text DEFAULT '+507 6890-1234',
+  telefono text DEFAULT '+507 6215-0251',
+  whatsapp text DEFAULT '+507 6215-0251',
   email text DEFAULT 'contacto@pretty-store.com',
-  direccion text DEFAULT 'Boulevard Costa del Este, Torre Financial Park, Nivel 14',
+  direccion text DEFAULT 'https://maps.app.goo.gl/PxA3suMXNZxuFF5X7',
   instagram text DEFAULT 'https://instagram.com',
   tiktok text DEFAULT 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS',
   facebook text DEFAULT 'https://facebook.com',
   twitter text DEFAULT 'https://twitter.com',
-  yappy_numero text DEFAULT '+507 6890-1234',
+  yappy_numero text DEFAULT '6402-8245',
   banco_datos text DEFAULT 'Banco General - Cuenta Corriente #03-01-01-123456-7 a nombre de Pretty-Store Inc.',
   pasarela_tarjeta text DEFAULT 'PagueloFacil',
-  link_pago_tarjeta text DEFAULT '',
+  link_pago_tarjeta text DEFAULT 'https://checkout.paguelofacil.com/gorras',
   updated_at timestamp with time zone DEFAULT now()
 );
 

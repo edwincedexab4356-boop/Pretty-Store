@@ -1,9 +1,12 @@
 import { getSupabaseClient } from '../lib/supabase';
 import { CartItem, MetodoPago, TipoEntrega, CourierOption } from '../types/database';
+import { calculateLegendaryCapsPromo } from '../utils/promoUtils';
 
 export interface CreateOrderParams {
   items: CartItem[];
   subtotal: number;
+  discount?: number;
+  promoTitle?: string;
   shipping: number;
   total: number;
   nombre: string;
@@ -34,6 +37,8 @@ export interface CreatedOrderResult {
   courier?: CourierOption;
   comprobantePago?: string;
   subtotal: number;
+  discount: number;
+  promoTitle?: string;
   shipping: number;
   total: number;
   itemCount: number;
@@ -185,11 +190,17 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     });
   }
 
-  // 4. RECALCULAR ENVÍO Y TOTAL AUTORIZADOS
+  // 4. RECALCULAR ENVÍO Y TOTAL AUTORIZADOS CON PROMOCIÓN DE GORRAS LEGENDARIAS (2x $55)
   trustedSubtotal = Number(trustedSubtotal.toFixed(2));
-  const trustedShipping =
-    tipoEntrega === 'retiro' ? 0 : trustedSubtotal >= 100 ? 0 : 5.0;
-  const trustedTotal = Number((trustedSubtotal + trustedShipping).toFixed(2));
+  const promo = calculateLegendaryCapsPromo(items);
+  const trustedDiscount = promo.discount;
+  const effectiveSubtotal = Math.max(0, trustedSubtotal - trustedDiscount);
+
+  const trustedShipping = typeof params.shipping === 'number'
+    ? params.shipping
+    : (tipoEntrega === 'retiro' ? 0 : (effectiveSubtotal >= 100 ? 0 : 5.0));
+
+  const trustedTotal = Number((effectiveSubtotal + trustedShipping).toFixed(2));
 
   // Resolver dirección y correo seguros
   const resolvedEmail = cleanEmail || `${phoneDigits}@prettystore.com`;
@@ -390,6 +401,8 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     courier,
     comprobantePago: cleanComprobante,
     subtotal: trustedSubtotal,
+    discount: trustedDiscount,
+    promoTitle: promo.promoTitle,
     shipping: trustedShipping,
     total: trustedTotal,
     itemCount: totalItemCount,

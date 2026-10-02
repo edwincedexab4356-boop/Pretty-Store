@@ -18,6 +18,7 @@ export interface Categoria {
   descripcion: string | null;
   imagen_url?: string | null;
   activa: boolean;
+  orden?: number;
   created_at?: string;
   // Campos calculados para admin
   total_productos?: number;

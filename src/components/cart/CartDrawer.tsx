@@ -6,14 +6,19 @@ import {
   Minus,
   ShoppingBag,
   ArrowRight,
+  Sparkles,
+  Tag,
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
+import { isLegendaryCap } from '../../utils/promoUtils';
 
 export const CartDrawer: React.FC = () => {
   const {
     items,
     totalItems,
     subtotal,
+    discount,
+    promo,
     shipping,
     total,
     isCartOpen,
@@ -92,7 +97,7 @@ export const CartDrawer: React.FC = () => {
 
           {/* Free Shipping Notice */}
           {items.length > 0 && (
-            <div className="px-6 py-2.5 bg-stone-900/60 border-b border-white/[0.06] text-xs text-stone-300 flex items-center justify-between">
+            <div className="px-6 py-2 bg-stone-900/60 border-b border-white/[0.06] text-xs text-stone-300 flex items-center justify-between">
               {remainingForFreeShipping > 0 ? (
                 <span className="font-light text-[11px]">
                   Agrega <strong className="text-white font-mono font-medium">${remainingForFreeShipping.toFixed(2)}</strong> para <span className="text-[#c5a059]">envío sin costo</span>
@@ -102,6 +107,31 @@ export const CartDrawer: React.FC = () => {
                   Envío prioritario sin costo incluido
                 </span>
               )}
+            </div>
+          )}
+
+          {/* Banner Promoción: 2 Gorras Legendarias por $55 */}
+          {items.length > 0 && promo.hasPromo && (
+            <div className="px-6 py-2.5 bg-gradient-to-r from-[#c5a059]/20 via-amber-500/10 to-transparent border-b border-[#c5a059]/40 text-xs flex items-center justify-between animate-in fade-in duration-200">
+              <div className="flex items-center gap-2">
+                <Sparkles size={15} className="text-[#c5a059] shrink-0 animate-pulse" />
+                <span className="text-white text-[11px] font-medium">
+                  {promo.promoTitle}: <strong className="text-[#c5a059] font-mono">-${promo.discount.toFixed(2)} USD</strong>
+                </span>
+              </div>
+              <span className="text-[9px] uppercase font-bold tracking-wider text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/30">
+                ¡Aplicado!
+              </span>
+            </div>
+          )}
+
+          {/* Sugerencia de Promoción si falta 1 gorra */}
+          {items.length > 0 && !promo.hasPromo && promo.nextPromoHint && (
+            <div className="px-6 py-2 bg-amber-500/10 border-b border-amber-500/25 text-xs flex items-center gap-2 animate-in fade-in duration-200">
+              <Tag size={14} className="text-amber-400 shrink-0" />
+              <span className="text-stone-300 text-[11px] font-light">
+                {promo.nextPromoHint}
+              </span>
             </div>
           )}
 
@@ -157,9 +187,16 @@ export const CartDrawer: React.FC = () => {
                           <Trash2 size={14} />
                         </button>
                       </div>
-                      <p className="text-xs font-mono tabular-nums text-[#c5a059] mt-0.5">
-                        ${item.product.precio.toFixed(2)}
-                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs font-mono tabular-nums text-[#c5a059]">
+                          ${item.product.precio.toFixed(2)}
+                        </span>
+                        {isLegendaryCap(item.product, item.product?.categoria?.nombre) && (
+                          <span className="text-[9px] text-amber-300 font-medium px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30">
+                            Promo 2x $55
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Stepper Controls & Subtotal */}
@@ -204,6 +241,15 @@ export const CartDrawer: React.FC = () => {
                   <span>Subtotal</span>
                   <span className="font-mono tabular-nums text-white">${subtotal.toFixed(2)}</span>
                 </div>
+                {discount > 0 && (
+                  <div className="flex items-center justify-between text-emerald-400 font-medium bg-emerald-500/10 px-2 py-1.5 rounded border border-emerald-500/20">
+                    <span className="flex items-center gap-1.5 text-[11px]">
+                      <Tag size={12} className="shrink-0" />
+                      <span>{promo.promoTitle}</span>
+                    </span>
+                    <span className="font-mono tabular-nums font-semibold">-${discount.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between text-stone-400 font-light">
                   <span>Envío</span>
                   <span className="font-mono tabular-nums text-white">

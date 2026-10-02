@@ -20,6 +20,7 @@ import { ToastNotification } from './components/common/ToastNotification';
 import { fetchCatalogData, CatalogError } from './services/catalogService';
 import { getSupabaseConfig, getSupabaseClient } from './lib/supabase';
 import { Categoria, Producto } from './types/database';
+import { subscribeToCategoryOrder, sortCategoriesWithOrder } from './utils/categoryOrderUtils';
 
 export type LoadStatus = 'loading' | 'unconfigured' | 'error' | 'empty' | 'success';
 
@@ -114,6 +115,14 @@ function StoreApp({ onOpenAdmin, onOpenTerms, onOpenPrivacy }: StoreAppProps) {
       // Realtime channel creation fallback
     }
   }, [loadData]);
+
+  // Sincronizar reordenamiento instantáneo de categorías
+  useEffect(() => {
+    const unsubscribe = subscribeToCategoryOrder(() => {
+      setCategories((prev) => sortCategoriesWithOrder(prev));
+    });
+    return unsubscribe;
+  }, []);
 
   // Compute products count per category (only active products)
   const productCountMap = useMemo(() => {

@@ -1,5 +1,6 @@
 import { getSupabaseClient } from '../lib/supabase';
 import { compressImageFile } from '../utils/imageOptimizer';
+import { sortCategoriesWithOrder, persistCategoryOrder } from '../utils/categoryOrderUtils';
 import {
   Categoria,
   Producto,
@@ -1475,12 +1476,12 @@ export async function getAdminCategories(): Promise<Categoria[]> {
 
   const { data: cats, error } = await supabase
     .from('categorias')
-    .select('*')
-    .order('nombre', { ascending: true });
+    .select('*');
 
   if (error) throw new Error(`Error al cargar categorías: ${error.message}`);
 
   // Count products per category
+  let mappedCats: Categoria[] = [];
   try {
     const { data: prods } = await supabase.from('productos').select('categoria_id');
     const countMap: Record<string, number> = {};
@@ -1490,13 +1491,22 @@ export async function getAdminCategories(): Promise<Categoria[]> {
       });
     }
 
-    return (cats || []).map((c) => ({
+    mappedCats = (cats || []).map((c) => ({
       ...c,
       total_productos: countMap[c.id] || 0,
     }));
   } catch (e) {
-    return cats || [];
+    mappedCats = cats || [];
   }
+
+  // Ordenar respetando el orden personalizado definido por el usuario
+  return sortCategoriesWithOrder(mappedCats);
+}
+
+export async function saveAdminCategoriesOrder(
+  categoryIds: string[]
+): Promise<{ success: boolean; supabaseSynced: boolean; error?: string }> {
+  return persistCategoryOrder(categoryIds);
 }
 
 export async function createAdminCategory(categoryData: {
@@ -1753,7 +1763,32 @@ export async function getAdminClients(): Promise<Cliente[]> {
   if (error) throw new Error(`Error al cargar clientes: ${error.message}`);
 
   const excluded = getExcludedClientIds();
-  const visibleClients = (clients || []).filter((c) => !excluded.has(String(c.id)));
+
+  // Si existen clientes que fueron excluidos localmente durante un bloqueo previo de permisos,
+  // intentar eliminarlos definitivamente de Supabase ahora que los permisos están desbloqueados.
+  if (excluded.size > 0 && clients && clients.length > 0) {
+    for (const client of clients) {
+      const cId = String(client.id);
+      if (excluded.has(cId)) {
+        try {
+          const numId = Number(cId);
+          if (!isNaN(numId)) {
+            await supabase.from('pedidos').update({ cliente_id: null } as any).eq('cliente_id', numId);
+            await supabase.from('ventas').update({ cliente_id: null } as any).eq('cliente_id', numId);
+            await supabase.from('clientes').delete().eq('id', numId);
+          } else {
+            await supabase.from('pedidos').update({ cliente_id: null } as any).eq('cliente_id', cId);
+            await supabase.from('ventas').update({ cliente_id: null } as any).eq('cliente_id', cId);
+            await supabase.from('clientes').delete().eq('id', cId);
+          }
+          removeExcludedClientId(cId);
+        } catch {}
+      }
+    }
+  }
+
+  const updatedExcluded = getExcludedClientIds();
+  const visibleClients = (clients || []).filter((c) => !updatedExcluded.has(String(c.id)));
 
   // Cross-reference with pedidos
   const { data: orders } = await supabase
@@ -1824,13 +1859,13 @@ export async function deleteAdminClient(clientId: string | number): Promise<{ su
     await supabase.from('ventas').update({ cliente_id: null } as any).eq('cliente_id', cleanId);
   } catch {}
 
-  // 3. Eliminar de la tabla clientes
+  // 3. Eliminar de la tabla clientes sin .select() para evitar requerir permisos de lectura sobre filas borradas
   let deleteRes = isNumeric
-    ? await supabase.from('clientes').delete().eq('id', numId).select()
-    : await supabase.from('clientes').delete().eq('id', cleanId).select();
+    ? await supabase.from('clientes').delete().eq('id', numId)
+    : await supabase.from('clientes').delete().eq('id', cleanId);
 
   if (deleteRes.error && isNumeric) {
-    deleteRes = await supabase.from('clientes').delete().eq('id', cleanId).select();
+    deleteRes = await supabase.from('clientes').delete().eq('id', cleanId);
   }
 
   // Si falló por falta de permisos en PostgreSQL (code 42501 o similar)
