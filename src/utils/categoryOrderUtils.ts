@@ -3,18 +3,26 @@ import { getSupabaseClient } from '../lib/supabase';
 
 export const CATEGORY_ORDER_STORAGE_KEY = 'pretty_store_category_order_ids';
 const CATEGORY_ORDER_EVENT = 'pretty_store_category_order_changed';
+const SYSTEM_ORDER_EMAIL = 'system_category_order@store.internal';
+
+// Memoria caché en tiempo de ejecución
+let memoryCachedOrder: string[] | null = null;
 
 /**
  * Obtiene el orden guardado de IDs de categorías desde almacenamiento local
  */
 export function getSavedCategoryOrder(): string[] {
+  if (memoryCachedOrder && memoryCachedOrder.length > 0) {
+    return memoryCachedOrder;
+  }
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(CATEGORY_ORDER_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed.map(String);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      memoryCachedOrder = parsed.map(String);
+      return memoryCachedOrder;
     }
   } catch (e) {
     console.warn('[CategoryOrder] Error al leer orden local:', e);
@@ -23,9 +31,42 @@ export function getSavedCategoryOrder(): string[] {
 }
 
 /**
+ * Consulta el orden persistido en Supabase de forma global para todos los visitantes públicos.
+ */
+export async function fetchRemoteCategoryOrder(): Promise<string[]> {
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('clientes')
+      .select('direccion')
+      .eq('email', SYSTEM_ORDER_EMAIL)
+      .maybeSingle();
+
+    if (!error && data?.direccion) {
+      try {
+        const parsed = JSON.parse(data.direccion);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const ids = parsed.map(String);
+          memoryCachedOrder = ids;
+          saveCategoryOrderLocal(ids);
+          return ids;
+        }
+      } catch (parseErr) {
+        console.warn('[CategoryOrder] Error parseando JSON remoto:', parseErr);
+      }
+    }
+  } catch (err) {
+    console.warn('[CategoryOrder] Error consultando orden remoto en Supabase:', err);
+  }
+
+  return getSavedCategoryOrder();
+}
+
+/**
  * Guarda el orden localmente y notifica a todas las vistas / pestañas
  */
 export function saveCategoryOrderLocal(ids: string[]): void {
+  memoryCachedOrder = ids;
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(CATEGORY_ORDER_STORAGE_KEY, JSON.stringify(ids));
@@ -45,7 +86,10 @@ export function sortCategoriesWithOrder(
 ): Categoria[] {
   if (!categories || categories.length === 0) return [];
 
-  const orderIds = explicitOrderIds || getSavedCategoryOrder();
+  const orderIds = explicitOrderIds && explicitOrderIds.length > 0
+    ? explicitOrderIds
+    : getSavedCategoryOrder();
+
   const orderMap = new Map<string, number>();
 
   if (orderIds && orderIds.length > 0) {
@@ -86,44 +130,72 @@ export function sortCategoriesWithOrder(
 }
 
 /**
- * Guarda el orden de las categorías tanto localmente como en Supabase (si la columna orden existe)
+ * Guarda el orden de las categorías de manera definitiva en Supabase para que
+ * se refleje en la página pública para TODOS los visitantes en cualquier dispositivo.
  */
 export async function persistCategoryOrder(
   orderedIds: string[]
 ): Promise<{ success: boolean; supabaseSynced: boolean; error?: string }> {
-  // 1. Guardar de forma inmediata en local storage para que el usuario no sienta latencia
+  // 1. Guardar de forma inmediata en local storage y memoria para latencia 0
   saveCategoryOrderLocal(orderedIds);
 
   let supabaseSynced = false;
   let syncError: string | undefined = undefined;
 
-  // 2. Intentar actualizar en Supabase la columna 'orden' de cada categoría
   try {
     const supabase = getSupabaseClient();
-    
-    // Ejecutar actualizaciones en paralelo
-    const updatePromises = orderedIds.map((id, index) =>
-      supabase
-        .from('categorias')
-        .update({ orden: index } as any)
-        .eq('id', id)
-    );
+    const jsonOrder = JSON.stringify(orderedIds);
 
-    const results = await Promise.allSettled(updatePromises);
-    const hasError = results.some(
-      (r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error)
-    );
+    // 2. Persistir en la tabla global de Supabase accesible para todos los clientes públicos
+    const { data: existingRecord, error: checkError } = await supabase
+      .from('clientes')
+      .select('id')
+      .eq('email', SYSTEM_ORDER_EMAIL)
+      .maybeSingle();
 
-    if (!hasError) {
-      supabaseSynced = true;
-    } else {
-      // Inspeccionar el primer error
-      const firstRejected = results.find(
-        (r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error)
-      );
-      if (firstRejected && firstRejected.status === 'fulfilled' && firstRejected.value.error) {
-        syncError = firstRejected.value.error.message;
+    if (!checkError && existingRecord?.id) {
+      const { error: updateError } = await supabase
+        .from('clientes')
+        .update({
+          direccion: jsonOrder,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingRecord.id);
+
+      if (!updateError) {
+        supabaseSynced = true;
+      } else {
+        syncError = updateError.message;
       }
+    } else {
+      const { error: insertError } = await supabase
+        .from('clientes')
+        .insert({
+          nombre: '__system_category_order__',
+          email: SYSTEM_ORDER_EMAIL,
+          telefono: 'system',
+          direccion: jsonOrder,
+        });
+
+      if (!insertError) {
+        supabaseSynced = true;
+      } else {
+        syncError = insertError.message;
+      }
+    }
+
+    // 3. También intentar actualizar la columna 'orden' en la tabla 'categorias'
+    // si el usuario ejecutó la migración de columna en PostgreSQL
+    try {
+      const updatePromises = orderedIds.map((id, index) =>
+        supabase
+          .from('categorias')
+          .update({ orden: index } as any)
+          .eq('id', id)
+      );
+      await Promise.allSettled(updatePromises);
+    } catch {
+      // Ignorar si la columna no existe aún en categorias
     }
   } catch (err: any) {
     syncError = err?.message || 'Error al sincronizar con Supabase';

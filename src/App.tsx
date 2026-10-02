@@ -106,6 +106,13 @@ function StoreApp({ onOpenAdmin, onOpenTerms, onOpenPrivacy }: StoreAppProps) {
             loadData();
           }
         )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'clientes' },
+          () => {
+            loadData();
+          }
+        )
         .subscribe();
 
       return () => {

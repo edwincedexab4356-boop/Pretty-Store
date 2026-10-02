@@ -1,6 +1,6 @@
 import { getSupabaseClient, getSupabaseConfig } from '../lib/supabase';
 import { Categoria, Producto, Inventario } from '../types/database';
-import { sortCategoriesWithOrder } from '../utils/categoryOrderUtils';
+import { sortCategoriesWithOrder, fetchRemoteCategoryOrder } from '../utils/categoryOrderUtils';
 
 export interface CatalogLoadResult {
   isConfigured: boolean;
@@ -45,30 +45,28 @@ export async function fetchCatalogData(): Promise<CatalogLoadResult> {
 
   const supabase = getSupabaseClient();
 
-  // 1. Fetch active categories from public.categorias
-  let rawCategories: any[] | null = null;
-  const { data: catData, error: catError } = await supabase
-    .from('categorias')
-    .select('*')
-    .eq('activa', true);
+  // 1. Fetch active categories from public.categorias & global category order in parallel
+  const [catResponse, remoteOrder] = await Promise.all([
+    supabase.from('categorias').select('*').eq('activa', true),
+    fetchRemoteCategoryOrder(),
+  ]);
 
-  if (catError) {
+  if (catResponse.error) {
     const err: CatalogError = {
       failedQuery: 'categorias',
-      message: `Error al consultar la tabla 'public.categorias': ${catError.message}`,
-      details: catError.details,
-      hint: catError.hint || 'Ejecuta en Supabase SQL Editor: GRANT SELECT ON public.categorias TO anon; y CREATE POLICY "Lectura categorias" ON public.categorias FOR SELECT USING (true);',
-      code: catError.code,
+      message: `Error al consultar la tabla 'public.categorias': ${catResponse.error.message}`,
+      details: catResponse.error.details,
+      hint: catResponse.error.hint || 'Ejecuta en Supabase SQL Editor: GRANT SELECT ON public.categorias TO anon; y CREATE POLICY "Lectura categorias" ON public.categorias FOR SELECT USING (true);',
+      code: catResponse.error.code,
     };
     throw err;
   }
-  rawCategories = catData;
 
-  const unsortedCategories: Categoria[] = (rawCategories || []).map((c) => ({
+  const unsortedCategories: Categoria[] = (catResponse.data || []).map((c) => ({
     ...c,
     id: String(c.id),
   }));
-  const categories: Categoria[] = sortCategoriesWithOrder(unsortedCategories);
+  const categories: Categoria[] = sortCategoriesWithOrder(unsortedCategories, remoteOrder);
   const categoryMap = new Map<string, Categoria>();
   categories.forEach((c) => categoryMap.set(String(c.id), c));
 

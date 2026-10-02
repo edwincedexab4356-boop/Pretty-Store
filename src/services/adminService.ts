@@ -1,6 +1,6 @@
 import { getSupabaseClient } from '../lib/supabase';
 import { compressImageFile } from '../utils/imageOptimizer';
-import { sortCategoriesWithOrder, persistCategoryOrder } from '../utils/categoryOrderUtils';
+import { sortCategoriesWithOrder, persistCategoryOrder, fetchRemoteCategoryOrder } from '../utils/categoryOrderUtils';
 import {
   Categoria,
   Producto,
@@ -1474,33 +1474,30 @@ export async function deleteAdminSale(orderId: string | number): Promise<{ succe
 export async function getAdminCategories(): Promise<Categoria[]> {
   const supabase = getSupabaseClient();
 
-  const { data: cats, error } = await supabase
-    .from('categorias')
-    .select('*');
+  const [catsResponse, prodsResponse, remoteOrder] = await Promise.all([
+    supabase.from('categorias').select('*'),
+    supabase.from('productos').select('categoria_id'),
+    fetchRemoteCategoryOrder(),
+  ]);
 
-  if (error) throw new Error(`Error al cargar categorías: ${error.message}`);
+  if (catsResponse.error) throw new Error(`Error al cargar categorías: ${catsResponse.error.message}`);
+
+  const cats = catsResponse.data || [];
+  const prods = prodsResponse.data || [];
 
   // Count products per category
-  let mappedCats: Categoria[] = [];
-  try {
-    const { data: prods } = await supabase.from('productos').select('categoria_id');
-    const countMap: Record<string, number> = {};
-    if (prods) {
-      prods.forEach((p) => {
-        countMap[p.categoria_id] = (countMap[p.categoria_id] || 0) + 1;
-      });
-    }
+  const countMap: Record<string, number> = {};
+  prods.forEach((p) => {
+    countMap[p.categoria_id] = (countMap[p.categoria_id] || 0) + 1;
+  });
 
-    mappedCats = (cats || []).map((c) => ({
-      ...c,
-      total_productos: countMap[c.id] || 0,
-    }));
-  } catch (e) {
-    mappedCats = cats || [];
-  }
+  const mappedCats: Categoria[] = cats.map((c) => ({
+    ...c,
+    total_productos: countMap[c.id] || 0,
+  }));
 
-  // Ordenar respetando el orden personalizado definido por el usuario
-  return sortCategoriesWithOrder(mappedCats);
+  // Ordenar respetando el orden personalizado sincronizado en Supabase
+  return sortCategoriesWithOrder(mappedCats, remoteOrder);
 }
 
 export async function saveAdminCategoriesOrder(
@@ -1788,7 +1785,12 @@ export async function getAdminClients(): Promise<Cliente[]> {
   }
 
   const updatedExcluded = getExcludedClientIds();
-  const visibleClients = (clients || []).filter((c) => !updatedExcluded.has(String(c.id)));
+  const visibleClients = (clients || []).filter(
+    (c) =>
+      !updatedExcluded.has(String(c.id)) &&
+      !c.email?.includes('system_') &&
+      !c.nombre?.startsWith('__system')
+  );
 
   // Cross-reference with pedidos
   const { data: orders } = await supabase
