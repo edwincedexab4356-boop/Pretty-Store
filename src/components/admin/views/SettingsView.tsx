@@ -11,6 +11,7 @@ import {
   Copy,
   ExternalLink,
   Shield,
+  ShieldCheck,
   RefreshCw,
   Phone,
   Mail,
@@ -63,13 +64,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenQuotaModal }) 
   const [twitter, setTwitter] = useState(config.twitter || '');
 
   // Payment settings state
-  const [yappyNumero, setYappyNumero] = useState(config.yappy_numero || '6402-8245');
+  const [yappyNumero, setYappyNumero] = useState(config.yappy_numero || '6215-0251');
   const [bancoDatos, setBancoDatos] = useState(
     config.banco_datos ||
-      'Banco General - Cuenta Corriente #03-01-01-123456-7 a nombre de Pretty-Store Inc.'
+      'Banco General - Cuenta Corriente #0472985946850 a nombre de JESUS ALEJANDRO CARDONA ESCOBAR'
   );
   const [pasarelaTarjeta, setPasarelaTarjeta] = useState(config.pasarela_tarjeta || 'PagueloFacil');
-  const [linkPagoTarjeta, setLinkPagoTarjeta] = useState(config.link_pago_tarjeta || '');
+  const [linkPagoTarjeta, setLinkPagoTarjeta] = useState(config.link_pago_tarjeta || 'https://checkout.paguelofacil.com/W_F9464GL');
+  const [badgeGarantiaTitulo, setBadgeGarantiaTitulo] = useState(config.badge_garantia_titulo || 'Pieza Exclusiva Pretty-Store');
+  const [badgeGarantiaSubtitulo, setBadgeGarantiaSubtitulo] = useState(config.badge_garantia_subtitulo || 'Acabados de primera calidad y empaque de colección.');
 
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [copiedSql, setCopiedSql] = useState(false);
@@ -208,6 +211,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenQuotaModal }) 
         banco_datos: bancoDatos,
         pasarela_tarjeta: pasarelaTarjeta,
         link_pago_tarjeta: linkPagoTarjeta,
+        badge_garantia_titulo: badgeGarantiaTitulo,
+        badge_garantia_subtitulo: badgeGarantiaSubtitulo,
       });
 
       if (res.syncedToSupabase) {
@@ -760,8 +765,47 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenQuotaModal }) 
                 rows={2}
                 value={bancoDatos}
                 onChange={(e) => setBancoDatos(e.target.value)}
-                placeholder="Banco General - Cuenta Corriente #03-01-01-123456-7 a nombre de Pretty-Store Inc."
+                placeholder="Banco General - Cuenta Corriente #0472985946850 a nombre de JESUS ALEJANDRO CARDONA ESCOBAR"
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-xs focus:outline-none focus:border-amber-500 resize-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Distintivo y Garantía del Producto (Personalizable) */}
+        <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
+            <ShieldCheck size={18} className="text-amber-400" />
+            <h3 className="text-sm font-semibold text-white">
+              Distintivo y Garantía del Producto (Reemplazo de 100% Original)
+            </h3>
+          </div>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Personaliza el texto de garantía y autenticidad que ven tus clientes en cada producto (anteriormente decía "100% Original"). Puedes escribir lo que desees mostrar aquí.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">
+                Título del Distintivo
+              </label>
+              <input
+                type="text"
+                value={badgeGarantiaTitulo}
+                onChange={(e) => setBadgeGarantiaTitulo(e.target.value)}
+                placeholder="Ej. Pieza Exclusiva Pretty-Store"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">
+                Subtítulo o Descripción del Distintivo
+              </label>
+              <input
+                type="text"
+                value={badgeGarantiaSubtitulo}
+                onChange={(e) => setBadgeGarantiaSubtitulo(e.target.value)}
+                placeholder="Ej. Acabados de primera calidad y empaque de colección."
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-amber-500"
               />
             </div>
           </div>

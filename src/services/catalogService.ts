@@ -155,6 +155,21 @@ export async function fetchCatalogData(): Promise<CatalogLoadResult> {
     };
   });
 
+  // 5. Ordenar productos según el orden configurado de categorías y luego alfabéticamente
+  const categoryOrderMap = new Map<string, number>();
+  categories.forEach((cat, index) => {
+    categoryOrderMap.set(String(cat.id), index);
+  });
+
+  products.sort((a, b) => {
+    const orderA = categoryOrderMap.get(String(a.categoria_id)) ?? 9999;
+    const orderB = categoryOrderMap.get(String(b.categoria_id)) ?? 9999;
+    if (orderA !== orderB) {
+      return orderA - orderB;
+    }
+    return a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' });
+  });
+
   return {
     isConfigured: true,
     categories,

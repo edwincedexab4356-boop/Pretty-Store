@@ -10,8 +10,8 @@ export const FeaturesSection: React.FC = () => {
     },
     {
       icon: <Truck size={22} className="text-[#c5a059] stroke-[1.5]" />,
-      title: 'Envíos Prioritarios',
-      description: 'Empaque de protección premium y seguimiento directo. Envío sin costo a partir de $100.',
+      title: 'Envíos a Nivel Nacional',
+      description: 'Empaque de protección premium y coordinación directa por WhatsApp a todo Panamá.',
     },
     {
       icon: <CreditCard size={22} className="text-[#c5a059] stroke-[1.5]" />,

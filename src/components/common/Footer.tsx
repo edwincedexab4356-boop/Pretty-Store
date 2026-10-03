@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Smartphone, Mail, MapPin, Instagram, Lock } from 'lucide-react';
+import { Smartphone, Mail, MapPin, Instagram, Lock, MessageCircle } from 'lucide-react';
 import { Categoria } from '../../types/database';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 import { LegalModal, LegalTab } from './LegalModal';
+import { ContactModal } from './ContactModal';
 
 interface FooterProps {
   categories: Categoria[];
@@ -21,6 +22,7 @@ export const Footer: React.FC<FooterProps> = ({
 }) => {
   const { config } = useStoreConfig();
   const [isLegalOpen, setIsLegalOpen] = useState(false);
+  const [isContactOpen, setIsContactOpen] = useState(false);
   const [legalTab, setLegalTab] = useState<LegalTab>('privacidad');
 
   const openLegal = (tab: LegalTab) => {
@@ -139,6 +141,15 @@ export const Footer: React.FC<FooterProps> = ({
                   className="hover:text-white transition-colors cursor-pointer"
                 >
                   Sobre Nosotros
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => setIsContactOpen(true)}
+                  className="hover:text-white text-[#e8c872] font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <MessageCircle size={13} className="text-[#e8c872]" />
+                  <span>Contáctanos</span>
                 </button>
               </li>
               <li>
@@ -310,6 +321,12 @@ export const Footer: React.FC<FooterProps> = ({
         isOpen={isLegalOpen}
         onClose={() => setIsLegalOpen(false)}
         initialTab={legalTab}
+      />
+
+      {/* Modal Oficial de Contacto */}
+      <ContactModal
+        isOpen={isContactOpen}
+        onClose={() => setIsContactOpen(false)}
       />
     </footer>
   );

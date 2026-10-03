@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingBag, Menu, X, Search, ChevronDown, Layers } from 'lucide-react';
+import { ShoppingBag, Menu, X, Search, ChevronDown, Layers, MessageCircle } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 import { Categoria } from '../../types/database';
+import { ContactModal } from './ContactModal';
 
 interface HeaderProps {
   categories?: Categoria[];
@@ -26,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(false);
   const [desktopDropdownOpen, setDesktopDropdownOpen] = useState(false);
+  const [isContactOpen, setIsContactOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -131,22 +133,22 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          {/* Center Zone: Clean Desktop Navigation with Categories Dropdown */}
-          <nav className="hidden md:flex items-center gap-8 text-[11px] uppercase tracking-[0.22em] font-medium text-stone-300">
+          {/* Center Zone: Luxury Desktop Navigation with Enlarged, Vibrant Amber/Gold Colors */}
+          <nav className="hidden md:flex items-center gap-7 lg:gap-9 text-base lg:text-[17px] font-extrabold tracking-wide">
             <button
               onClick={() => handleNavClick('hero')}
-              className="hover:text-white transition-colors cursor-pointer py-1 relative group"
+              className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]"
             >
               <span>Inicio</span>
-              <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#c5a059] group-hover:w-full transition-all duration-300" />
+              <span className="absolute bottom-0 left-0 w-0 h-[2.5px] bg-[#fbbf24] group-hover:w-full transition-all duration-300 rounded-full" />
             </button>
 
             <button
               onClick={() => handleNavClick('catalogo')}
-              className="hover:text-white transition-colors cursor-pointer py-1 relative group"
+              className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]"
             >
               <span>Tienda</span>
-              <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#c5a059] group-hover:w-full transition-all duration-300" />
+              <span className="absolute bottom-0 left-0 w-0 h-[2.5px] bg-[#fbbf24] group-hover:w-full transition-all duration-300 rounded-full" />
             </button>
 
             {/* Desktop Categories with Dropdown */}
@@ -159,17 +161,17 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={handleToggleCategories}
-                className="hover:text-white transition-colors cursor-pointer py-1 relative group flex items-center gap-1.5 focus:outline-none"
+                className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group flex items-center gap-1.5 focus:outline-none drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]"
                 aria-expanded={desktopDropdownOpen}
               >
                 <span>Categorías</span>
                 <ChevronDown
-                  size={12}
+                  size={16}
                   className={`transition-transform duration-200 ${
-                    desktopDropdownOpen ? 'rotate-180 text-[#c5a059]' : ''
+                    desktopDropdownOpen ? 'rotate-180 text-white' : ''
                   }`}
                 />
-                <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#c5a059] group-hover:w-full transition-all duration-300" />
+                <span className="absolute bottom-0 left-0 w-0 h-[2.5px] bg-[#fbbf24] group-hover:w-full transition-all duration-300 rounded-full" />
               </button>
 
               {desktopDropdownOpen && (
@@ -179,7 +181,7 @@ export const Header: React.FC<HeaderProps> = ({
                   onMouseLeave={handleMouseLeaveDropdown}
                 >
                   <div className="bg-[#09090b]/98 backdrop-blur-2xl border border-white/10 shadow-2xl py-2 rounded-xl flex flex-col max-h-[65vh] overflow-hidden">
-                    <div className="px-4 py-2 border-b border-white/10 text-[9px] uppercase tracking-[0.25em] text-[#c5a059] font-medium flex items-center justify-between shrink-0">
+                    <div className="px-4 py-2 border-b border-white/10 text-[11px] uppercase tracking-[0.25em] text-[#fbbf24] font-bold flex items-center justify-between shrink-0">
                       <span>Colecciones</span>
                       <span className="text-stone-400 font-mono text-[9px]">
                         {categories.length} categorías
@@ -190,7 +192,7 @@ export const Header: React.FC<HeaderProps> = ({
                       onClick={() => handlePickCategory('all')}
                       className="w-full text-left px-4 py-2.5 text-xs text-stone-300 hover:text-white hover:bg-white/5 transition-colors flex items-center justify-between cursor-pointer border-b border-white/[0.04] shrink-0"
                     >
-                      <span className="font-medium text-[#c5a059]">Todo el Catálogo</span>
+                      <span className="font-bold text-[#fbbf24]">Todo el Catálogo</span>
                       <span className="text-[10px] text-stone-500 font-mono">Ver Todo</span>
                     </button>
                     <div className="overflow-y-auto flex-1 divide-y divide-white/[0.03]">
@@ -206,7 +208,7 @@ export const Header: React.FC<HeaderProps> = ({
                             onClick={() => handlePickCategory(cat.id)}
                             className="w-full text-left px-4 py-2 text-xs text-stone-300 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2.5 cursor-pointer"
                           >
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#c5a059] shrink-0" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#fbbf24] shrink-0" />
                             <span className="capitalize text-stone-200">{cat.nombre}</span>
                           </button>
                         ))
@@ -219,10 +221,19 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => handleNavClick('editoriales')}
-              className="hover:text-white transition-colors cursor-pointer py-1 relative group"
+              className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]"
             >
               <span>Sobre Nosotros</span>
-              <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-[#c5a059] group-hover:w-full transition-all duration-300" />
+              <span className="absolute bottom-0 left-0 w-0 h-[2.5px] bg-[#fbbf24] group-hover:w-full transition-all duration-300 rounded-full" />
+            </button>
+
+            {/* Contáctanos Link */}
+            <button
+              onClick={() => setIsContactOpen(true)}
+              className="px-4 py-2 rounded-full bg-gradient-to-r from-amber-500/25 via-[#fbbf24]/25 to-amber-500/20 border border-[#fbbf24]/50 hover:border-[#fbbf24] text-[#fef08a] hover:text-white transition-all duration-200 cursor-pointer flex items-center gap-2 shadow-sm hover:shadow-[#fbbf24]/30 hover:scale-105"
+            >
+              <MessageCircle size={15} className="text-[#fbbf24]" />
+              <span>Contáctanos</span>
             </button>
           </nav>
 
@@ -263,43 +274,43 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Mobile Dropdown Menu (Tres rayitas desplegadas) */}
         {mobileMenuOpen && (
-          <div className="md:hidden mt-3 pt-4 pb-5 border-t border-white/10 bg-[#09090b]/98 backdrop-blur-2xl px-3 flex flex-col gap-1 text-xs uppercase tracking-[0.2em] animate-in fade-in duration-200">
+          <div className="md:hidden mt-3 pt-4 pb-5 border-t border-white/10 bg-[#09090b]/98 backdrop-blur-2xl px-3 flex flex-col gap-2 text-base font-extrabold tracking-wide animate-in fade-in duration-200">
             <button
               onClick={() => handleNavClick('hero')}
-              className="text-left py-2.5 px-3 text-stone-300 hover:text-white hover:bg-white/5 rounded transition-colors"
+              className="text-left py-2.5 px-3 text-[#fbbf24] hover:text-white hover:bg-white/5 rounded-xl transition-colors drop-shadow-[0_1px_4px_rgba(251,191,36,0.3)]"
             >
               Inicio
             </button>
 
             <button
               onClick={() => handleNavClick('catalogo')}
-              className="text-left py-2.5 px-3 text-stone-300 hover:text-white hover:bg-white/5 rounded transition-colors"
+              className="text-left py-2.5 px-3 text-[#fbbf24] hover:text-white hover:bg-white/5 rounded-xl transition-colors drop-shadow-[0_1px_4px_rgba(251,191,36,0.3)]"
             >
               Tienda
             </button>
 
             {/* Accordion Deslizante de Categorías */}
-            <div className="border border-white/10 rounded-lg overflow-hidden my-1 bg-black/40">
+            <div className="border border-white/10 rounded-xl overflow-hidden my-1 bg-black/40">
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setMobileCategoriesOpen((prev) => !prev);
                 }}
-                className="w-full text-left py-3 px-3 text-stone-200 hover:text-white flex items-center justify-between transition-colors bg-white/[0.02] cursor-pointer"
+                className="w-full text-left py-3 px-3 text-[#fbbf24] hover:text-white flex items-center justify-between transition-colors bg-white/[0.02] cursor-pointer drop-shadow-[0_1px_4px_rgba(251,191,36,0.3)]"
               >
                 <div className="flex items-center gap-2">
-                  <Layers size={14} className="text-[#c5a059]" />
+                  <Layers size={18} className="text-[#fbbf24]" />
                   <span>Categorías</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-[#c5a059] font-mono lowercase">
+                  <span className="text-xs text-[#fbbf24] font-mono lowercase">
                     {categories.length} categorías
                   </span>
                   <ChevronDown
-                    size={15}
-                    className={`text-stone-400 transition-transform duration-300 ${
-                      mobileCategoriesOpen ? 'rotate-180 text-[#c5a059]' : ''
+                    size={16}
+                    className={`text-[#fbbf24] transition-transform duration-300 ${
+                      mobileCategoriesOpen ? 'rotate-180' : ''
                     }`}
                   />
                 </div>
@@ -307,10 +318,10 @@ export const Header: React.FC<HeaderProps> = ({
 
               {/* Sub-menu deslizante con todas las categorías */}
               {mobileCategoriesOpen && (
-                <div className="px-2 py-2 border-t border-white/10 bg-black/60 flex flex-col gap-1 max-h-[50vh] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="px-2 py-2 border-t border-white/10 bg-black/60 flex flex-col gap-1 max-h-[50vh] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200 font-medium">
                   <button
                     onClick={() => handlePickCategory('all')}
-                    className="text-left py-2 px-3 text-xs text-[#c5a059] font-medium hover:bg-white/5 rounded transition-colors flex items-center justify-between"
+                    className="text-left py-2 px-3 text-xs text-[#fbbf24] font-bold hover:bg-white/5 rounded transition-colors flex items-center justify-between"
                   >
                     <span>Ver Todo el Catálogo</span>
                     <span className="text-[9px] text-stone-400 font-mono tracking-normal">
@@ -327,10 +338,10 @@ export const Header: React.FC<HeaderProps> = ({
                       <button
                         key={cat.id}
                         onClick={() => handlePickCategory(cat.id)}
-                        className="text-left py-2.5 px-3 text-xs text-stone-300 hover:text-white hover:bg-white/5 rounded transition-colors flex items-center gap-2.5"
+                        className="text-left py-2.5 px-3 text-xs text-stone-200 hover:text-white hover:bg-white/5 rounded transition-colors flex items-center gap-2.5"
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#c5a059] shrink-0" />
-                        <span className="capitalize text-stone-200 font-light">{cat.nombre}</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#fbbf24] shrink-0" />
+                        <span className="capitalize">{cat.nombre}</span>
                       </button>
                     ))
                   )}
@@ -340,13 +351,27 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => handleNavClick('editoriales')}
-              className="text-left py-2.5 px-3 text-stone-300 hover:text-white hover:bg-white/5 rounded transition-colors"
+              className="text-left py-2.5 px-3 text-[#fbbf24] hover:text-white hover:bg-white/5 rounded-xl transition-colors drop-shadow-[0_1px_4px_rgba(251,191,36,0.3)]"
             >
               Sobre Nosotros
+            </button>
+
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                setIsContactOpen(true);
+              }}
+              className="text-left py-3 px-3.5 rounded-xl bg-gradient-to-r from-amber-500/25 via-[#fbbf24]/20 to-amber-500/20 border border-[#fbbf24]/50 text-[#fef08a] font-bold hover:text-white hover:bg-amber-500/30 transition-all flex items-center gap-2 mt-1 shadow-md shadow-[#fbbf24]/10"
+            >
+              <MessageCircle size={18} className="text-[#fbbf24]" />
+              <span>Contáctanos</span>
             </button>
           </div>
         )}
       </div>
+
+      {/* Modal de Contacto Oficial */}
+      <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} />
     </header>
   );
 };

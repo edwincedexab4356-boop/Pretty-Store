@@ -54,9 +54,6 @@ export const CartDrawer: React.FC = () => {
     setIsCheckoutOpen(true);
   };
 
-  const freeShippingThreshold = 100;
-  const remainingForFreeShipping = Math.max(0, freeShippingThreshold - subtotal);
-
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
       {/* Dimmed Backdrop */}
@@ -95,31 +92,16 @@ export const CartDrawer: React.FC = () => {
             </button>
           </div>
 
-          {/* Free Shipping Notice */}
-          {items.length > 0 && (
-            <div className="px-6 py-2 bg-stone-900/60 border-b border-white/[0.06] text-xs text-stone-300 flex items-center justify-between">
-              {remainingForFreeShipping > 0 ? (
-                <span className="font-light text-[11px]">
-                  Agrega <strong className="text-white font-mono font-medium">${remainingForFreeShipping.toFixed(2)}</strong> para <span className="text-[#c5a059]">envío sin costo</span>
-                </span>
-              ) : (
-                <span className="text-[#c5a059] font-medium text-[11px]">
-                  Envío prioritario sin costo incluido
-                </span>
-              )}
-            </div>
-          )}
-
           {/* Banner Promoción: 2 Gorras Legendarias por $55 */}
           {items.length > 0 && promo.hasPromo && (
-            <div className="px-6 py-2.5 bg-gradient-to-r from-[#c5a059]/20 via-amber-500/10 to-transparent border-b border-[#c5a059]/40 text-xs flex items-center justify-between animate-in fade-in duration-200">
+            <div className="px-6 py-2.5 bg-[#c5a059]/10 border-b border-[#c5a059]/20 text-xs flex items-center justify-between animate-in fade-in duration-200">
               <div className="flex items-center gap-2">
-                <Sparkles size={15} className="text-[#c5a059] shrink-0 animate-pulse" />
+                <Sparkles size={14} className="text-[#c5a059] shrink-0" />
                 <span className="text-white text-[11px] font-medium">
                   {promo.promoTitle}: <strong className="text-[#c5a059] font-mono">-${promo.discount.toFixed(2)} USD</strong>
                 </span>
               </div>
-              <span className="text-[9px] uppercase font-bold tracking-wider text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/30">
+              <span className="text-[9px] uppercase font-bold tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                 ¡Aplicado!
               </span>
             </div>
@@ -127,8 +109,8 @@ export const CartDrawer: React.FC = () => {
 
           {/* Sugerencia de Promoción si falta 1 gorra */}
           {items.length > 0 && !promo.hasPromo && promo.nextPromoHint && (
-            <div className="px-6 py-2 bg-amber-500/10 border-b border-amber-500/25 text-xs flex items-center gap-2 animate-in fade-in duration-200">
-              <Tag size={14} className="text-amber-400 shrink-0" />
+            <div className="px-6 py-2 bg-amber-500/10 border-b border-amber-500/20 text-xs flex items-center gap-2 animate-in fade-in duration-200">
+              <Tag size={13} className="text-amber-400 shrink-0" />
               <span className="text-stone-300 text-[11px] font-light">
                 {promo.nextPromoHint}
               </span>
@@ -250,22 +232,15 @@ export const CartDrawer: React.FC = () => {
                     <span className="font-mono tabular-nums font-semibold">-${discount.toFixed(2)}</span>
                   </div>
                 )}
-                <div className="flex items-center justify-between text-stone-400 font-light">
-                  <span>Envío</span>
-                  <span className="font-mono tabular-nums text-white">
-                    {shipping === 0 ? (
-                      <span className="text-[#c5a059]">Gratis</span>
-                    ) : (
-                      `$${shipping.toFixed(2)}`
-                    )}
-                  </span>
-                </div>
                 <div className="pt-2 border-t border-white/[0.08] flex items-center justify-between text-sm">
                   <span className="uppercase tracking-[0.16em] text-xs font-medium text-white">Total</span>
-                  <span className="text-lg font-mono tabular-nums font-semibold text-white">
+                  <span className="text-xl font-mono tabular-nums font-semibold text-white">
                     ${total.toFixed(2)}
                   </span>
                 </div>
+                <p className="text-[10px] text-stone-500 font-light text-right pt-0.5">
+                  * El costo de envío se coordina tras confirmar el pedido
+                </p>
               </div>
 
               {/* Checkout CTA */}

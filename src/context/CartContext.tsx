@@ -167,10 +167,10 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const effectiveSubtotal = Math.max(0, subtotal - discount);
 
-  // Envío gratis en compras mayores o iguales a $100, de lo contrario $5.00
-  const shipping = items.length === 0 ? 0 : effectiveSubtotal >= 100 ? 0 : 5.0;
+  // El costo de envío se coordina directamente tras confirmar el pedido (no se suma en el carrito)
+  const shipping = 0;
 
-  const total = Number((effectiveSubtotal + shipping).toFixed(2));
+  const total = Number(effectiveSubtotal.toFixed(2));
 
   return (
     <CartContext.Provider

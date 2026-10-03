@@ -157,6 +157,8 @@ export interface StoreConfig {
   banco_datos?: string;
   pasarela_tarjeta?: string;
   link_pago_tarjeta?: string;
+  badge_garantia_titulo?: string;
+  badge_garantia_subtitulo?: string;
 }
 
 export interface DashboardStats {

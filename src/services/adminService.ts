@@ -34,10 +34,10 @@ export const DEFAULT_STORE_CONFIG: StoreConfig = {
   tiktok: 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS',
   facebook: '',
   twitter: '',
-  yappy_numero: '6402-8245',
-  banco_datos: 'Banco General - Cuenta Corriente #03-01-01-123456-7 a nombre de Pretty-Store Inc.',
+  yappy_numero: '6215-0251',
+  banco_datos: 'Banco General - Cuenta Corriente #0472985946850 a nombre de JESUS ALEJANDRO CARDONA ESCOBAR',
   pasarela_tarjeta: 'PagueloFacil',
-  link_pago_tarjeta: 'https://checkout.paguelofacil.com/gorras',
+  link_pago_tarjeta: 'https://checkout.paguelofacil.com/W_F9464GL',
 };
 
 // ==========================================

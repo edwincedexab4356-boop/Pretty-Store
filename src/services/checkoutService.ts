@@ -149,29 +149,6 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     // Validar cantidad como entero positivo
     const validQty = Math.max(1, Math.floor(Number(item.quantity) || 1));
 
-    // Validar stock disponible en la base de datos
-    // También verificar si existe registro en tabla 'inventario'
-    let availableStock = dbProd.stock ?? 0;
-    try {
-      const { data: invRow } = await supabase
-        .from('inventario')
-        .select('stock_actual')
-        .eq('producto_id', dbProd.id)
-        .limit(1);
-
-      if (invRow && invRow.length > 0 && typeof invRow[0].stock_actual === 'number') {
-        availableStock = invRow[0].stock_actual;
-      }
-    } catch {
-      // Usar stock de productos
-    }
-
-    if (availableStock < validQty) {
-      throw new Error(
-        `Disponibilidad insuficiente para "${dbProd.nombre}". Existencias: ${availableStock}, solicitado: ${validQty}.`
-      );
-    }
-
     // Usar PRECIO OFICIAL DE LA BASE DE DATOS (protección contra manipulación)
     const officialPrice = Number(dbProd.precio) || 0;
     const lineSubtotal = Number((officialPrice * validQty).toFixed(2));
@@ -198,7 +175,7 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
 
   const trustedShipping = typeof params.shipping === 'number'
     ? params.shipping
-    : (tipoEntrega === 'retiro' ? 0 : (effectiveSubtotal >= 100 ? 0 : 5.0));
+    : 0;
 
   const trustedTotal = Number((effectiveSubtotal + trustedShipping).toFixed(2));
 
@@ -310,75 +287,45 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     console.warn('Detalle de pedidos guardado parcialmente:', detailsErr.message);
   }
 
-  // 8. DESCUENTO DE STOCK DE FORMA SEGURA Y ATÓMICA
-  for (const line of verifiedOrderLines) {
-    const qtyToDeduct = line.quantity;
-    const pId = line.product.id;
-
-    let rpcSuccess = false;
+  // 8. DESCUENTO DE STOCK Y VENTAS EN SEGUNDO PLANO (Ultra Rápido, no bloquea el pedido)
+  (async () => {
     try {
-      // Intentar primero con la función segura de PostgreSQL
-      const { data: rpcRes, error: rpcErr } = await supabase.rpc('deduct_product_stock_safe', {
-        p_producto_id: pId,
-        p_cantidad: qtyToDeduct,
-      });
-      if (!rpcErr && rpcRes === true) {
-        rpcSuccess = true;
+      for (const line of verifiedOrderLines) {
+        const qtyToDeduct = line.quantity;
+        const pId = line.product.id;
+        try {
+          const { data: rpcRes, error: rpcErr } = await supabase.rpc('deduct_product_stock_safe', {
+            p_producto_id: pId,
+            p_cantidad: qtyToDeduct,
+          });
+          if (!rpcErr && rpcRes === true) continue;
+        } catch {
+          // ignore
+        }
+
+        try {
+          const { data: curProd } = await supabase.from('productos').select('stock').eq('id', pId).single();
+          if (curProd) {
+            const currentStock = Number(curProd.stock) || 0;
+            const newStock = Math.max(0, currentStock - qtyToDeduct);
+            await supabase.from('productos').update({ stock: newStock, updated_at: new Date().toISOString() }).eq('id', pId);
+          }
+        } catch (stockErr) {
+          console.warn('Actualización de existencias protegida:', stockErr);
+        }
       }
+
+      await supabase.from('ventas').insert([
+        {
+          pedido_id: orderId,
+          total: trustedTotal,
+          fecha: new Date().toISOString(),
+        },
+      ]);
     } catch {
-      rpcSuccess = false;
+      // background tasks
     }
-
-    if (!rpcSuccess) {
-      // Fallback seguro: Descuento directo con GREATEST(0, stock - qty)
-      try {
-        const { data: curProd } = await supabase
-          .from('productos')
-          .select('stock')
-          .eq('id', pId)
-          .single();
-
-        if (curProd) {
-          const currentStock = Number(curProd.stock) || 0;
-          const newStock = Math.max(0, currentStock - qtyToDeduct);
-          await supabase
-            .from('productos')
-            .update({ stock: newStock, updated_at: new Date().toISOString() })
-            .eq('id', pId);
-        }
-
-        const { data: curInv } = await supabase
-          .from('inventario')
-          .select('id, stock_actual')
-          .eq('producto_id', pId)
-          .limit(1);
-
-        if (curInv && curInv.length > 0) {
-          const currentInvStock = Number(curInv[0].stock_actual) || 0;
-          const newInvStock = Math.max(0, currentInvStock - qtyToDeduct);
-          await supabase
-            .from('inventario')
-            .update({ stock_actual: newInvStock, updated_at: new Date().toISOString() })
-            .eq('producto_id', pId);
-        }
-      } catch (stockErr) {
-        console.warn('Actualización de existencias protegida:', stockErr);
-      }
-    }
-  }
-
-  // 9. Registrar en ventas si la tabla está configurada
-  try {
-    await supabase.from('ventas').insert([
-      {
-        pedido_id: orderId,
-        total: trustedTotal,
-        fecha: new Date().toISOString(),
-      },
-    ]);
-  } catch {
-    // Si la tabla ventas tiene RLS estricta para clientes, continúa con éxito
-  }
+  })();
 
   const orderNumber = `PED-${String(orderId || '').replace(/-/g, '').slice(0, 6).toUpperCase()}`;
 

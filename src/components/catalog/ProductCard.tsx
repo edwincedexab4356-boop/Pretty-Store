@@ -147,6 +147,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </span>
         )}
 
+        {/* Low Stock Urgent Badge - Ultra Llamativo cuando se están agotando */}
+        {!isOutOfStock && product.stock <= 5 && (
+          <span className={`absolute ${isCurrentVideo ? 'top-10' : 'top-2.5'} right-2.5 px-3 py-1 rounded-full bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 text-white font-black text-[11px] tracking-wider flex items-center gap-1.5 shadow-2xl shadow-red-600/70 border-2 border-yellow-300 z-10 animate-bounce`}>
+            <span className="text-sm">🔥</span>
+            <span>¡QUEDAN {product.stock}!</span>
+          </span>
+        )}
+
         {/* Legendary Caps Promo Badge */}
         {isLegendary && (
           <span className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded bg-black/85 backdrop-blur-md text-[10px] text-amber-300 flex items-center gap-1.5 border border-[#c5a059]/50 z-10 shadow-lg font-medium tracking-wide">
@@ -215,13 +223,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <span className="text-[#c5a059] font-medium">
             {categoryName || 'Colección'}
           </span>
-          {!isOutOfStock && product.stock <= 3 ? (
-            <span className="text-amber-400/90 font-light">
-              Últimas {product.stock}
+          {!isOutOfStock && product.stock <= 5 ? (
+            <span className="px-2.5 py-1 rounded-full bg-red-600/30 text-amber-300 border border-red-500/80 font-black text-[10px] tracking-wide flex items-center gap-1 animate-pulse shadow-md shadow-red-600/30">
+              <span className="text-xs">⚡</span>
+              <span>¡Solo {product.stock} restantes!</span>
             </span>
           ) : !isOutOfStock ? (
-            <span className="text-stone-400 font-light">
-              Disponible
+            <span className="text-emerald-400 font-light flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>Disponible</span>
             </span>
           ) : null}
         </div>

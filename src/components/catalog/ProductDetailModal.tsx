@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Producto, Categoria } from '../../types/database';
 import { useCart } from '../../context/CartContext';
+import { useStoreConfig } from '../../context/StoreConfigContext';
 import { getProductImages, isVideoMedia, getVideoEmbedUrl } from '../../utils/productImages';
 import { isLegendaryCap } from '../../utils/promoUtils';
 
@@ -29,6 +30,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   onClose,
 }) => {
   const { addItem, items } = useCart();
+  const { config } = useStoreConfig();
   const [selectedQty, setSelectedQty] = useState(1);
   const [isAdded, setIsAdded] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -307,11 +309,19 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   {category ? category.nombre : 'Colección Oficial'}
                 </span>
                 {isOutOfStock ? (
-                  <span className="text-rose-400 font-medium">Agotado</span>
-                ) : product.stock <= 3 ? (
-                  <span className="text-amber-400 font-medium">Últimas {product.stock} unidades</span>
+                  <span className="text-rose-400 font-bold px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/30">
+                    Agotado
+                  </span>
+                ) : product.stock <= 5 ? (
+                  <span className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 text-white font-extrabold text-xs tracking-wider flex items-center gap-1.5 shadow-xl shadow-red-600/50 border-2 border-amber-300 animate-bounce">
+                    <span className="text-sm">🔥</span>
+                    <span>¡POR AGOTARSE! ÚLTIMAS {product.stock} UNIDADES</span>
+                  </span>
                 ) : (
-                  <span className="text-stone-400 font-light">En stock ({product.stock})</span>
+                  <span className="text-emerald-400 font-medium flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span>En stock ({product.stock})</span>
+                  </span>
                 )}
               </div>
 
@@ -354,24 +364,24 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 </p>
               </div>
 
-              {/* Guarantees */}
+              {/* Guarantees Personalizables */}
               <div className="grid grid-cols-2 gap-3 pt-3">
                 <div className="p-3 bg-stone-900/40 border border-white/[0.06] rounded-sm space-y-1">
                   <div className="flex items-center gap-1.5 text-stone-300 text-[11px] font-medium">
                     <ShieldCheck size={14} className="text-[#c5a059]" />
-                    <span>100% Original</span>
+                    <span>{config.badge_garantia_titulo || 'Pieza Exclusiva Pretty-Store'}</span>
                   </div>
                   <p className="text-[10px] text-stone-400 font-light">
-                    Piezas exclusivas con acabados de primera calidad.
+                    {config.badge_garantia_subtitulo || 'Acabados de primera calidad y empaque de colección.'}
                   </p>
                 </div>
                 <div className="p-3 bg-stone-900/40 border border-white/[0.06] rounded-sm space-y-1">
                   <div className="flex items-center gap-1.5 text-stone-300 text-[11px] font-medium">
                     <Truck size={14} className="text-[#c5a059]" />
-                    <span>Envío Nacional</span>
+                    <span>Envío Express</span>
                   </div>
                   <p className="text-[10px] text-stone-400 font-light">
-                    Uno Express, Ferguson o Servi Entrega.
+                    Servientrega, Ferguson o UnoExpress a todo el país.
                   </p>
                 </div>
               </div>

@@ -28,6 +28,12 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
     return map;
   }, [categories]);
 
+  const categoryOrderMap = useMemo(() => {
+    const map = new Map<string, number>();
+    categories.forEach((cat, idx) => map.set(String(cat.id), idx));
+    return map;
+  }, [categories]);
+
   // Filter and sort products
   const filteredProducts = useMemo(() => {
     return products
@@ -52,10 +58,15 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
       .sort((a, b) => {
         if (sortBy === 'price-asc') return a.precio - b.precio;
         if (sortBy === 'price-desc') return b.precio - a.precio;
-        if (sortBy === 'name') return a.nombre.localeCompare(b.nombre);
-        return 0; // default order
+        if (sortBy === 'name') return a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' });
+        
+        // Orden destacado: Respeta el orden de categorías establecido y luego el nombre
+        const idxA = categoryOrderMap.get(String(a.categoria_id)) ?? 9999;
+        const idxB = categoryOrderMap.get(String(b.categoria_id)) ?? 9999;
+        if (idxA !== idxB) return idxA - idxB;
+        return a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' });
       });
-  }, [products, selectedCategoryId, searchQuery, sortBy]);
+  }, [products, selectedCategoryId, searchQuery, sortBy, categoryOrderMap]);
 
   const activeCategoryTitle =
     selectedCategoryId === 'all'
