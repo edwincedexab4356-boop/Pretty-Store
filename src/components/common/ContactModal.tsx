@@ -133,7 +133,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
               </div>
             </a>
 
-            {/* 4. Pasarela PagueloFacil */}
+            {/* 4. Pago con Tarjeta */}
             <a
               href={pagueloFacilUrl}
               target="_blank"
@@ -145,14 +145,14 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold text-white">PagueloFacil Checkout</h3>
+                  <h3 className="text-xs font-semibold text-white">Tarjeta de Débito o Crédito</h3>
                   <ExternalLink size={12} className="text-[#e8c872] opacity-70 group-hover:opacity-100" />
                 </div>
                 <p className="text-xs font-mono text-[#e8c872] font-semibold mt-0.5">
-                  checkout.paguelofacil.com
+                  Visa, Mastercard o Clave
                 </p>
                 <p className="text-[10px] text-stone-400 font-light mt-1">
-                  Pagos seguros con Tarjeta Visa, Mastercard o Clave.
+                  Enlace oficial de pago con tarjeta.
                 </p>
               </div>
             </a>
