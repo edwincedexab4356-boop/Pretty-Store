@@ -17,7 +17,7 @@ export const StoreConfigProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [config, setConfig] = useState<StoreConfig>(() => {
     const local = getLocalStoreConfig();
     if (!local.nombre_tienda || local.nombre_tienda === 'AURA') {
-      local.nombre_tienda = 'Pretty-Store';
+      local.nombre_tienda = 'Pretty Store';
     }
     if (!local.hero_video_url || local.hero_video_url.includes('mixkit') || local.hero_video_url.includes('2026-09-23')) {
       local.hero_video_url = '/videos/WhatsApp Video 2026-09-26 at 15.05.22.mp4';
@@ -28,7 +28,7 @@ export const StoreConfigProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!local.yappy_numero || local.yappy_numero.includes('6890-1234') || local.yappy_numero.includes('6402-8245')) {
       local.yappy_numero = '6215-0251';
     }
-    if (!local.banco_datos || local.banco_datos.includes('123456-7') || local.banco_datos.includes('Pretty-Store Inc.')) {
+    if (!local.banco_datos || local.banco_datos.includes('123456-7') || local.banco_datos.includes('Pretty Store Inc.')) {
       local.banco_datos = 'Banco General - Cuenta Corriente #0472985946850 a nombre de JESUS ALEJANDRO CARDONA ESCOBAR';
     }
     if (!local.whatsapp || local.whatsapp.includes('6890-1234')) {
@@ -65,7 +65,7 @@ export const StoreConfigProvider: React.FC<{ children: React.ReactNode }> = ({ c
             merged.logo_url = '/images/logo/logotipo.jpeg';
           }
           if (!merged.nombre_tienda || merged.nombre_tienda === 'AURA') {
-            merged.nombre_tienda = 'Pretty-Store';
+            merged.nombre_tienda = 'Pretty Store';
           }
           if (!merged.link_pago_tarjeta || merged.link_pago_tarjeta.includes('gorras')) {
             merged.link_pago_tarjeta = 'https://checkout.paguelofacil.com/W_F9464GL';
@@ -73,7 +73,7 @@ export const StoreConfigProvider: React.FC<{ children: React.ReactNode }> = ({ c
           if (!merged.yappy_numero || merged.yappy_numero.includes('6890-1234') || merged.yappy_numero.includes('6402-8245')) {
             merged.yappy_numero = '6215-0251';
           }
-          if (!merged.banco_datos || merged.banco_datos.includes('123456-7') || merged.banco_datos.includes('Pretty-Store Inc.')) {
+          if (!merged.banco_datos || merged.banco_datos.includes('123456-7') || merged.banco_datos.includes('Pretty Store Inc.')) {
             merged.banco_datos = 'Banco General - Cuenta Corriente #0472985946850 a nombre de JESUS ALEJANDRO CARDONA ESCOBAR';
           }
           if (!merged.whatsapp || merged.whatsapp.includes('6890-1234')) {
@@ -111,7 +111,7 @@ export const StoreConfigProvider: React.FC<{ children: React.ReactNode }> = ({ c
       // Payload sanitizado exactamente con las columnas esperadas en public.configuracion
       const remotePayload = {
         id: 1,
-        nombre_tienda: updated.nombre_tienda || 'Pretty-Store',
+        nombre_tienda: updated.nombre_tienda || 'Pretty Store',
         descripcion: updated.descripcion || '',
         logo_url: updated.logo_url || '/images/logo/logotipo.jpeg',
         hero_video_url: updated.hero_video_url || '',

@@ -631,7 +631,7 @@ export const ManualSaleModal: React.FC<ManualSaleModalProps> = ({
             {tipoEntrega === 'delivery' && (
               <div>
                 <label className="block text-[10px] text-stone-400 uppercase font-medium mb-1">
-                  Courier / Empresa
+                  Empresa de Envío
                 </label>
                 <select
                   value={courier}

@@ -55,7 +55,7 @@ export const LegalPageLayout: React.FC<LegalPageLayoutProps> = ({
             <div className="w-8 h-8 rounded-full overflow-hidden border border-white/20 bg-stone-900 shrink-0">
               <img
                 src={config.logo_url || '/images/logo/logotipo.jpeg'}
-                alt={config.nombre_tienda || 'Pretty-Store'}
+                alt={config.nombre_tienda || 'Pretty Store'}
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   (e.target as HTMLElement).style.display = 'none';
@@ -64,7 +64,7 @@ export const LegalPageLayout: React.FC<LegalPageLayoutProps> = ({
             </div>
             <div className="hidden sm:flex flex-col">
               <span className="text-sm font-serif-luxury font-semibold tracking-[0.18em] text-white uppercase leading-none group-hover:text-[#c5a059] transition-colors">
-                {config.nombre_tienda || 'Pretty-Store'}
+                {config.nombre_tienda || 'Pretty Store'}
               </span>
               <span className="text-[8px] uppercase tracking-[0.3em] text-stone-400 mt-0.5 font-light">
                 Atelier & Boutique

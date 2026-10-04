@@ -64,7 +64,7 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({
             <p><span className="text-stone-400">Razón Social o Nombre Legal:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Razón Social o Nombre Legal del Titular]</span></p>
             <p><span className="text-stone-400">RUC y DV:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Número de RUC y Dígito Verificador]</span></p>
             <p><span className="text-stone-400">Responsable / Oficial de Privacidad:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Nombre del Oficial o Contacto de Protección de Datos]</span></p>
-            <p><span className="text-stone-400">Correo para Asuntos de Privacidad:</span> <span className="text-white">{config.email || 'contacto@pretty-store.com'}</span></p>
+            <p><span className="text-stone-400">Correo para Asuntos de Privacidad:</span> <span className="text-white">{config.email || 'contacto@pretty store.com'}</span></p>
             <p><span className="text-stone-400">Dirección para Notificaciones Físicas:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Dirección Física en Panamá]</span></p>
           </div>
         </section>
@@ -197,7 +197,7 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({
             Para ejercer cualquiera de los derechos descritos, el titular o su apoderado debidamente acreditado deberá remitir una solicitud por correo electrónico a:
           </p>
           <div className="p-3.5 rounded-lg bg-black/40 border border-white/10 text-xs font-mono text-[#c5a059]">
-            {config.email || 'contacto@pretty-store.com'}
+            {config.email || 'contacto@pretty store.com'}
           </div>
           <p className="text-xs sm:text-sm">
             La solicitud debe contener:
@@ -312,7 +312,7 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({
               <Mail size={15} className="text-[#c5a059] shrink-0" />
               <div>
                 <span className="text-stone-400 block text-[10px]">Atención de Privacidad:</span>
-                <span className="text-white font-medium">{config.email || 'contacto@pretty-store.com'}</span>
+                <span className="text-white font-medium">{config.email || 'contacto@pretty store.com'}</span>
               </div>
             </div>
             <div className="p-3 bg-white/[0.02] border border-white/10 rounded-lg flex items-center gap-2.5">

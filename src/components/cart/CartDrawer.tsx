@@ -238,15 +238,15 @@ export const CartDrawer: React.FC = () => {
                     ${total.toFixed(2)}
                   </span>
                 </div>
-                <p className="text-[10px] text-stone-500 font-light text-right pt-0.5">
-                  * El costo de envío se coordina tras confirmar el pedido
+                <p className="text-[10px] text-[#fbbf24] font-medium text-right pt-0.5">
+                  * El costo de envío se calcula y agrega al total en el siguiente paso
                 </p>
               </div>
 
               {/* Checkout CTA */}
               <button
                 onClick={handleProceedToCheckout}
-                className="w-full py-3.5 bg-white hover:bg-stone-200 text-stone-950 font-sans-clean font-semibold uppercase tracking-[0.2em] text-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                className="w-full py-4 bg-white hover:bg-stone-200 text-stone-950 font-sans-clean font-semibold uppercase tracking-[0.2em] text-xs transition-colors cursor-pointer flex items-center justify-center gap-2 active:scale-[0.98] min-h-[48px]"
               >
                 <span>Tramitar Pedido</span>
                 <ArrowRight size={14} className="stroke-[2]" />

@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
     <title>prettystroe.store</title>
     <link rel="icon" type="image/jpeg" href="/images/logo/logotipo.jpeg" />
     <link rel="shortcut icon" href="/images/logo/logotipo.jpeg" />
@@ -13,6 +13,15 @@
     <meta property="og:image" content="/images/logo/logotipo.jpeg" />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Mobile, iPhone, iPad & PWA optimizations -->
+    <meta name="theme-color" content="#09090b" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Pretty Store" />
+    <meta name="format-detection" content="telephone=no" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Cinzel:wght@500;600;700&display=swap" rel="stylesheet">
@@ -22,9 +31,8 @@
     <link rel="preload" href="/images/products/gorra-2.jpg" as="image" type="image/jpeg" />
     <link rel="preload" href="/images/categories/gorras.jpg" as="image" type="image/jpeg" />
   </head>
-  <body>
+  <body class="bg-[#09090b] text-[#f4f4f6] selection:bg-[#fbbf24] selection:text-black">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

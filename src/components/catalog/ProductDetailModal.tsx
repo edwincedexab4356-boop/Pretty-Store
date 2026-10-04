@@ -125,7 +125,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       />
 
       {/* Modal Dialog - Wide, spacious desktop layout so nothing is cut off */}
-      <div className="relative w-full max-w-4xl lg:max-w-5xl xl:max-w-6xl bg-[#0c0c0f] border border-white/10 shadow-2xl overflow-hidden z-10 my-4 sm:my-8 rounded-sm max-h-[92vh] flex flex-col">
+      <div className="relative w-full max-w-4xl lg:max-w-5xl xl:max-w-6xl bg-[#0c0c0f] border border-white/10 shadow-2xl overflow-hidden z-10 my-2 sm:my-8 rounded-2xl sm:rounded-sm max-h-[94dvh] sm:max-h-[92vh] flex flex-col overscroll-contain">
         {/* Close button */}
         <button
           onClick={onClose}
@@ -135,7 +135,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           <X size={18} />
         </button>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 overflow-y-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 overflow-y-auto overscroll-contain touch-scroll flex-1">
           {/* Media & Carousel Column (7 cols on desktop for expansive presentation) */}
           <div className="lg:col-span-7 flex flex-col bg-[#141418] border-b lg:border-b-0 lg:border-r border-white/10 select-none">
             <div
@@ -193,14 +193,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   <div className="w-14 h-14 rounded-full border border-white/10 p-0.5 flex items-center justify-center mb-3 bg-black">
                     <img
                       src="/images/logo/logotipo.jpeg"
-                      alt="Pretty-Store"
+                      alt="Pretty Store"
                       className="w-full h-full object-cover rounded-full opacity-70"
                       onError={(e) => {
                         (e.target as HTMLElement).style.display = 'none';
                       }}
                     />
                   </div>
-                  <p className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059]">Pretty-Store</p>
+                  <p className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059]">Pretty Store</p>
                   <p className="text-xs text-stone-400 mt-1 font-light">Pieza de Alta Gama</p>
                 </div>
               )}
@@ -369,7 +369,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 <div className="p-3 bg-stone-900/40 border border-white/[0.06] rounded-sm space-y-1">
                   <div className="flex items-center gap-1.5 text-stone-300 text-[11px] font-medium">
                     <ShieldCheck size={14} className="text-[#c5a059]" />
-                    <span>{config.badge_garantia_titulo || 'Pieza Exclusiva Pretty-Store'}</span>
+                    <span>{config.badge_garantia_titulo || 'Pieza Exclusiva Pretty Store'}</span>
                   </div>
                   <p className="text-[10px] text-stone-400 font-light">
                     {config.badge_garantia_subtitulo || 'Acabados de primera calidad y empaque de colección.'}

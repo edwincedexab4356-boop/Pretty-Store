@@ -20,7 +20,7 @@ import {
 
 // Default configuration fallback
 export const DEFAULT_STORE_CONFIG: StoreConfig = {
-  nombre_tienda: 'Pretty-Store',
+  nombre_tienda: 'Pretty Store',
   descripcion: 'Boutique exclusiva de alta relojería, perfumería selecta y accesorios de distinción.',
   logo_url: '/images/logo/logotipo.jpeg',
   hero_video_url: '/videos/hero.mp4',
@@ -28,7 +28,7 @@ export const DEFAULT_STORE_CONFIG: StoreConfig = {
   catalog_video_url: '',
   telefono: '+507 6215-0251',
   whatsapp: '+507 6215-0251',
-  email: 'contacto@pretty-store.com',
+  email: 'contacto@pretty store.com',
   direccion: 'https://maps.app.goo.gl/PxA3suMXNZxuFF5X7',
   instagram: 'https://instagram.com',
   tiktok: 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS',

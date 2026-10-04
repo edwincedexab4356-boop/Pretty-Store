@@ -123,7 +123,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <div className="w-12 h-12 rounded-full border border-white/10 p-0.5 flex items-center justify-center mb-3 bg-black">
               <img
                 src="/images/logo/logotipo.jpeg"
-                alt="Pretty-Store"
+                alt="Pretty Store"
                 className="w-full h-full object-cover rounded-full opacity-70"
                 onError={(e) => {
                   (e.target as HTMLElement).style.display = 'none';
@@ -131,7 +131,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               />
             </div>
             <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059]">
-              Pretty-Store
+              Pretty Store
             </span>
             <span className="text-[11px] text-stone-400 mt-1 font-light">
               Pieza Exclusiva

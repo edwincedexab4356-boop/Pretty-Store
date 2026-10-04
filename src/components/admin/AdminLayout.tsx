@@ -48,7 +48,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
         <div className="w-10 h-10 rounded-full border-2 border-stone-800 border-t-[#c5a059] animate-spin" />
         <div className="text-center space-y-1">
           <p className="text-xs uppercase tracking-[0.25em] text-[#c5a059] font-medium">
-            Pretty-Store Atelier
+            Pretty Store Atelier
           </p>
           <span className="text-[11px] text-stone-500 block">
             Cargando panel de administración...
@@ -90,7 +90,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                 </>
               ) : (
                 <>
-                  La cuenta <strong className="text-white">{user?.email}</strong> está registrada con rol de <strong className="text-amber-300 capitalize">{role || 'Cliente'}</strong>. Este panel es privado y está reservado para el personal administrativo y cajeros de Pretty-Store.
+                  La cuenta <strong className="text-white">{user?.email}</strong> está registrada con rol de <strong className="text-amber-300 capitalize">{role || 'Cliente'}</strong>. Este panel es privado y está reservado para el personal administrativo y cajeros de Pretty Store.
                 </>
               )}
             </p>

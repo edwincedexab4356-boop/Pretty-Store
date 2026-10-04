@@ -151,7 +151,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             Panel de Control
           </h2>
           <p className="text-xs sm:text-sm text-stone-400 mt-1 max-w-xl font-light">
-            Supervisa en tiempo real las ventas, inventario y pedidos de tu boutique Pretty-Store.
+            Supervisa en tiempo real las ventas, inventario y pedidos de tu boutique Pretty Store.
           </p>
         </div>
 

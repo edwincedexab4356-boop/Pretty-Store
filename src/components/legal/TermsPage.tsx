@@ -64,7 +64,7 @@ export const TermsPage: React.FC<TermsPageProps> = ({
             <p><span className="text-stone-400">Razón Social:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Razón Social o Nombre Legal del Titular]</span></p>
             <p><span className="text-stone-400">RUC y DV:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Número de RUC y Dígito Verificador]</span></p>
             <p><span className="text-stone-400">Domicilio Legal:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Dirección de Notificaciones Legales en Panamá]</span></p>
-            <p><span className="text-stone-400">Contacto Electrónico:</span> <span className="text-white">{config.email || 'contacto@pretty-store.com'}</span></p>
+            <p><span className="text-stone-400">Contacto Electrónico:</span> <span className="text-white">{config.email || 'contacto@pretty store.com'}</span></p>
             <p><span className="text-stone-400">Línea Telefónica / WhatsApp:</span> <span className="text-white">{config.telefono || '+507 6215-0251'}</span></p>
           </div>
         </section>
@@ -322,7 +322,7 @@ export const TermsPage: React.FC<TermsPageProps> = ({
               <Mail size={15} className="text-[#c5a059] shrink-0" />
               <div>
                 <span className="text-stone-400 block text-[10px]">Correo Electrónico:</span>
-                <span className="text-white font-medium">{config.email || 'contacto@pretty-store.com'}</span>
+                <span className="text-white font-medium">{config.email || 'contacto@pretty store.com'}</span>
               </div>
             </div>
             <div className="p-3 bg-white/[0.02] border border-white/10 rounded-lg flex items-center gap-2.5">

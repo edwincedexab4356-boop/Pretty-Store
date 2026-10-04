@@ -183,7 +183,7 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
   const resolvedEmail = cleanEmail || `${phoneDigits}@prettystore.com`;
   const resolvedAddress =
     tipoEntrega === 'retiro'
-      ? 'Retiro en el Local / Tienda física (Pretty-Store)'
+      ? 'Retiro en el Local / Tienda física (Pretty Store)'
       : safeDireccion.includes('Sucursal') || safeDireccion.includes('Envío')
         ? safeDireccion
         : `${safeDireccion} (Envío vía: ${courier || 'Uno Express'})`;

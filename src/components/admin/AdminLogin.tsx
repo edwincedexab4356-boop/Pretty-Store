@@ -102,7 +102,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
             />
           </div>
           <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block mb-1">
-            Pretty-Store Atelier
+            Pretty Store Atelier
           </span>
           <h1 className="text-xl sm:text-2xl font-serif-luxury font-semibold text-white tracking-wide">
             Panel de Administración
@@ -124,7 +124,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@pretty-store.com o usuario"
+              placeholder="admin@pretty store.com o usuario"
               className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 text-sm text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] focus:ring-1 focus:ring-[#c5a059]/40 transition-colors"
             />
           </div>
@@ -174,7 +174,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
         <div className="mt-6 pt-5 border-t border-white/[0.06] text-center">
           <p className="text-[11px] text-stone-500 flex items-center justify-center gap-1.5">
             <Lock size={12} className="text-stone-500" />
-            <span>Acceso privado exclusivo para la administración de Pretty-Store</span>
+            <span>Acceso privado exclusivo para la administración de Pretty Store</span>
           </p>
         </div>
       </div>

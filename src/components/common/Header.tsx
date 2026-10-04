@@ -82,6 +82,28 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
+  const logoTapCountRef = useRef(0);
+  const logoTapTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleLogoClick = () => {
+    logoTapCountRef.current += 1;
+    if (logoTapTimerRef.current) clearTimeout(logoTapTimerRef.current);
+
+    if (logoTapCountRef.current >= 5) {
+      logoTapCountRef.current = 0;
+      if (onOpenAdmin) {
+        onOpenAdmin();
+        return;
+      }
+    }
+
+    logoTapTimerRef.current = setTimeout(() => {
+      logoTapCountRef.current = 0;
+    }, 2500);
+
+    handleNavClick('hero');
+  };
+
   const handlePickCategory = (categoryId: string) => {
     setMobileMenuOpen(false);
     setMobileCategoriesOpen(false);
@@ -103,16 +125,17 @@ export const Header: React.FC<HeaderProps> = ({
     >
       <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12">
         <div className="flex items-center justify-between h-9">
-          {/* Left Zone: Brand Logo & Wordmark */}
+          {/* Left Zone: Brand Logo & Wordmark (5 toques para modo Admin en tablet/teléfono) */}
           <div className="flex items-center">
             <button
-              onClick={() => handleNavClick('hero')}
+              onClick={handleLogoClick}
               className="flex items-center gap-3 group cursor-pointer text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-[#c5a059]"
+              title="Pretty Store"
             >
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden bg-black border border-white/15 flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-105">
                 <img
                   src={config.logo_url || '/images/logo/logotipo.jpeg'}
-                  alt={config.nombre_tienda || 'Pretty-Store'}
+                  alt={config.nombre_tienda || 'Pretty Store'}
                   className="w-full h-full object-cover"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
@@ -124,7 +147,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <div className="flex flex-col">
                 <span className="text-base sm:text-lg font-serif-luxury font-semibold tracking-[0.16em] text-white uppercase leading-none transition-colors group-hover:text-[#c5a059]">
-                  {config.nombre_tienda || 'Pretty-Store'}
+                  {config.nombre_tienda || 'Pretty Store'}
                 </span>
                 <span className="text-[8px] uppercase tracking-[0.3em] text-[#a1a1aa] mt-1 font-light hidden sm:block">
                   Atelier & Boutique

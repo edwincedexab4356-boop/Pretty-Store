@@ -25,6 +25,20 @@ export const Footer: React.FC<FooterProps> = ({
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [legalTab, setLegalTab] = useState<LegalTab>('privacidad');
 
+  const [footerTaps, setFooterTaps] = useState(0);
+
+  const handleFooterLogoTap = () => {
+    const next = footerTaps + 1;
+    if (next >= 5) {
+      setFooterTaps(0);
+      if (onOpenAdmin) onOpenAdmin();
+      return;
+    }
+    setFooterTaps(next);
+    setTimeout(() => setFooterTaps(0), 2500);
+    scrollToTop();
+  };
+
   const openLegal = (tab: LegalTab) => {
     setLegalTab(tab);
     setIsLegalOpen(true);
@@ -40,11 +54,15 @@ export const Footer: React.FC<FooterProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-12">
           {/* Brand Info (4 cols) */}
           <div className="lg:col-span-4 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full overflow-hidden bg-black border border-white/15 flex items-center justify-center shrink-0">
+            <button
+              onClick={handleFooterLogoTap}
+              className="flex items-center gap-3 text-left group cursor-pointer focus:outline-none"
+              title="Pretty Store"
+            >
+              <div className="w-9 h-9 rounded-full overflow-hidden bg-black border border-white/15 flex items-center justify-center shrink-0 transition-transform group-hover:scale-105">
                 <img
                   src={config.logo_url || '/images/logo/logotipo.jpeg'}
-                  alt={config.nombre_tienda || 'Pretty-Store'}
+                  alt={config.nombre_tienda || 'Pretty Store'}
                   className="w-full h-full object-cover"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
@@ -55,68 +73,94 @@ export const Footer: React.FC<FooterProps> = ({
                 />
               </div>
               <div className="flex flex-col">
-                <span className="text-lg font-serif-luxury font-medium tracking-[0.16em] text-white uppercase leading-none">
-                  {config.nombre_tienda || 'Pretty-Store'}
+                <span className="text-lg font-serif-luxury font-medium tracking-[0.16em] text-white uppercase leading-none transition-colors group-hover:text-[#c5a059]">
+                  {config.nombre_tienda || 'Pretty Store'}
                 </span>
                 <span className="text-[8px] uppercase tracking-[0.3em] text-[#a1a1aa] mt-1 font-light">
                   Haute Horlogerie & Atelier
                 </span>
               </div>
-            </div>
+            </button>
 
             <p className="text-stone-400 text-xs leading-relaxed max-w-sm font-light">
               {config.descripcion ||
                 'Boutique exclusiva de gorras legendarias, accesorios selectos y moda urbana diseñada con los más elevados estándares de distinción.'}
             </p>
 
-            {/* Social links with text underneath + WhatsApp 6215-0251 */}
-            <div className="pt-3 space-y-2">
-              <span className="text-[10px] uppercase tracking-[0.2em] text-[#c5a059] font-semibold block">
-                Nuestras Redes & Contacto
-              </span>
-              <div className="flex flex-wrap items-center gap-3 text-stone-400">
-                {/* Instagram */}
-                <a
-                  href={config.instagram || 'https://instagram.com/pretty_store_pty'}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3.5 py-2.5 rounded-xl border border-white/10 hover:border-[#fbbf24] hover:text-white bg-white/[0.03] hover:bg-white/[0.08] transition-all flex flex-col items-center justify-center gap-1 group text-center min-w-[76px]"
-                  aria-label="Instagram"
-                  title="Instagram"
-                >
-                  <Instagram size={18} className="text-[#fbbf24] group-hover:scale-110 transition-transform" />
-                  <span className="text-[10px] font-semibold text-white tracking-wide">Instagram</span>
-                </a>
+            {/* Social links con el nombre debajo de cada logo */}
+            <div className="pt-2 flex flex-wrap items-start gap-4 sm:gap-5 text-stone-400">
+              {/* Instagram Principal */}
+              <a
+                href={config.instagram || 'https://instagram.com/pretty_store_pty'}
+                target="_blank"
+                rel="noreferrer"
+                className="flex flex-col items-center gap-1.5 group text-center min-w-[52px]"
+                aria-label="Instagram"
+                title="Instagram"
+              >
+                <div className="w-9 h-9 rounded-full border border-white/10 group-hover:border-[#fbbf24] text-stone-300 group-hover:text-[#fbbf24] flex items-center justify-center transition-all bg-white/[0.03] group-hover:bg-white/[0.08] shadow-sm">
+                  <Instagram size={17} />
+                </div>
+                <span className="text-[10px] text-stone-400 group-hover:text-white transition-colors tracking-tight font-medium">
+                  Instagram
+                </span>
+              </a>
 
-                {/* TikTok */}
-                <a
-                  href={config.tiktok || 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS'}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3.5 py-2.5 rounded-xl border border-white/10 hover:border-[#fbbf24] hover:text-white bg-white/[0.03] hover:bg-white/[0.08] transition-all flex flex-col items-center justify-center gap-1 group text-center min-w-[76px]"
-                  aria-label="TikTok"
-                  title="TikTok @tienda_prettystore"
-                >
-                  <svg className="w-4 h-4 fill-current text-[#fbbf24] transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+              {/* Instagram (2) Solicitado */}
+              <a
+                href="https://www.instagram.com/tienda_prettystore2?stkn=MTR1MGo5YTJ1N3VycQ=="
+                target="_blank"
+                rel="noreferrer"
+                className="flex flex-col items-center gap-1.5 group text-center min-w-[66px]"
+                aria-label="Instagram (2)"
+                title="Instagram (2)"
+              >
+                <div className="w-9 h-9 rounded-full border border-white/10 group-hover:border-[#fbbf24] text-stone-300 group-hover:text-[#fbbf24] flex items-center justify-center transition-all bg-white/[0.03] group-hover:bg-white/[0.08] shadow-sm relative">
+                  <Instagram size={17} />
+                  <span className="absolute -bottom-1 -right-1 text-[8px] font-bold bg-[#fbbf24] text-black w-3.5 h-3.5 rounded-full flex items-center justify-center shadow-sm">
+                    2
+                  </span>
+                </div>
+                <span className="text-[10px] text-stone-400 group-hover:text-white transition-colors tracking-tight font-medium">
+                  Instagram (2)
+                </span>
+              </a>
+
+              {/* TikTok */}
+              <a
+                href={config.tiktok || 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS'}
+                target="_blank"
+                rel="noreferrer"
+                className="flex flex-col items-center gap-1.5 group text-center min-w-[50px]"
+                aria-label="TikTok"
+                title="TikTok @tienda_prettystore"
+              >
+                <div className="w-9 h-9 rounded-full border border-white/10 group-hover:border-white text-stone-300 group-hover:text-white flex items-center justify-center transition-all bg-white/[0.03] group-hover:bg-white/[0.08] shadow-sm">
+                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                     <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .58.04.86.12V9.42a6.34 6.34 0 0 0-.86-.06 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V9.08a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.51z" />
                   </svg>
-                  <span className="text-[10px] font-semibold text-white tracking-wide">TikTok</span>
-                </a>
+                </div>
+                <span className="text-[10px] text-stone-400 group-hover:text-white transition-colors tracking-tight font-medium">
+                  TikTok
+                </span>
+              </a>
 
-                {/* WhatsApp Oficial 6215-0251 */}
-                <a
-                  href="https://wa.me/50762150251"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3.5 py-2 rounded-xl border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 transition-all flex flex-col items-center justify-center gap-0.5 group text-center min-w-[90px]"
-                  aria-label="WhatsApp"
-                  title="WhatsApp 6215-0251"
-                >
-                  <MessageCircle size={18} className="text-[#25D366] group-hover:scale-110 transition-transform" />
-                  <span className="text-[10px] font-bold text-white tracking-wide">WhatsApp</span>
-                  <span className="text-[9px] font-mono text-emerald-400 font-bold">6215-0251</span>
-                </a>
-              </div>
+              {/* WhatsApp Oficial 6215-0251 */}
+              <a
+                href="https://wa.me/50762150251"
+                target="_blank"
+                rel="noreferrer"
+                className="flex flex-col items-center gap-1.5 group text-center min-w-[56px]"
+                aria-label="WhatsApp"
+                title="WhatsApp 6215-0251"
+              >
+                <div className="w-9 h-9 rounded-full border border-emerald-500/40 group-hover:border-emerald-400 text-emerald-400 group-hover:text-emerald-300 flex items-center justify-center transition-all bg-emerald-500/10 group-hover:bg-emerald-500/20 shadow-sm">
+                  <MessageCircle size={17} />
+                </div>
+                <span className="text-[10px] text-emerald-400 group-hover:text-emerald-300 transition-colors tracking-tight font-medium">
+                  WhatsApp
+                </span>
+              </a>
             </div>
           </div>
 
@@ -249,7 +293,7 @@ export const Footer: React.FC<FooterProps> = ({
               </p>
               <p className="flex items-center gap-2 text-stone-300">
                 <Mail size={13} className="text-[#c5a059]" />
-                <span>{config.email || 'contacto@pretty-store.com'}</span>
+                <span>{config.email || 'contacto@pretty store.com'}</span>
               </p>
               <a
                 href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7"
@@ -279,7 +323,7 @@ export const Footer: React.FC<FooterProps> = ({
 
         {/* Bottom Bar */}
         <div className="mt-14 pt-8 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4 text-stone-500 font-light text-[11px]">
-          <p>© {new Date().getFullYear()} {config.nombre_tienda || 'Pretty-Store'}. Todos los derechos reservados.</p>
+          <p>© {new Date().getFullYear()} {config.nombre_tienda || 'Pretty Store'}. Todos los derechos reservados.</p>
           <div className="flex flex-wrap items-center justify-center sm:justify-end gap-x-4 gap-y-2 text-stone-400">
             <a
               href="/politica-de-privacidad"

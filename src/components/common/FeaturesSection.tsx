@@ -30,7 +30,7 @@ export const FeaturesSection: React.FC = () => {
       <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12">
         <div className="text-center max-w-xl mx-auto mb-16 sm:mb-20">
           <span className="text-[10px] sm:text-xs uppercase tracking-[0.35em] text-[#c5a059] font-medium block mb-2">
-            El Compromiso Pretty-Store
+            El Compromiso Pretty Store
           </span>
           <h2 className="text-2xl sm:text-4xl font-serif-luxury font-light text-white tracking-tight">
             Excelencia en Cada Experiencia

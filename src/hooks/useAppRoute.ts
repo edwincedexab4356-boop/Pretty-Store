@@ -116,10 +116,11 @@ export function useAppNavigation() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
-  // Admin shortcut Ctrl+Alt+A / Cmd+Alt+A
+  // Admin shortcut Ctrl+Alt+A / Cmd+Alt+A en computadora
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'a' || e.key === 'A')) {
+      const isA = e.key?.toLowerCase() === 'a' || e.code === 'KeyA';
+      if ((e.ctrlKey || e.metaKey) && e.altKey && isA) {
         e.preventDefault();
         navigateToAdmin('dashboard');
       }

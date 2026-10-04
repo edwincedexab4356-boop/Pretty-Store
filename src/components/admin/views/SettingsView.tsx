@@ -71,7 +71,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenQuotaModal }) 
   );
   const [pasarelaTarjeta, setPasarelaTarjeta] = useState(config.pasarela_tarjeta || 'PagueloFacil');
   const [linkPagoTarjeta, setLinkPagoTarjeta] = useState(config.link_pago_tarjeta || 'https://checkout.paguelofacil.com/W_F9464GL');
-  const [badgeGarantiaTitulo, setBadgeGarantiaTitulo] = useState(config.badge_garantia_titulo || 'Pieza Exclusiva Pretty-Store');
+  const [badgeGarantiaTitulo, setBadgeGarantiaTitulo] = useState(config.badge_garantia_titulo || 'Pieza Exclusiva Pretty Store');
   const [badgeGarantiaSubtitulo, setBadgeGarantiaSubtitulo] = useState(config.badge_garantia_subtitulo || 'Acabados de primera calidad y empaque de colección.');
 
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -792,7 +792,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenQuotaModal }) 
                 type="text"
                 value={badgeGarantiaTitulo}
                 onChange={(e) => setBadgeGarantiaTitulo(e.target.value)}
-                placeholder="Ej. Pieza Exclusiva Pretty-Store"
+                placeholder="Ej. Pieza Exclusiva Pretty Store"
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-amber-500"
               />
             </div>

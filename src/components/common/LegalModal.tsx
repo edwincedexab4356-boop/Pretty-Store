@@ -27,7 +27,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({
         <div className="p-5 sm:p-6 border-b border-white/[0.08] flex items-center justify-between bg-black/40">
           <div>
             <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block mb-0.5">
-              {config.nombre_tienda || 'Pretty-Store'} • Información Legal
+              {config.nombre_tienda || 'Pretty Store'} • Información Legal
             </span>
             <h2 className="text-lg sm:text-xl font-serif-luxury font-medium text-white">
               Términos de Servicio & Privacidad
@@ -91,7 +91,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({
                   1. Tratamiento y Protección de Datos Personales
                 </h3>
                 <p>
-                  En {config.nombre_tienda || 'Pretty-Store'}, nos comprometemos a salvaguardar la privacidad de nuestros clientes de conformidad con las mejores prácticas internacionales y las leyes aplicables de protección de datos personales. Los datos recabados a través de nuestro sitio web (incluyendo nombre, número de teléfono, dirección de entrega y correo electrónico) son utilizados exclusivamente para la gestión, facturación, despacho y seguimiento de sus pedidos.
+                  En {config.nombre_tienda || 'Pretty Store'}, nos comprometemos a salvaguardar la privacidad de nuestros clientes de conformidad con las mejores prácticas internacionales y las leyes aplicables de protección de datos personales. Los datos recabados a través de nuestro sitio web (incluyendo nombre, número de teléfono, dirección de entrega y correo electrónico) son utilizados exclusivamente para la gestión, facturación, despacho y seguimiento de sus pedidos.
                 </p>
               </div>
 
@@ -109,7 +109,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({
                   3. Transacciones y Datos Financieros
                 </h3>
                 <p>
-                  {config.nombre_tienda || 'Pretty-Store'} no almacena números completos de tarjetas de crédito o débito, códigos de seguridad (CVV) ni contraseñas bancarias en sus bases de datos. Los pagos electrónicos se coordinan a través de canales bancarios seguros (Yappy, ACH) o pasarelas de pago certificadas con cifrado SSL.
+                  {config.nombre_tienda || 'Pretty Store'} no almacena números completos de tarjetas de crédito o débito, códigos de seguridad (CVV) ni contraseñas bancarias en sus bases de datos. Los pagos electrónicos se coordinan a través de canales bancarios seguros (Yappy, ACH) o pasarelas de pago certificadas con cifrado SSL.
                 </p>
               </div>
 
@@ -131,7 +131,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({
                   1. Ámbito de Aplicación
                 </h3>
                 <p>
-                  Los presentes Términos y Condiciones regulan el uso del catálogo en línea y los procesos de compra en la boutique {config.nombre_tienda || 'Pretty-Store'}. Al registrar un pedido a través de nuestro sitio web, el cliente acepta los términos aquí descritos.
+                  Los presentes Términos y Condiciones regulan el uso del catálogo en línea y los procesos de compra en la boutique {config.nombre_tienda || 'Pretty Store'}. Al registrar un pedido a través de nuestro sitio web, el cliente acepta los términos aquí descritos.
                 </p>
               </div>
 
@@ -193,7 +193,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({
                     <span>Correo Electrónico</span>
                   </div>
                   <p className="text-xs text-stone-300 font-mono truncate">
-                    {config.email || 'contacto@pretty-store.com'}
+                    {config.email || 'contacto@pretty store.com'}
                   </p>
                   <p className="text-[11px] text-stone-500">Consultas corporativas y soporte</p>
                 </div>

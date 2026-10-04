@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   X,
   CreditCard,
@@ -20,6 +20,7 @@ import {
   ArrowLeft,
   ShoppingBag,
   FileCheck,
+  Lock,
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { MetodoPago, TipoEntrega, CourierOption } from '../../types/database';
@@ -280,7 +281,20 @@ export const UNO_EXPRESS_SUCURSALES: Record<PanamaProvince, SingleCourierBranch[
   ],
 };
 
-type CheckoutStep = 'form' | 'payment' | 'receipt';
+/**
+ * Extrae el valor numérico en dólares a partir del string de tarifa (ej. "$3.86" -> 3.86, "B/. 6.50" -> 6.50)
+ */
+export function parseShippingRateToNumber(rateStr: string): number {
+  if (!rateStr) return 0;
+  const match = rateStr.match(/(\d+(?:\.\d+)?)/);
+  if (match) {
+    const val = parseFloat(match[1]);
+    return isNaN(val) ? 0 : val;
+  }
+  return 0;
+}
+
+type CheckoutStep = 'form' | 'review' | 'payment' | 'receipt';
 
 export const CheckoutDemoModal: React.FC = () => {
   const {
@@ -288,12 +302,14 @@ export const CheckoutDemoModal: React.FC = () => {
     subtotal,
     discount,
     promo,
+    clearCart,
     isCheckoutOpen,
     setIsCheckoutOpen,
   } = useCart();
 
-  // Pasos: 'form' -> 'payment' (con número de pedido) -> 'receipt' (con WhatsApp)
+  // Pasos: 'form' -> 'review' (hojita y confirmación) -> 'payment' (números de pago y comprobante) -> 'receipt' (con WhatsApp)
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>('form');
+  const [hasOpenedWhatsApp, setHasOpenedWhatsApp] = useState(false);
 
   // 1. Modalidad de Entrega
   const [tipoEntrega, setTipoEntrega] = useState<TipoEntrega>('delivery');
@@ -331,10 +347,36 @@ export const CheckoutDemoModal: React.FC = () => {
   const [confirmedOrder, setConfirmedOrder] = useState<CreatedOrderResult | null>(null);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
 
-  // Total sin sumar envío en la web (el envío es aproximado y se cancela a la agencia)
-  const finalTotal = useMemo(() => {
-    return Math.max(0, subtotal - discount);
-  }, [subtotal, discount]);
+  // REINICIAR TODO EL ESTADO PARA UN NUEVO PEDIDO
+  const resetCheckout = () => {
+    setCheckoutStep('form');
+    setConfirmedOrder(null);
+    setVoucherImage(null);
+    setVoucherFileName(null);
+    setIsVoucherAttached(false);
+    setHasOpenedWhatsApp(false);
+    setNombre('');
+    setTelefono('');
+    setDireccion('');
+    setNotas('');
+    setFormErrors({});
+    setSubmissionError(null);
+    if (voucherInputRef.current) voucherInputRef.current.value = '';
+  };
+
+  // Si se cierra el modal estando en 'receipt', reiniciar para que el próximo pedido empiece 100% limpio
+  useEffect(() => {
+    if (!isCheckoutOpen && checkoutStep === 'receipt') {
+      resetCheckout();
+    }
+  }, [isCheckoutOpen, checkoutStep]);
+
+  // Si se abre el modal y estaba en 'receipt', forzar inicio limpio en 'form'
+  useEffect(() => {
+    if (isCheckoutOpen && checkoutStep === 'receipt') {
+      resetCheckout();
+    }
+  }, [isCheckoutOpen, checkoutStep]);
 
   // Lista de sucursales de Servientrega
   const currentServientregaBranches = useMemo<ServientregaBranchRate[]>(() => {
@@ -371,11 +413,24 @@ export const CheckoutDemoModal: React.FC = () => {
     return '$5.00';
   }, [courier, currentFergusonBranches, currentUnoExpressBranches, sucursalRetiro]);
 
-  // Tarifa estimada para mostrar según el courier seleccionado
+  // Tarifa estimada textual para mostrar según el courier seleccionado
   const displayEstimatedRate = useMemo(() => {
     if (courier === 'Servientrega') return activeServientregaRate;
     return activeSingleRate;
   }, [courier, activeServientregaRate, activeSingleRate]);
+
+  // REQUISITO SOLICITADO: "el precio del envió no se agrega al precio arregla eso"
+  // Calculamos el valor numérico del envío seleccionado y LO AGREGAMOS al total
+  const numericalShipping = useMemo(() => {
+    if (tipoEntrega === 'retiro') return 0;
+    return parseShippingRateToNumber(displayEstimatedRate);
+  }, [tipoEntrega, displayEstimatedRate]);
+
+  // Total CON ENVÍO SUMADO
+  const finalTotal = useMemo(() => {
+    const itemsTotal = Math.max(0, subtotal - discount);
+    return Number((itemsTotal + numericalShipping).toFixed(2));
+  }, [subtotal, discount, numericalShipping]);
 
   if (!isCheckoutOpen) return null;
 
@@ -482,10 +537,10 @@ export const CheckoutDemoModal: React.FC = () => {
 
     const resolvedAddress =
       tipoEntrega === 'retiro'
-        ? 'Retiro en el Local / Tienda física (Pretty-Store)'
+        ? 'Retiro en el Local / Tienda física (Pretty Store)'
         : (courier === 'Servientrega' && servientregaModalidad === 'domicilio')
           ? (direccion.trim() || `Entrega a Domicilio (${provincia})`)
-          : `Sucursal ${courier}: ${branchClean} (${provincia})`;
+          : `Sucursal de envío (${courier}): ${branchClean} (${provincia})`;
 
     // Generar número de pedido legible de inmediato
     const randomSuffix = Math.floor(100000 + Math.random() * 900000);
@@ -511,7 +566,7 @@ export const CheckoutDemoModal: React.FC = () => {
       subtotal,
       discount,
       promoTitle: promo.promoTitle,
-      shipping: 0,
+      shipping: numericalShipping,
       total: finalTotal,
       itemCount: items.reduce((acc, i) => acc + i.quantity, 0),
       items: [...items],
@@ -519,18 +574,18 @@ export const CheckoutDemoModal: React.FC = () => {
     };
 
     // 1. Mostrar de inmediato la vista del Número de Pedido y la Hojita de lo que pidió
-    // ¡EL CARRITO NO SE ELIMINA AQUÍ!
+    // ¡EL CARRITO NO SE ELIMINA AQUÍ! Se mantiene para que pueda regresar libremente.
     setConfirmedOrder(instantSummary);
-    setCheckoutStep('payment');
+    setCheckoutStep('review');
     setIsSubmitting(false);
 
-    // 2. Guardar en Supabase en segundo plano sin bloquear la UI
+    // 2. Guardar en Supabase en segundo plano con el costo de envío sumado
     createRealOrder({
       items,
       subtotal,
       discount,
       promoTitle: promo.promoTitle,
-      shipping: 0,
+      shipping: numericalShipping,
       total: finalTotal,
       nombre: nombre.trim(),
       telefono: telefono.trim(),
@@ -548,7 +603,7 @@ export const CheckoutDemoModal: React.FC = () => {
     });
   };
 
-  // PASO 2 -> PASO 3: "Confirmar Pedido" después de subir comprobante (OBLIGATORIO)
+  // PASO 3 -> PASO 4: "Confirmar Comprobante" después de subir comprobante (OBLIGATORIO)
   const handleFinalOrderConfirmation = async () => {
     if (!voucherImage) {
       alert('Debes ingresar la captura de tu comprobante de pago para continuar.');
@@ -566,13 +621,85 @@ export const CheckoutDemoModal: React.FC = () => {
         console.warn('Sync voucher status:', e);
       }
     }
-    // Pasar a la pantalla del Recibo Oficial y Envío por WhatsApp
+    // Pasar a la pantalla del Recibo Oficial
     setCheckoutStep('receipt');
+    setHasOpenedWhatsApp(true);
+
+    // Se envía / abre automáticamente a WhatsApp apenas se confirma el comprobante
+    handleSendToWhatsApp();
   };
 
-  // Función para copiar comprobante al portapapeles y abrir WhatsApp
+  // Función para enviar captura y recibo por WhatsApp (soporte nativo para móviles + portapapeles en PC)
   const handleSendToWhatsApp = async () => {
-    // Si hay imagen cargada, intentar copiarla al portapapeles del dispositivo
+    setHasOpenedWhatsApp(true);
+    const rawUrl = generateWhatsAppUrl();
+    const orderNum = confirmedOrder?.orderNumber || '#PEDIDO';
+    const paymentLabel =
+      metodoPago === 'yappy'
+        ? 'Yappy (6215-0251)'
+        : metodoPago === 'transferencia'
+        ? 'Transferencia Bancaria (Banco General)'
+        : 'Tarjeta de Débito o Crédito';
+
+    let entregaLabel = '';
+    if (tipoEntrega === 'retiro') {
+      entregaLabel = 'Retiro en el Local';
+    } else {
+      entregaLabel = `Envío express (${courier}) en ${provincia}`;
+      if (courier === 'Servientrega' && servientregaModalidad === 'domicilio') {
+        entregaLabel += ` - A Domicilio: ${direccion}`;
+      } else {
+        entregaLabel += ` - Sucursal: ${sucursalRetiro}`;
+      }
+    }
+
+    const itemsText = (confirmedOrder?.items || items)
+      .map((it) => `• ${it.product.nombre} (Cant: ${it.quantity} × $${it.product.precio.toFixed(2)})`)
+      .join('\n');
+
+    const shippingLine =
+      confirmedOrder?.shipping && confirmedOrder.shipping > 0
+        ? `*Envío (${confirmedOrder.courier}):* $${confirmedOrder.shipping.toFixed(2)} USD`
+        : '*Envío:* Gratis (Retiro en tienda)';
+
+    const msg = `*Recibo Oficial de Compra*
+*#${orderNum}*
+
+*Cliente:* ${nombre.trim()}
+*Teléfono:* ${telefono.trim()}
+*Método de Pago:* ${paymentLabel}
+*Entrega:* ${entregaLabel}
+
+*Productos:*
+${itemsText}
+
+*Subtotal:* $${(confirmedOrder?.subtotal || subtotal).toFixed(2)} USD
+${(confirmedOrder?.discount || discount) > 0 ? `*Descuento:* -$${(confirmedOrder?.discount || discount).toFixed(2)} USD\n` : ''}${shippingLine}
+*Total a Cancelar (con envío):* $${(confirmedOrder?.total || finalTotal).toFixed(2)} USD
+
+*Comprobante:*
+${isVoucherAttached ? `✓ Captura adjuntada (${voucherFileName || 'comprobante_pago.png'})` : 'Comprobante verificado'}`;
+
+    // 1. Si el dispositivo (iPhone, Android, tablet) soporta compartir archivos directamente:
+    if (voucherImage && navigator.share) {
+      try {
+        const res = await fetch(voucherImage);
+        const blob = await res.blob();
+        const file = new File([blob], voucherFileName || 'comprobante_pago.png', { type: blob.type || 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `Recibo de Compra #${orderNum}`,
+            text: msg,
+            files: [file],
+          });
+          return;
+        }
+      } catch (shareErr) {
+        console.log('Native share not completed:', shareErr);
+      }
+    }
+
+    // 2. Si es computadora o no soporta compartir archivo directo, copiar al portapapeles:
     if (voucherImage) {
       try {
         const res = await fetch(voucherImage);
@@ -582,16 +709,15 @@ export const CheckoutDemoModal: React.FC = () => {
           await navigator.clipboard.write([item]);
         }
       } catch (clipErr) {
-        console.log('Clipboard auto-copy not supported:', clipErr);
+        console.log('Clipboard auto-copy fallback:', clipErr);
       }
     }
 
-    // Abrir WhatsApp con el recibo estructurado
-    const url = generateWhatsAppUrl();
-    window.open(url, '_blank', 'noopener,noreferrer');
+    // 3. Abrir WhatsApp directamente con el recibo estructurado
+    window.open(rawUrl, '_blank', 'noopener,noreferrer');
   };
 
-  // Generador del Recibo Oficial para WhatsApp
+  // Generador del Recibo Oficial para WhatsApp con el envío sumado
   const generateWhatsAppUrl = () => {
     const orderNum = confirmedOrder?.orderNumber || '#PEDIDO';
     const paymentLabel =
@@ -603,7 +729,7 @@ export const CheckoutDemoModal: React.FC = () => {
 
     let entregaLabel = '';
     if (tipoEntrega === 'retiro') {
-      entregaLabel = 'Retiro en el Local (Sede La Chorrera)';
+      entregaLabel = 'Retiro en el Local';
     } else {
       entregaLabel = `Envío express (${courier}) en ${provincia}`;
       if (courier === 'Servientrega' && servientregaModalidad === 'domicilio') {
@@ -621,6 +747,11 @@ export const CheckoutDemoModal: React.FC = () => {
       ? `✓ Captura de comprobante montada (${voucherFileName || 'captura'}). Te la envío a continuación.`
       : `Adjunto mi captura de comprobante a este mensaje.`;
 
+    const shippingLine =
+      confirmedOrder?.shipping && confirmedOrder.shipping > 0
+        ? `*Envío (${confirmedOrder.courier}):* $${confirmedOrder.shipping.toFixed(2)} USD`
+        : '*Envío:* Gratis (Retiro en tienda)';
+
     const msg = `*Recibo Oficial de Compra*
 *#${orderNum}*
 
@@ -633,8 +764,8 @@ export const CheckoutDemoModal: React.FC = () => {
 ${itemsText}
 
 *Subtotal:* $${(confirmedOrder?.subtotal || subtotal).toFixed(2)} USD
-${(confirmedOrder?.discount || discount) > 0 ? `*Descuento:* -$${(confirmedOrder?.discount || discount).toFixed(2)} USD\n` : ''}*Total a Pagar:* $${finalTotal.toFixed(2)} USD
-*Envío:* A coordinar por WhatsApp según agencia y destino.
+${(confirmedOrder?.discount || discount) > 0 ? `*Descuento:* -$${(confirmedOrder?.discount || discount).toFixed(2)} USD\n` : ''}${shippingLine}
+*Total a Pagar (con envío):* $${(confirmedOrder?.total || finalTotal).toFixed(2)} USD
 
 *Comprobante:*
 ${voucherStatus}`;
@@ -642,30 +773,53 @@ ${voucherStatus}`;
     return `https://wa.me/${WHATSAPP_ORDERS_PHONE}?text=${encodeURIComponent(msg)}`;
   };
 
-  // REGRESAR A LA TIENDA SIN ELIMINAR EL CARRITO (Requisito explícito del usuario)
+  // REGRESAR A LA TIENDA (No permite salir en el paso de recibo hasta enviar por WhatsApp)
   const handleReturnToStore = () => {
+    if (checkoutStep === 'receipt') {
+      if (!hasOpenedWhatsApp) {
+        alert('Debes presionar "Enviar Captura y Recibo por WhatsApp" antes de regresar a la tienda.');
+        return;
+      }
+      clearCart();
+      resetCheckout();
+      setIsCheckoutOpen(false);
+      return;
+    }
+    setIsCheckoutOpen(false);
+  };
+
+  // CERRAR PEDIDO (Se habilita después de ingresar al link de WhatsApp y reinicia todo para el siguiente pedido)
+  const handleCloseOrder = () => {
+    if (!hasOpenedWhatsApp) {
+      alert('Debes presionar "Enviar Captura y Recibo por WhatsApp" antes de cerrar tu pedido.');
+      return;
+    }
+    clearCart();
+    resetCheckout();
     setIsCheckoutOpen(false);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-150">
-      <div className="bg-[#09090b] border border-white/10 rounded-2xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-150">
+      <div className="bg-[#09090b] border border-white/10 rounded-2xl w-full max-w-full sm:max-w-2xl lg:max-w-3xl max-h-[94dvh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative overscroll-contain">
         {/* Header Bar */}
-        <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-black/50">
+        <div className="p-3.5 sm:p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-black/60">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24] shadow-sm shadow-[#fbbf24]/50" />
-            <span className="text-xs uppercase tracking-[0.25em] text-[#fbbf24] font-bold">
-              {checkoutStep === 'form' && 'Pretty-Store · Datos del Pedido'}
-              {checkoutStep === 'payment' && 'Pretty-Store · Confirmación y Pago'}
-              {checkoutStep === 'receipt' && 'Pretty-Store · Recibo Oficial'}
+            <span className="text-xs uppercase tracking-[0.2em] text-[#fbbf24] font-bold truncate">
+              {checkoutStep === 'form' && 'Pretty Store · Datos del Pedido'}
+              {checkoutStep === 'review' && 'Pretty Store · Confirma tu Pedido'}
+              {checkoutStep === 'payment' && 'Pretty Store · Pago y Comprobante'}
+              {checkoutStep === 'receipt' && 'Pretty Store · Recibo Oficial'}
             </span>
           </div>
           <button
             onClick={handleReturnToStore}
-            className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+            className="p-2 rounded-lg text-stone-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
             title="Cerrar sin borrar bolsa"
+            aria-label="Cerrar modal"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
@@ -673,7 +827,7 @@ ${voucherStatus}`;
         {/* PASO 1: FORMULARIO BÁSICO (ENTREGA, CLIENTE, COURIER CON TARIFAS, PAGO) */}
         {/* ========================================================================= */}
         {checkoutStep === 'form' && (
-          <div className="overflow-y-auto p-5 sm:p-7 space-y-6">
+          <div className="overflow-y-auto overscroll-contain touch-scroll p-4 sm:p-6 lg:p-7 space-y-6 pb-8 sm:pb-6">
             <form onSubmit={handleProceedToPayment} className="space-y-6">
               {submissionError && (
                 <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
@@ -689,36 +843,35 @@ ${voucherStatus}`;
                   <span>1. ¿Cómo deseas recibir tu compra? *</span>
                 </label>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setTipoEntrega('retiro')}
-                    className={`p-3.5 border text-left cursor-pointer transition-all flex items-center gap-2.5 rounded-xl ${
+                    className={`p-3.5 border text-left cursor-pointer transition-all flex items-center gap-3 rounded-xl min-h-[56px] active:scale-[0.98] ${
                       tipoEntrega === 'retiro'
                         ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-2 ring-[#fbbf24]'
                         : 'border-white/10 bg-stone-900/40 text-stone-400 hover:border-white/20'
                     }`}
                   >
-                    <Store size={20} className={tipoEntrega === 'retiro' ? 'text-[#fbbf24]' : 'text-stone-400'} />
+                    <Store size={22} className={tipoEntrega === 'retiro' ? 'text-[#fbbf24]' : 'text-stone-400'} />
                     <div>
-                      <p className="text-xs font-bold text-white">Retirar en el Local</p>
-                      <p className="text-[10px] text-stone-400">Sede La Chorrera · Gratis</p>
+                      <p className="text-xs sm:text-sm font-bold text-white">Retirar en el Local</p>
                     </div>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setTipoEntrega('delivery')}
-                    className={`p-3.5 border text-left cursor-pointer transition-all flex items-center gap-2.5 rounded-xl ${
+                    className={`p-3.5 border text-left cursor-pointer transition-all flex items-center gap-3 rounded-xl min-h-[56px] active:scale-[0.98] ${
                       tipoEntrega === 'delivery'
                         ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-2 ring-[#fbbf24]'
                         : 'border-white/10 bg-stone-900/40 text-stone-400 hover:border-white/20'
                     }`}
                   >
-                    <Truck size={20} className={tipoEntrega === 'delivery' ? 'text-[#fbbf24]' : 'text-stone-400'} />
+                    <Truck size={22} className={tipoEntrega === 'delivery' ? 'text-[#fbbf24]' : 'text-stone-400'} />
                     <div>
-                      <p className="text-xs font-bold text-white">Envío express</p>
-                      <p className="text-[10px] text-stone-400">Servientrega / Ferguson / UnoExpress</p>
+                      <p className="text-xs sm:text-sm font-bold text-white">Envío express</p>
+                      <p className="text-[10px] sm:text-xs text-stone-400">Servientrega / Ferguson / UnoExpress</p>
                     </div>
                   </button>
                 </div>
@@ -727,12 +880,12 @@ ${voucherStatus}`;
               {/* Si es Envío express: Selección de Courier, Provincia y Sucursal con Tarifas */}
               {tipoEntrega === 'delivery' && (
                 <div className="p-4 rounded-xl bg-stone-900/60 border border-white/10 space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                     <label className="text-xs uppercase tracking-wider text-stone-200 font-bold block">
-                      Selecciona tu Courier de Preferencia *
+                      Selecciona tu Envío *
                     </label>
                     <span className="text-[10px] text-[#fbbf24] font-medium">
-                      * El precio depende del producto
+                      * El envío se suma automáticamente al total
                     </span>
                   </div>
 
@@ -745,17 +898,17 @@ ${voucherStatus}`;
                         const def = SERVIENTREGA_SUCURSALES[provincia]?.[0]?.branch || 'La Chorrera (Av. de las Américas)';
                         setSucursalRetiro(def);
                       }}
-                      className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                      className={`p-3 rounded-xl border text-left cursor-pointer transition-all active:scale-[0.98] ${
                         courier === 'Servientrega'
                           ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-2 ring-[#fbbf24]'
                           : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-extrabold text-xs text-white">1. Servientrega</span>
-                        {courier === 'Servientrega' && <span className="w-2 h-2 rounded-full bg-[#fbbf24]" />}
+                        <span className="font-extrabold text-xs sm:text-sm text-white">1. Servientrega</span>
+                        {courier === 'Servientrega' && <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24]" />}
                       </div>
-                      <span className="text-[10px] text-emerald-400 font-mono block mt-1">
+                      <span className="text-[11px] text-emerald-400 font-mono block mt-1 font-semibold">
                         Desde $3.25 (Sucursal / Casa)
                       </span>
                     </button>
@@ -768,17 +921,17 @@ ${voucherStatus}`;
                         const def = FERGUSON_SUCURSALES[provincia]?.[0]?.branch || 'La Chorrera (Parque Feuillet)';
                         setSucursalRetiro(def);
                       }}
-                      className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                      className={`p-3 rounded-xl border text-left cursor-pointer transition-all active:scale-[0.98] ${
                         courier === 'Ferguson'
                           ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-2 ring-[#fbbf24]'
                           : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-extrabold text-xs text-white">2. Ferguson</span>
-                        {courier === 'Ferguson' && <span className="w-2 h-2 rounded-full bg-[#fbbf24]" />}
+                        <span className="font-extrabold text-xs sm:text-sm text-white">2. Ferguson</span>
+                        {courier === 'Ferguson' && <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24]" />}
                       </div>
-                      <span className="text-[10px] text-[#fbbf24] font-mono block mt-1">
+                      <span className="text-[11px] text-[#fbbf24] font-mono block mt-1 font-semibold">
                         Desde $5.00 aprox.
                       </span>
                     </button>
@@ -791,17 +944,17 @@ ${voucherStatus}`;
                         const def = UNO_EXPRESS_SUCURSALES[provincia]?.[0]?.branch || 'La Chorrera (Plaza Italia)';
                         setSucursalRetiro(def);
                       }}
-                      className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                      className={`p-3 rounded-xl border text-left cursor-pointer transition-all active:scale-[0.98] ${
                         courier === 'Uno Express'
                           ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-2 ring-[#fbbf24]'
                           : 'border-white/10 bg-black/40 text-stone-400 hover:border-white/20'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-extrabold text-xs text-white">3. UnoExpress</span>
-                        {courier === 'Uno Express' && <span className="w-2 h-2 rounded-full bg-[#fbbf24]" />}
+                        <span className="font-extrabold text-xs sm:text-sm text-white">3. UnoExpress</span>
+                        {courier === 'Uno Express' && <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24]" />}
                       </div>
-                      <span className="text-[10px] text-[#fbbf24] font-mono block mt-1">
+                      <span className="text-[11px] text-[#fbbf24] font-mono block mt-1 font-semibold">
                         Desde $6.50 aprox.
                       </span>
                     </button>
@@ -809,10 +962,10 @@ ${voucherStatus}`;
 
                   {/* Modalidad Servientrega: Explicación de los 2 Números (1er número a la sucursal, 2do número a la casa) */}
                   {courier === 'Servientrega' && (
-                    <div className="space-y-2 pt-1 border-t border-white/10">
+                    <div className="space-y-2 pt-2 border-t border-white/10">
                       <div className="flex items-center justify-between">
-                        <label className="text-[11px] text-stone-200 font-semibold">
-                          Modalidad Servientrega (2 Precios del PDF):
+                        <label className="text-xs text-stone-200 font-semibold">
+                          Modalidad Servientrega:
                         </label>
                         <span className="text-[10px] text-[#fbbf24] font-mono">
                           1° Sucursal vs 2° A Casa
@@ -822,34 +975,34 @@ ${voucherStatus}`;
                         <button
                           type="button"
                           onClick={() => setServientregaModalidad('sucursal')}
-                          className={`p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all flex flex-col items-center justify-center gap-1 ${
+                          className={`p-3 rounded-xl border text-xs font-semibold cursor-pointer transition-all flex flex-col items-center justify-center gap-1 active:scale-[0.98] ${
                             servientregaModalidad === 'sucursal'
                               ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
                               : 'border-white/10 bg-stone-900 text-stone-400 hover:text-white'
                           }`}
                         >
                           <div className="flex items-center gap-1.5">
-                            <Store size={14} className="text-[#fbbf24]" />
-                            <span>Envío a la Sucursal</span>
+                            <Store size={15} className="text-[#fbbf24]" />
+                            <span className="font-bold">Envío a la Sucursal</span>
                           </div>
-                          <span className="text-[10px] font-mono text-emerald-400">
+                          <span className="text-[11px] font-mono text-emerald-400 font-bold">
                             1° Tarifa (ej. $3.25 / $3.86)
                           </span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setServientregaModalidad('domicilio')}
-                          className={`p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all flex flex-col items-center justify-center gap-1 ${
+                          className={`p-3 rounded-xl border text-xs font-semibold cursor-pointer transition-all flex flex-col items-center justify-center gap-1 active:scale-[0.98] ${
                             servientregaModalidad === 'domicilio'
                               ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
                               : 'border-white/10 bg-stone-900 text-stone-400 hover:text-white'
                           }`}
                         >
                           <div className="flex items-center gap-1.5">
-                            <Home size={14} className="text-[#fbbf24]" />
-                            <span>Envío a la Casa</span>
+                            <Home size={15} className="text-[#fbbf24]" />
+                            <span className="font-bold">Envío a la Casa</span>
                           </div>
-                          <span className="text-[10px] font-mono text-amber-300">
+                          <span className="text-[11px] font-mono text-amber-300 font-bold">
                             2° Tarifa (ej. $5.61 / $5.79)
                           </span>
                         </button>
@@ -882,9 +1035,9 @@ ${voucherStatus}`;
                                 if (list && list[0]) setSucursalRetiro(list[0].branch);
                               }
                             }}
-                            className={`p-2 rounded-xl border text-left text-xs font-medium transition-all ${
+                            className={`p-2.5 rounded-xl border text-left text-xs font-medium transition-all active:scale-[0.98] ${
                               isSelected
-                                ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white'
+                                ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white font-bold'
                                 : 'border-white/10 bg-black/40 text-stone-400 hover:text-white'
                             }`}
                           >
@@ -902,8 +1055,8 @@ ${voucherStatus}`;
                         <label className="text-[11px] text-stone-300 font-medium block">
                           Dirección exacta de entrega a domicilio: *
                         </label>
-                        <span className="text-[10px] text-amber-300 font-mono font-bold">
-                          Tarifa Casa estimada: {activeServientregaRate}
+                        <span className="text-xs text-amber-300 font-mono font-bold">
+                          Envío Casa: {activeServientregaRate}
                         </span>
                       </div>
                       <input
@@ -911,10 +1064,10 @@ ${voucherStatus}`;
                         placeholder="Barriada, calle, número de casa/apto en Panamá..."
                         value={direccion}
                         onChange={(e) => setDireccion(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-black/60 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-[#fbbf24]"
+                        className="w-full px-3.5 py-3 bg-black/60 border border-white/10 rounded-xl text-sm sm:text-xs text-white focus:outline-none focus:border-[#fbbf24]"
                       />
                       <p className="text-[10px] text-stone-400 font-light">
-                        Tarifa de entrega a domicilio según agencia Servientrega: <strong>{activeServientregaRate} aprox.</strong> (depende del producto).
+                        Tarifa de entrega a domicilio sumada al pedido: <strong>{activeServientregaRate}</strong> (depende del producto).
                       </p>
                     </div>
                   ) : courier === 'Servientrega' ? (
@@ -923,11 +1076,11 @@ ${voucherStatus}`;
                         <label className="text-[11px] text-stone-300 font-medium">
                           Sucursal de Servientrega en {provincia}:
                         </label>
-                        <span className="text-[10px] text-emerald-400 font-mono font-bold">
-                          Tarifa Sucursal estimada: {activeServientregaRate}
+                        <span className="text-xs text-emerald-400 font-mono font-bold">
+                          Envío Sucursal: {activeServientregaRate}
                         </span>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto overscroll-contain pr-1">
                         {currentServientregaBranches.map((b) => {
                           const isSel = sucursalRetiro === b.branch;
                           return (
@@ -935,7 +1088,7 @@ ${voucherStatus}`;
                               key={b.branch}
                               type="button"
                               onClick={() => setSucursalRetiro(b.branch)}
-                              className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                              className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
                                 isSel
                                   ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
                                   : 'border-white/10 bg-black/50 text-stone-300 hover:border-white/25'
@@ -943,10 +1096,10 @@ ${voucherStatus}`;
                             >
                               <span className="font-medium truncate">{b.branch}</span>
                               <div className="text-right shrink-0">
-                                <span className="text-[10px] font-mono text-emerald-400 font-bold block">
+                                <span className="text-[11px] font-mono text-emerald-400 font-bold block">
                                   {b.branchRate}
                                 </span>
-                                <span className="text-[8px] text-stone-400 block">
+                                <span className="text-[9px] text-stone-400 block">
                                   Casa: {b.homeRate}
                                 </span>
                               </div>
@@ -961,11 +1114,11 @@ ${voucherStatus}`;
                         <label className="text-[11px] text-stone-300 font-medium">
                           Sucursal de Ferguson en {provincia}:
                         </label>
-                        <span className="text-[10px] text-[#fbbf24] font-mono font-bold">
-                          Tarifa estimada: {activeSingleRate}
+                        <span className="text-xs text-[#fbbf24] font-mono font-bold">
+                          Envío Sucursal: {activeSingleRate}
                         </span>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto overscroll-contain pr-1">
                         {currentFergusonBranches.map((b) => {
                           const isSel = sucursalRetiro === b.branch;
                           return (
@@ -973,14 +1126,14 @@ ${voucherStatus}`;
                               key={b.branch}
                               type="button"
                               onClick={() => setSucursalRetiro(b.branch)}
-                              className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                              className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
                                 isSel
                                   ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
                                   : 'border-white/10 bg-black/50 text-stone-300 hover:border-white/25'
                               }`}
                             >
                               <span className="font-medium truncate">{b.branch}</span>
-                              <span className="text-[10px] font-mono text-[#fbbf24] shrink-0 font-bold">
+                              <span className="text-xs font-mono text-[#fbbf24] shrink-0 font-bold">
                                 {b.rate}
                               </span>
                             </button>
@@ -994,11 +1147,11 @@ ${voucherStatus}`;
                         <label className="text-[11px] text-stone-300 font-medium">
                           Sucursal de UnoExpress en {provincia}:
                         </label>
-                        <span className="text-[10px] text-[#fbbf24] font-mono font-bold">
-                          Tarifa estimada: {activeSingleRate}
+                        <span className="text-xs text-[#fbbf24] font-mono font-bold">
+                          Envío Sucursal: {activeSingleRate}
                         </span>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto overscroll-contain pr-1">
                         {currentUnoExpressBranches.map((b) => {
                           const isSel = sucursalRetiro === b.branch;
                           return (
@@ -1006,14 +1159,14 @@ ${voucherStatus}`;
                               key={b.branch}
                               type="button"
                               onClick={() => setSucursalRetiro(b.branch)}
-                              className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                              className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
                                 isSel
                                   ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
                                   : 'border-white/10 bg-black/50 text-stone-300 hover:border-white/25'
                               }`}
                             >
                               <span className="font-medium truncate">{b.branch}</span>
-                              <span className="text-[10px] font-mono text-[#fbbf24] shrink-0 font-bold">
+                              <span className="text-xs font-mono text-[#fbbf24] shrink-0 font-bold">
                                 {b.rate}
                               </span>
                             </button>
@@ -1023,11 +1176,11 @@ ${voucherStatus}`;
                     </div>
                   )}
 
-                  {/* AVISO CLARO: EL PRECIO DEL ENVÍO DEPENDE DEL PRODUCTO Y ES SOLO UN APROXIMADO */}
+                  {/* AVISO CLARO: EL PRECIO DEL ENVÍO DEPENDE DEL PRODUCTO Y SE SUMA AL TOTAL */}
                   <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2">
                     <AlertCircle size={15} className="text-amber-400 shrink-0 mt-0.5" />
                     <p className="text-[11px] leading-relaxed">
-                      <strong>Aviso de Envío:</strong> Los precios mostrados (ej. {displayEstimatedRate}) <strong>son solo un aproximado</strong> y <strong>el precio del envío depende del producto</strong> y dimensiones del paquete. El costo exacto se cancela directamente al retirar en la agencia o recibir.
+                      <strong>Aviso de Envío:</strong> La tarifa de <strong>+${numericalShipping.toFixed(2)} USD</strong> se suma directamente a tu total a pagar. Ten en cuenta que el precio del envío depende del producto según la empresa de transporte seleccionada (Servientrega, Ferguson o UnoExpress).
                     </p>
                   </div>
                 </div>
@@ -1046,7 +1199,7 @@ ${voucherStatus}`;
                       placeholder="Ej. Roberto Cedeño"
                       value={nombre}
                       onChange={(e) => setNombre(e.target.value)}
-                      className={`w-full px-3.5 py-2.5 bg-stone-900/60 border text-xs text-white placeholder-stone-600 focus:outline-none rounded-xl ${
+                      className={`w-full px-3.5 py-3 bg-stone-900/60 border text-sm sm:text-xs text-white placeholder-stone-600 focus:outline-none rounded-xl ${
                         formErrors.nombre ? 'border-rose-500' : 'border-white/10 focus:border-[#fbbf24]'
                       }`}
                     />
@@ -1060,7 +1213,7 @@ ${voucherStatus}`;
                       placeholder="+507 6000-0000"
                       value={telefono}
                       onChange={(e) => setTelefono(e.target.value)}
-                      className={`w-full px-3.5 py-2.5 bg-stone-900/60 border text-xs text-white placeholder-stone-600 focus:outline-none rounded-xl ${
+                      className={`w-full px-3.5 py-3 bg-stone-900/60 border text-sm sm:text-xs text-white placeholder-stone-600 focus:outline-none rounded-xl ${
                         formErrors.telefono ? 'border-rose-500' : 'border-white/10 focus:border-[#fbbf24]'
                       }`}
                     />
@@ -1074,66 +1227,78 @@ ${voucherStatus}`;
                 <label className="text-xs uppercase tracking-[0.16em] text-white font-bold block">
                   3. Selecciona tu Método de Pago *
                 </label>
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
                   <button
                     type="button"
                     onClick={() => setMetodoPago('yappy')}
-                    className={`p-3 rounded-xl border text-center cursor-pointer transition-all ${
+                    className={`p-3 rounded-xl border text-center cursor-pointer transition-all active:scale-[0.98] ${
                       metodoPago === 'yappy'
                         ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-1 ring-[#fbbf24]'
                         : 'border-white/10 bg-black/40 text-stone-400 hover:text-white'
                     }`}
                   >
-                    <Smartphone size={18} className="mx-auto text-[#fbbf24]" />
-                    <span className="text-xs font-bold block mt-1">Yappy</span>
+                    <Smartphone size={20} className="mx-auto text-[#fbbf24]" />
+                    <span className="text-xs sm:text-sm font-bold block mt-1">Yappy</span>
                     <span className="text-[9px] text-stone-400 font-mono">6215-0251</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setMetodoPago('transferencia')}
-                    className={`p-3 rounded-xl border text-center cursor-pointer transition-all ${
+                    className={`p-3 rounded-xl border text-center cursor-pointer transition-all active:scale-[0.98] ${
                       metodoPago === 'transferencia'
                         ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-1 ring-[#fbbf24]'
                         : 'border-white/10 bg-black/40 text-stone-400 hover:text-white'
                     }`}
                   >
-                    <Landmark size={18} className="mx-auto text-[#fbbf24]" />
-                    <span className="text-xs font-bold block mt-1">Banco General</span>
+                    <Landmark size={20} className="mx-auto text-[#fbbf24]" />
+                    <span className="text-xs sm:text-sm font-bold block mt-1">Banco General</span>
                     <span className="text-[9px] text-stone-400 font-mono">ACH</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setMetodoPago('tarjeta')}
-                    className={`p-3 rounded-xl border text-center cursor-pointer transition-all ${
+                    className={`p-3 rounded-xl border text-center cursor-pointer transition-all active:scale-[0.98] ${
                       metodoPago === 'tarjeta'
                         ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-1 ring-[#fbbf24]'
                         : 'border-white/10 bg-black/40 text-stone-400 hover:text-white'
                     }`}
                   >
-                    <CreditCard size={18} className="mx-auto text-[#fbbf24]" />
-                    <span className="text-xs font-bold block mt-1 leading-tight">Tarjeta</span>
+                    <CreditCard size={20} className="mx-auto text-[#fbbf24]" />
+                    <span className="text-xs sm:text-sm font-bold block mt-1 leading-tight">Tarjeta</span>
                     <span className="text-[9px] text-stone-300 font-medium">Débito o Crédito</span>
                   </button>
                 </div>
               </div>
 
-              {/* Resumen básico de compra: subtotal, descuento, total */}
+              {/* Resumen de compra: subtotal, descuento, ENVÍO SUMADO y total */}
               <div className="p-4 rounded-xl bg-black/60 border border-white/10 space-y-2 text-xs">
                 <div className="flex justify-between text-stone-400">
-                  <span>Subtotal</span>
+                  <span>Subtotal productos:</span>
                   <span className="font-mono text-white">${subtotal.toFixed(2)} USD</span>
                 </div>
                 {discount > 0 && (
                   <div className="flex justify-between text-emerald-400 font-semibold">
-                    <span>{promo.promoTitle || 'Descuento Promocional'}</span>
+                    <span>{promo.promoTitle || 'Descuento Promocional'}:</span>
                     <span className="font-mono">-${discount.toFixed(2)} USD</span>
                   </div>
                 )}
+                <div className="flex justify-between text-stone-300">
+                  <span>
+                    {tipoEntrega === 'retiro'
+                      ? 'Retiro en el local:'
+                      : `Costo de envío (${courier}${courier === 'Servientrega' ? (servientregaModalidad === 'domicilio' ? ' a Casa' : ' a Sucursal') : ''}):`}
+                  </span>
+                  <span className="font-mono text-[#fbbf24] font-bold">
+                    {tipoEntrega === 'retiro'
+                      ? 'Gratis ($0.00)'
+                      : `+$${numericalShipping.toFixed(2)} USD`}
+                  </span>
+                </div>
                 <div className="pt-2 border-t border-white/10 flex justify-between items-center text-sm font-bold">
-                  <span className="text-white">Total a Pagar:</span>
-                  <span className="text-2xl font-mono text-[#fbbf24]">
+                  <span className="text-white">Total a Pagar (con envío):</span>
+                  <span className="text-xl sm:text-2xl font-mono text-[#fbbf24]">
                     ${finalTotal.toFixed(2)} USD
                   </span>
                 </div>
@@ -1144,7 +1309,7 @@ ${voucherStatus}`;
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] hover:from-[#f59e0b] hover:to-[#fbbf24] text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-xl shadow-[#fbbf24]/20 active:scale-[0.99]"
+                  className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] hover:from-[#f59e0b] hover:to-[#fbbf24] text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-xl shadow-[#fbbf24]/20 active:scale-[0.99] min-h-[48px]"
                 >
                   <span>Confirmar Pedido</span>
                   <ArrowRight size={18} />
@@ -1154,9 +1319,9 @@ ${voucherStatus}`;
                 <button
                   type="button"
                   onClick={handleReturnToStore}
-                  className="w-full py-2.5 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-400 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  className="w-full py-3 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-400 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[44px]"
                 >
-                  <ArrowLeft size={14} />
+                  <ArrowLeft size={15} />
                   <span>Regresar a la tienda (Conservar bolsa)</span>
                 </button>
               </div>
@@ -1165,122 +1330,176 @@ ${voucherStatus}`;
         )}
 
         {/* ========================================================================= */}
-        {/* PASO 2: NÚMERO DE PEDIDO PRIMERO + "TU PEDIDO ESTÁ CASI LISTO"             */}
-        {/*         + LA HOJITA DE LO QUE PIDIÓ + PAGO + CAPTURA OBLIGATORIA          */}
-        {/* REQUISITO EXACTO DEL USUARIO:
-            "quiero que aquí me des no el recibo oficial pero si lo que lo que persona
-             pidió ósea lo hojita que aparecía antes y que debajo del numero de pedio
-             aparezca tu pedido esta casi listo tmb que la imagen que adjunte se envié
-             a wasap nose porque no se envía y que la persona no pueda continuar hasta
-             que monte el comprobante y ya solo seria eso..."
-        */}
+        {/* PASO 2: HOJITA CON ESTÁS A PUNTO DE HACER TU COMPRA REVISA TU PEDIDO      */}
+        {/*         BOTÓN: "Continuar con el pedido"                                   */}
         {/* ========================================================================= */}
-        {checkoutStep === 'payment' && confirmedOrder && (
-          <div className="overflow-y-auto p-5 sm:p-7 space-y-6">
-            {/* 1. NÚMERO DE PEDIDO PRIMERO + "TU PEDIDO ESTÁ CASI LISTO" */}
-            <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-b from-[#fbbf24]/20 via-black to-black border-2 border-[#fbbf24] text-center space-y-2 shadow-2xl">
-              <span className="text-[11px] uppercase tracking-[0.25em] text-[#fbbf24] font-black block">
-                ✓ NÚMERO DE PEDIDO
-              </span>
-              <h2 className="text-3xl sm:text-5xl font-mono font-black text-[#fbbf24] tracking-wider drop-shadow-[0_2px_12px_rgba(251,191,36,0.5)]">
-                #{confirmedOrder.orderNumber}
-              </h2>
-              {/* TEXTO PEDIDO POR EL USUARIO DIRECTAMENTE DEBAJO DEL NÚMERO */}
-              <p className="text-sm sm:text-base font-extrabold text-white tracking-wide">
-                Tu pedido está casi listo
-              </p>
-              <p className="text-xs text-stone-300 font-medium">
-                Total a pagar: <strong className="text-white font-mono text-sm sm:text-base">${confirmedOrder.total.toFixed(2)} USD</strong>
-              </p>
-            </div>
-
-            {/* 2. "LA HOJITA QUE APARECÍA ANTES" - RESUMEN DE LO QUE LA PERSONA PIDIÓ */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-[#121216] border border-white/15 space-y-3.5 shadow-xl text-left">
-              <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                <h3 className="text-xs uppercase tracking-wider font-extrabold text-white flex items-center gap-2">
-                  <ShoppingBag size={16} className="text-[#fbbf24]" />
-                  <span>Resumen de lo que pediste</span>
-                </h3>
-                <span className="text-[11px] text-stone-400 font-mono">
-                  {confirmedOrder.itemCount} artículo{confirmedOrder.itemCount > 1 ? 's' : ''}
+        {checkoutStep === 'review' && confirmedOrder && (
+          <div className="overflow-y-auto overscroll-contain touch-scroll p-4 sm:p-6 lg:p-7 space-y-5 pb-8 sm:pb-6">
+            {/* Tarjeta con el diseño exacto de la primera imagen ("ESTÁS A PUNTO DE HACER TU COMPRA REVISA TU PEDIDO") */}
+            <div className="p-5 sm:p-6 rounded-2xl bg-black border border-white/10 text-left space-y-4 text-xs font-sans shadow-2xl">
+              {/* Encabezado: Título solicitado + Fecha */}
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-wider">
+                    ESTÁS A PUNTO DE HACER TU COMPRA REVISA TU PEDIDO
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#fbbf24] font-mono font-bold mt-0.5">
+                    #{confirmedOrder.orderNumber}
+                  </p>
+                </div>
+                <span className="text-stone-400 text-xs font-mono">
+                  {new Date().toLocaleDateString('es-PA')}
                 </span>
               </div>
 
-              {/* Lista de productos con foto, nombre, cantidad y precio */}
-              <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
-                {(confirmedOrder.items || items).map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="p-2.5 rounded-xl bg-black/60 border border-white/10 flex items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-12 h-12 rounded-lg bg-stone-900 border border-white/10 overflow-hidden shrink-0 flex items-center justify-center">
-                        {item.product.imagen_url ? (
-                          <img
-                            src={item.product.imagen_url}
-                            alt={item.product.nombre}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <ShoppingBag size={18} className="text-[#fbbf24]" />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-white truncate">
-                          {item.product.nombre}
-                        </p>
-                        <p className="text-[10px] text-stone-400">
-                          Cantidad: <strong className="text-[#fbbf24] font-mono">{item.quantity}</strong> × ${item.product.precio.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0">
-                      <span className="text-xs font-mono font-bold text-white">
-                        ${(item.quantity * item.product.precio).toFixed(2)} USD
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Desglose de totales */}
-              <div className="pt-2 border-t border-white/10 space-y-1.5 text-xs">
-                <div className="flex justify-between text-stone-400">
-                  <span>Subtotal productos:</span>
-                  <span className="font-mono text-white">${confirmedOrder.subtotal.toFixed(2)} USD</span>
+              {/* Fila: Cliente y Método de Pago */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <span className="text-stone-400 text-xs block font-medium">Cliente:</span>
+                  <span className="text-white font-bold text-sm block mt-0.5">{nombre}</span>
+                  <span className="text-stone-400 font-mono text-xs block">{telefono}</span>
                 </div>
-                {confirmedOrder.discount > 0 && (
-                  <div className="flex justify-between text-emerald-400 font-semibold">
-                    <span>{confirmedOrder.promoTitle || 'Descuento aplicado'}:</span>
-                    <span className="font-mono">-${confirmedOrder.discount.toFixed(2)} USD</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-stone-400 text-[11px]">
-                  <span>Envío express:</span>
-                  <span className="font-mono text-[#fbbf24]">A coordinar por WhatsApp (Aprox.)</span>
-                </div>
-                <div className="pt-2 border-t border-white/10 flex justify-between items-center text-sm font-black">
-                  <span className="text-white">Monto a Cancelar:</span>
-                  <span className="text-xl font-mono text-[#fbbf24]">
-                    ${confirmedOrder.total.toFixed(2)} USD
+                <div>
+                  <span className="text-stone-400 text-xs block font-medium">Método de Pago:</span>
+                  <span className="text-[#fbbf24] font-bold text-sm block mt-0.5">
+                    {metodoPago === 'yappy'
+                      ? 'Yappy (6215-0251)'
+                      : metodoPago === 'transferencia'
+                      ? 'Banco General (ACH)'
+                      : 'Tarjeta de Débito o Crédito'}
                   </span>
                 </div>
               </div>
+
+              {/* Modalidad de Entrega */}
+              <div>
+                <span className="text-stone-400 text-xs block font-medium">Modalidad de Entrega:</span>
+                <span className="text-white font-bold text-sm block mt-0.5">
+                  {tipoEntrega === 'retiro'
+                    ? 'Retiro en el Local'
+                    : `Envío express (${courier}) en ${provincia} - ${
+                        courier === 'Servientrega' && servientregaModalidad === 'domicilio'
+                          ? direccion
+                          : sucursalRetiro
+                      }`}
+                </span>
+              </div>
+
+              {/* Detalle de Productos */}
+              <div className="border-t border-white/10 pt-3 space-y-2">
+                <span className="text-stone-300 font-bold text-xs block">
+                  Detalle de Productos:
+                </span>
+                <div className="space-y-1.5">
+                  {(confirmedOrder.items || items).map((it, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-xs">
+                      <span className="text-white font-semibold">
+                        {it.product.nombre} <span className="text-stone-400 font-mono font-normal">({it.quantity}x)</span>
+                      </span>
+                      <span className="font-mono text-white font-bold text-xs">
+                        ${(it.quantity * it.product.precio).toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Subtotal y Envío */}
+              <div className="border-t border-white/10 pt-3 space-y-1.5 text-xs">
+                <div className="flex justify-between text-stone-300">
+                  <span>Subtotal productos:</span>
+                  <span className="font-mono text-white">${confirmedOrder.subtotal.toFixed(2)}</span>
+                </div>
+                {confirmedOrder.discount > 0 && (
+                  <div className="flex justify-between text-emerald-400 font-semibold">
+                    <span>Descuento aplicado:</span>
+                    <span className="font-mono">-${confirmedOrder.discount.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-stone-300">
+                  <span>Envío express ({confirmedOrder.courier || courier}):</span>
+                  <span className="font-mono text-[#fbbf24] font-bold">
+                    {confirmedOrder.shipping > 0
+                      ? `+$${confirmedOrder.shipping.toFixed(2)} USD`
+                      : 'Gratis ($0.00)'}
+                  </span>
+                </div>
+              </div>
+
+              {/* TOTAL CANCELADO */}
+              <div className="border-t border-white/10 pt-3 flex justify-between items-center">
+                <span className="text-white font-extrabold uppercase tracking-wider text-sm sm:text-base">
+                  TOTAL CANCELADO:
+                </span>
+                <span className="text-2xl sm:text-3xl font-mono font-black text-[#fbbf24]">
+                  ${confirmedOrder.total.toFixed(2)} USD
+                </span>
+              </div>
             </div>
 
-            {/* 3. APARTADO "Continuar con el pedido" */}
-            <div className="p-5 rounded-2xl bg-[#121216] border border-white/15 space-y-4 shadow-xl text-left">
+            {/* BOTÓN: "Continuar con el pedido" */}
+            <div className="space-y-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setCheckoutStep('payment')}
+                className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] hover:from-[#f59e0b] hover:to-[#fbbf24] text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xl shadow-[#fbbf24]/20 active:scale-[0.99] min-h-[48px]"
+              >
+                <span>Continuar con el pedido</span>
+                <ArrowRight size={18} />
+              </button>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCheckoutStep('form')}
+                  className="flex-1 py-3 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[44px]"
+                >
+                  <ArrowLeft size={14} />
+                  <span>Modificar Datos</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleReturnToStore}
+                  className="flex-1 py-3 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-400 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[44px]"
+                >
+                  <span>Regresar a la Tienda</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* PASO 3: DE PRIMERO EL NÚMERO DE PAGO (YAPPY, TARJETA O BANCO)              */}
+        {/*         Y DESPUÉS MONTA EL COMPROBANTE Y CONFIRMAR COMPROBANTE             */}
+        {/* ========================================================================= */}
+        {checkoutStep === 'payment' && confirmedOrder && (
+          <div className="overflow-y-auto overscroll-contain touch-scroll p-4 sm:p-6 lg:p-7 space-y-5 pb-8 sm:pb-6">
+            {/* Recordatorio de pedido y monto */}
+            <div className="p-3.5 sm:p-4 rounded-xl bg-stone-900/80 border border-white/10 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-stone-400 uppercase tracking-wider block">Pedido</span>
+                <span className="font-mono font-bold text-[#fbbf24] text-base sm:text-lg">#{confirmedOrder.orderNumber}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] text-stone-400 uppercase tracking-wider block">Total a Cancelar (con envío)</span>
+                <span className="font-mono font-bold text-white text-base sm:text-lg">${confirmedOrder.total.toFixed(2)} USD</span>
+              </div>
+            </div>
+
+            {/* 1. DE PRIMERO: NÚMERO DE YAPPY, TRANSFERENCIA O LINK DE TARJETA SEGÚN EL MÉTODO ELEGIDO */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-[#121216] border border-white/15 space-y-4 shadow-xl text-left">
               <div className="flex items-center justify-between pb-3 border-b border-white/10">
                 <div>
                   <h3 className="text-base font-extrabold text-white tracking-wide flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24]" />
-                    <span>Continuar con el pedido</span>
+                    <span>Datos para realizar el pago</span>
                   </h3>
                   <p className="text-xs text-stone-400 mt-0.5">
-                    {metodoPago === 'yappy' && 'Realiza tu pago vía Yappy con el siguiente número'}
-                    {metodoPago === 'tarjeta' && 'Realiza tu pago en el enlace seguro con Tarjeta de Débito o Crédito'}
-                    {metodoPago === 'transferencia' && 'Realiza tu transferencia bancaria a la siguiente cuenta'}
+                    {metodoPago === 'yappy' && 'Realiza tu pago vía Yappy con el siguiente número:'}
+                    {metodoPago === 'tarjeta' && 'Realiza tu pago en el enlace oficial con Tarjeta de Débito o Crédito:'}
+                    {metodoPago === 'transferencia' && 'Realiza tu transferencia bancaria a la siguiente cuenta:'}
                   </p>
                 </div>
                 <span className="px-3 py-1 rounded-full bg-[#fbbf24]/15 border border-[#fbbf24]/40 text-[#fbbf24] text-xs font-mono font-bold">
@@ -1301,12 +1520,15 @@ ${voucherStatus}`;
                     <span className="text-xs text-stone-300 block">
                       A nombre de: <strong className="text-white">{TITULAR_CUENTAS}</strong>
                     </span>
+                    <span className="text-[11px] text-[#fbbf24] font-medium block pt-0.5">
+                      Monto a enviar: <strong>${confirmedOrder.total.toFixed(2)} USD</strong> (incluye envío)
+                    </span>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => copyYappyNumber(YAPPY_PAY_PHONE)}
-                    className="px-5 py-3 rounded-xl bg-[#fbbf24] hover:bg-[#f59e0b] text-black text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shrink-0 shadow-lg shadow-[#fbbf24]/30"
+                    className="px-5 py-3 rounded-xl bg-[#fbbf24] hover:bg-[#f59e0b] text-black text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shrink-0 shadow-lg shadow-[#fbbf24]/30 min-h-[46px] active:scale-[0.98]"
                   >
                     {copiedYappy ? <Check size={18} /> : <Copy size={18} />}
                     <span>{copiedYappy ? '¡Copiado!' : 'Copiar Número'}</span>
@@ -1314,7 +1536,7 @@ ${voucherStatus}`;
                 </div>
               )}
 
-              {/* Si agarró Tarjeta: aparece el link oficial (SOLO TARJETA DE DÉBITO O CRÉDITO) */}
+              {/* Si agarró Tarjeta: aparece el link oficial (SOLO TARJETA DE DÉBITO O CRÉDITO - SIN PAGUELOFACIL) */}
               {metodoPago === 'tarjeta' && (
                 <div className="p-4 rounded-xl bg-black/90 border border-[#fbbf24]/40 space-y-3">
                   <div className="space-y-1">
@@ -1324,6 +1546,9 @@ ${voucherStatus}`;
                     <div className="p-2.5 rounded-lg bg-white/5 border border-white/10 font-mono text-xs text-stone-300 break-all select-all">
                       {TARJETA_PAY_LINK}
                     </div>
+                    <span className="text-[11px] text-[#fbbf24] font-medium block pt-0.5">
+                      Monto a pagar con tarjeta: <strong>${confirmedOrder.total.toFixed(2)} USD</strong> (incluye envío)
+                    </span>
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-2.5">
@@ -1331,7 +1556,7 @@ ${voucherStatus}`;
                       href={TARJETA_PAY_LINK}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex-1 py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] hover:from-[#f59e0b] hover:to-[#fbbf24] text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-[#fbbf24]/20 cursor-pointer"
+                      className="flex-1 py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] hover:from-[#f59e0b] hover:to-[#fbbf24] text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-[#fbbf24]/20 cursor-pointer min-h-[46px] active:scale-[0.98]"
                     >
                       <CreditCard size={18} />
                       <span>Ir al Link de Pago con Tarjeta</span>
@@ -1340,7 +1565,7 @@ ${voucherStatus}`;
                     <button
                       type="button"
                       onClick={() => copyCardLink(TARJETA_PAY_LINK)}
-                      className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[46px] active:scale-[0.98]"
                     >
                       <Copy size={16} />
                       <span>{copiedLink ? '¡Link Copiado!' : 'Copiar Link'}</span>
@@ -1362,12 +1587,15 @@ ${voucherStatus}`;
                     <span className="text-xs text-stone-300 block">
                       A nombre de: <strong className="text-white">{TITULAR_CUENTAS}</strong>
                     </span>
+                    <span className="text-[11px] text-[#fbbf24] font-medium block pt-0.5">
+                      Monto a transferir: <strong>${confirmedOrder.total.toFixed(2)} USD</strong> (incluye envío)
+                    </span>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => copyBankDetails(BANCO_GENERAL_CUENTA)}
-                    className="px-5 py-3 rounded-xl bg-[#fbbf24] hover:bg-[#f59e0b] text-black text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shrink-0 shadow-lg shadow-[#fbbf24]/30"
+                    className="px-5 py-3 rounded-xl bg-[#fbbf24] hover:bg-[#f59e0b] text-black text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shrink-0 shadow-lg shadow-[#fbbf24]/30 min-h-[46px] active:scale-[0.98]"
                   >
                     {copiedBank ? <Check size={18} /> : <Copy size={18} />}
                     <span>{copiedBank ? '¡Copiado!' : 'Copiar Cuenta'}</span>
@@ -1376,8 +1604,8 @@ ${voucherStatus}`;
               )}
             </div>
 
-            {/* 4. LUEGO ABAJO: "INGRESE LA CAPTURA DE SU COMPROBANTE" */}
-            <div className="p-5 rounded-2xl bg-[#121216] border border-white/15 space-y-3 text-left shadow-xl">
+            {/* 2. DESPUÉS: "INGRESE LA CAPTURA DE SU COMPROBANTE" */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-[#121216] border border-white/15 space-y-3 text-left shadow-xl">
               <div className="flex items-center justify-between pb-2 border-b border-white/10">
                 <label className="text-sm font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
                   <UploadCloud size={18} className="text-[#fbbf24]" />
@@ -1419,7 +1647,7 @@ ${voucherStatus}`;
                       <p className="text-white font-medium text-xs truncate">
                         {voucherFileName || 'comprobante_pago.png'}
                       </p>
-                      <p className="text-[11px] text-emerald-400 font-mono mt-0.5">
+                      <p className="text-[11px] text-emerald-400 font-mono mt-0.5 font-semibold">
                         ✓ Captura lista para enviar
                       </p>
                     </div>
@@ -1428,14 +1656,15 @@ ${voucherStatus}`;
                   <div className="flex items-center gap-2 shrink-0">
                     <label
                       htmlFor="payment-voucher-input"
-                      className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold cursor-pointer transition-colors"
+                      className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold cursor-pointer transition-colors"
                     >
                       Cambiar
                     </label>
                     <button
                       type="button"
                       onClick={handleRemoveVoucher}
-                      className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors cursor-pointer"
+                      className="p-2 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors cursor-pointer"
+                      aria-label="Eliminar comprobante"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -1444,14 +1673,14 @@ ${voucherStatus}`;
               ) : (
                 <label
                   htmlFor="payment-voucher-input"
-                  className="p-5 rounded-xl border-2 border-dashed border-white/20 hover:border-[#fbbf24] bg-black/50 hover:bg-[#fbbf24]/5 transition-all flex flex-col items-center justify-center text-center gap-2 cursor-pointer group"
+                  className="p-5 rounded-xl border-2 border-dashed border-white/20 hover:border-[#fbbf24] bg-black/50 hover:bg-[#fbbf24]/5 transition-all flex flex-col items-center justify-center text-center gap-2 cursor-pointer group active:scale-[0.99]"
                 >
-                  <UploadCloud size={28} className="text-[#fbbf24] group-hover:scale-110 transition-transform" />
+                  <UploadCloud size={30} className="text-[#fbbf24] group-hover:scale-110 transition-transform" />
                   <div>
-                    <span className="text-xs font-bold text-white block">
+                    <span className="text-xs sm:text-sm font-bold text-white block">
                       Toca aquí para seleccionar la captura del comprobante
                     </span>
-                    <span className="text-[10px] text-stone-400 block mt-0.5">
+                    <span className="text-[10px] sm:text-xs text-stone-400 block mt-0.5">
                       Adjunta la foto o captura del pago realizado
                     </span>
                   </div>
@@ -1459,13 +1688,13 @@ ${voucherStatus}`;
               )}
             </div>
 
-            {/* 5. Y LUEGO DÉLE CONFIRMAR PEDIDO (BLOQUEADO HASTA QUE MONTE EL COMPROBANTE) */}
+            {/* 3. LUEGO: "CONFIRMAR COMPROBANTE" (BLOQUEADO HASTA QUE MONTE EL COMPROBANTE) */}
             <div className="space-y-2.5 pt-1">
               <button
                 type="button"
                 disabled={!voucherImage}
                 onClick={handleFinalOrderConfirmation}
-                className={`w-full py-4 px-6 rounded-xl font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-xl ${
+                className={`w-full py-4 px-6 rounded-xl font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-xl min-h-[48px] ${
                   !voucherImage
                     ? 'bg-stone-800 text-stone-500 border border-white/10 cursor-not-allowed opacity-60'
                     : 'bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] hover:from-[#f59e0b] hover:to-[#fbbf24] text-black cursor-pointer shadow-[#fbbf24]/30 active:scale-[0.99]'
@@ -1473,32 +1702,31 @@ ${voucherStatus}`;
               >
                 {!voucherImage ? (
                   <>
-                    <AlertCircle size={18} className="text-amber-400" />
-                    <span>Adjunta la captura del comprobante para confirmar pedido</span>
+                    <AlertCircle size={18} className="text-amber-400 shrink-0" />
+                    <span>Adjunta la captura del comprobante para confirmar comprobante</span>
                   </>
                 ) : (
                   <>
-                    <span>Confirmar Pedido</span>
+                    <span>Confirmar Comprobante</span>
                     <CheckCircle2 size={20} />
                   </>
                 )}
               </button>
 
-              {/* Botón de Regresar a la Tienda (Manteniendo carrito intacto) */}
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setCheckoutStep('form')}
-                  className="flex-1 py-2.5 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  onClick={() => setCheckoutStep('review')}
+                  className="flex-1 py-3 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[44px]"
                 >
                   <ArrowLeft size={14} />
-                  <span>Modificar Datos</span>
+                  <span>Volver a la hojita</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleReturnToStore}
-                  className="flex-1 py-2.5 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-400 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  className="flex-1 py-3 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-400 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[44px]"
                 >
                   <span>Regresar a la Tienda</span>
                 </button>
@@ -1511,7 +1739,7 @@ ${voucherStatus}`;
         {/* PASO 3: Y DESPUÉS LE SALE EL RECIBO Y QUE ENVÍE LA CAPTURA Y RECIBO POR WASAP */}
         {/* ========================================================================= */}
         {checkoutStep === 'receipt' && confirmedOrder && (
-          <div className="overflow-y-auto p-5 sm:p-7 space-y-6 text-center">
+          <div className="overflow-y-auto overscroll-contain touch-scroll p-4 sm:p-6 lg:p-7 space-y-5 text-center pb-8 sm:pb-6">
             {/* Encabezado del Recibo */}
             <div className="space-y-1">
               <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono uppercase font-bold inline-block mb-1">
@@ -1526,7 +1754,7 @@ ${voucherStatus}`;
             </div>
 
             {/* Recibo Oficial Estructurado */}
-            <div className="max-w-xl mx-auto p-5 rounded-2xl bg-black/90 border border-white/15 text-left space-y-4 text-xs font-sans shadow-2xl">
+            <div className="max-w-xl mx-auto p-4 sm:p-5 rounded-2xl bg-black/90 border border-white/15 text-left space-y-4 text-xs font-sans shadow-2xl">
               <div className="border-b border-white/10 pb-2.5 flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-white uppercase tracking-wide">
@@ -1542,7 +1770,7 @@ ${voucherStatus}`;
               </div>
 
               {/* Datos Cliente y Entrega */}
-              <div className="grid grid-cols-2 gap-3 border-b border-white/10 pb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-b border-white/10 pb-3">
                 <div>
                   <span className="text-stone-400 text-[10px] block">Cliente:</span>
                   <span className="text-white font-medium block">{nombre}</span>
@@ -1554,11 +1782,11 @@ ${voucherStatus}`;
                     {metodoPago === 'yappy' ? 'Yappy (6215-0251)' : metodoPago === 'transferencia' ? 'Banco General (ACH)' : 'Tarjeta de Débito o Crédito'}
                   </span>
                 </div>
-                <div className="col-span-2 pt-1">
+                <div className="col-span-1 sm:col-span-2 pt-1">
                   <span className="text-stone-400 text-[10px] block">Modalidad de Entrega:</span>
                   <span className="text-white font-medium block">
                     {tipoEntrega === 'retiro'
-                      ? 'Retiro en Tienda (Sede La Chorrera)'
+                      ? 'Retiro en el Local'
                       : `Envío express (${courier}) en ${provincia} - ${courier === 'Servientrega' && servientregaModalidad === 'domicilio' ? direccion : sucursalRetiro}`}
                   </span>
                 </div>
@@ -1583,24 +1811,28 @@ ${voucherStatus}`;
                 </div>
               </div>
 
-              {/* Desglose */}
+              {/* Desglose de Precios con Envío sumado */}
               <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between text-stone-300">
-                  <span>Subtotal</span>
+                  <span>Subtotal productos:</span>
                   <span className="font-mono text-white">${confirmedOrder.subtotal.toFixed(2)}</span>
                 </div>
                 {confirmedOrder.discount > 0 && (
                   <div className="flex justify-between text-emerald-400 font-semibold">
-                    <span>Descuento Promo</span>
+                    <span>Descuento Promo:</span>
                     <span className="font-mono">-${confirmedOrder.discount.toFixed(2)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-stone-300">
-                  <span>Envío express</span>
-                  <span className="font-mono text-[#fbbf24]">A coordinar por WhatsApp (Aprox.)</span>
+                  <span>Envío express ({confirmedOrder.courier || courier}):</span>
+                  <span className="font-mono text-[#fbbf24] font-bold">
+                    {confirmedOrder.shipping > 0
+                      ? `+$${confirmedOrder.shipping.toFixed(2)} USD`
+                      : 'Gratis ($0.00)'}
+                  </span>
                 </div>
                 <div className="pt-2 border-t border-white/10 flex justify-between items-center text-sm font-bold">
-                  <span className="text-white uppercase tracking-wider text-xs">Total:</span>
+                  <span className="text-white uppercase tracking-wider text-xs">Total Cancelado:</span>
                   <span className="text-xl font-mono text-[#fbbf24]">
                     ${confirmedOrder.total.toFixed(2)} USD
                   </span>
@@ -1634,43 +1866,82 @@ ${voucherStatus}`;
 
             {/* BOTÓN OFICIAL DE WHATSAPP: "ENVIAR LA CAPTURA Y EL RECIBO POR WASAP DE UNA VEZ" */}
             <div className="max-w-xl mx-auto space-y-3 pt-1">
-              <button
-                type="button"
-                onClick={handleSendToWhatsApp}
-                className="w-full py-4 px-6 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2.5 transition-all shadow-xl shadow-[#25D366]/30 cursor-pointer active:scale-[0.99]"
+              <a
+                href={generateWhatsAppUrl()}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => {
+                  setHasOpenedWhatsApp(true);
+                  handleSendToWhatsApp();
+                }}
+                className="w-full py-4 px-6 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2.5 transition-all shadow-xl shadow-[#25D366]/30 cursor-pointer active:scale-[0.99] min-h-[48px]"
               >
                 <MessageSquare size={22} className="fill-black" />
                 <span>Enviar Captura y Recibo por WhatsApp</span>
-              </button>
+              </a>
 
               {/* Indicación clara de envío de la captura */}
-              <div className="p-3 rounded-xl bg-stone-900 border border-white/10 text-stone-300 text-xs text-left space-y-1">
+              <div className="p-3.5 rounded-xl bg-stone-900 border border-white/10 text-stone-300 text-xs text-left space-y-1">
                 <div className="flex items-center gap-2 text-emerald-400 font-semibold text-[11px]">
-                  <FileCheck size={14} />
+                  <FileCheck size={15} />
                   <span>Tu comprobante y recibo están listos para enviar al +507 6215-0251</span>
                 </div>
-                <p className="text-[10px] text-stone-400 leading-relaxed font-light">
-                  Al pulsar el botón verde se abre WhatsApp con tu recibo ya escrito. En el chat con Pretty-Store, dale <strong>Pegar</strong> o presiona el botón de <strong>adjuntar (+)</strong> para enviar la captura que ya seleccionaste.
+                <p className="text-[11px] text-stone-400 leading-relaxed font-light">
+                  Al pulsar el botón verde se abre WhatsApp con tu recibo ya escrito. En el chat con Pretty Store, dale <strong>Pegar</strong> o presiona el botón de <strong>adjuntar (+)</strong> para enviar la captura que ya seleccionaste.
                 </p>
               </div>
             </div>
 
             {/* Aviso de 48 Horas */}
-            <div className="max-w-xl mx-auto p-3 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-200 text-xs flex items-center gap-2.5 text-left">
+            <div className="max-w-xl mx-auto p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-200 text-xs flex items-center gap-2.5 text-left">
               <Clock size={16} className="text-amber-400 shrink-0" />
               <span className="text-[11px] text-stone-200 font-light">
                 Dispones de un plazo de <strong>48 horas</strong> para coordinar tu entrega o retiro con tu comprobante.
               </span>
             </div>
 
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={handleReturnToStore}
-                className="px-8 py-3 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 text-white text-xs uppercase tracking-wider transition-colors cursor-pointer"
-              >
-                Regresar a la Tienda
-              </button>
+            {/* Acciones finales: Cerrar Pedido y Regresar a la Tienda (Se habilitan solo tras enviar/ingresar a WhatsApp) */}
+            <div className="pt-2 max-w-xl mx-auto space-y-2">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5">
+                {/* Botón Cerrar Pedido: Se habilita después de que la persona ingrese a WhatsApp */}
+                <button
+                  type="button"
+                  disabled={!hasOpenedWhatsApp}
+                  onClick={handleCloseOrder}
+                  className={`w-full sm:flex-1 py-3.5 px-5 rounded-xl font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2 transition-all min-h-[46px] ${
+                    !hasOpenedWhatsApp
+                      ? 'bg-stone-800 text-stone-500 border border-white/10 cursor-not-allowed opacity-60'
+                      : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20 cursor-pointer active:scale-[0.98]'
+                  }`}
+                  title={!hasOpenedWhatsApp ? 'Habilitado al presionar el botón de WhatsApp' : 'Finalizar y cerrar pedido'}
+                >
+                  {!hasOpenedWhatsApp ? <Lock size={15} /> : <CheckCircle2 size={16} />}
+                  <span>Cerrar Pedido</span>
+                </button>
+
+                {/* Botón Regresar a la Tienda: También bloqueado hasta ingresar a WhatsApp */}
+                <button
+                  type="button"
+                  disabled={!hasOpenedWhatsApp}
+                  onClick={handleReturnToStore}
+                  className={`w-full sm:flex-1 py-3.5 px-5 rounded-xl border font-semibold uppercase tracking-wider text-xs flex items-center justify-center gap-2 transition-all min-h-[46px] ${
+                    !hasOpenedWhatsApp
+                      ? 'border-white/10 bg-black/40 text-stone-500 cursor-not-allowed opacity-60'
+                      : 'border-white/15 bg-white/5 hover:bg-white/10 text-white cursor-pointer active:scale-[0.98]'
+                  }`}
+                  title={!hasOpenedWhatsApp ? 'Habilitado al presionar el botón de WhatsApp' : 'Regresar al catálogo'}
+                >
+                  {!hasOpenedWhatsApp && <Lock size={14} />}
+                  <span>Regresar a la Tienda</span>
+                </button>
+              </div>
+
+              {!hasOpenedWhatsApp && (
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-medium flex items-center justify-center gap-2">
+                  <Lock size={14} className="text-amber-400 shrink-0" />
+                  <span>Presiona primero el botón verde para enviar tu recibo por WhatsApp y habilitar las opciones.</span>
+                </div>
+              )}
             </div>
           </div>
         )}

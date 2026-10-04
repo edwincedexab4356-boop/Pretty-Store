@@ -91,7 +91,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
             <div className="overflow-hidden">
               <h2 className="text-sm font-serif-luxury font-semibold text-white tracking-[0.12em] uppercase truncate">
-                {config.nombre_tienda || 'Pretty-Store'}
+                {config.nombre_tienda || 'Pretty Store'}
               </h2>
               <span className="text-[10px] uppercase tracking-[0.2em] text-[#c5a059] block mt-0.5">
                 Administración
@@ -145,7 +145,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               </span>
             </div>
             <p className="text-xs text-stone-300 truncate">
-              {user?.email || 'usuario@pretty-store.com'}
+              {user?.email || 'usuario@pretty store.com'}
             </p>
           </div>
 

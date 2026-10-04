@@ -42,7 +42,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
                 Atención & Canales Oficiales
               </span>
               <h2 className="text-xl sm:text-2xl font-serif-luxury font-medium text-white tracking-wide">
-                Contáctanos · {config.nombre_tienda || 'Pretty-Store'}
+                Contáctanos · {config.nombre_tienda || 'Pretty Store'}
               </h2>
               <p className="text-xs text-stone-400 font-light mt-0.5">
                 Comunícate directamente con nuestro equipo o visita nuestras páginas oficiales.
@@ -61,7 +61,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {/* 1. WhatsApp Oficial */}
             <a
-              href={`https://wa.me/${whatsappClean}?text=${encodeURIComponent('Hola Pretty-Store, deseo información sobre sus productos y pedidos.')}`}
+              href={`https://wa.me/${whatsappClean}?text=${encodeURIComponent('Hola Pretty Store, deseo información sobre sus productos y pedidos.')}`}
               target="_blank"
               rel="noreferrer"
               className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-400 hover:bg-emerald-500/15 transition-all group flex items-start gap-3.5"
@@ -111,7 +111,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
 
             {/* 3. Instagram Oficial */}
             <a
-              href={config.instagram || 'https://instagram.com'}
+              href={config.instagram || 'https://instagram.com/pretty_store_pty'}
               target="_blank"
               rel="noreferrer"
               className="p-4 rounded-xl bg-stone-900/60 border border-white/10 hover:border-pink-500/50 hover:bg-pink-500/5 transition-all group flex items-start gap-3.5"
@@ -125,10 +125,37 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
                   <ExternalLink size={12} className="text-stone-400 group-hover:text-white" />
                 </div>
                 <p className="text-xs font-mono text-pink-300 font-semibold mt-0.5">
-                  @prettystore
+                  @pretty_store_pty
                 </p>
                 <p className="text-[10px] text-stone-400 font-light mt-1">
                   Catálogo fotográfico y piezas de colección.
+                </p>
+              </div>
+            </a>
+
+            {/* 4. Instagram (2) */}
+            <a
+              href="https://www.instagram.com/tienda_prettystore2?stkn=MTR1MGo5YTJ1N3VycQ=="
+              target="_blank"
+              rel="noreferrer"
+              className="p-4 rounded-xl bg-stone-900/60 border border-white/10 hover:border-pink-500/50 hover:bg-pink-500/5 transition-all group flex items-start gap-3.5"
+            >
+              <div className="w-10 h-10 rounded-lg bg-pink-500/15 text-pink-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform relative">
+                <Smartphone size={20} />
+                <span className="absolute -bottom-1 -right-1 text-[8px] font-bold bg-[#fbbf24] text-black w-3.5 h-3.5 rounded-full flex items-center justify-center shadow-sm">
+                  2
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold text-white">Instagram (2)</h3>
+                  <ExternalLink size={12} className="text-stone-400 group-hover:text-white" />
+                </div>
+                <p className="text-xs font-mono text-pink-300 font-semibold mt-0.5 truncate">
+                  @tienda_prettystore2
+                </p>
+                <p className="text-[10px] text-stone-400 font-light mt-1">
+                  Cuenta secundaria de respaldo y novedades.
                 </p>
               </div>
             </a>
@@ -210,7 +237,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
             </span>
             <span className="flex items-center gap-1.5">
               <Mail size={13} className="text-[#e8c872]" />
-              <span>{config.email || 'contacto@pretty-store.com'}</span>
+              <span>{config.email || 'contacto@pretty store.com'}</span>
             </span>
           </div>
         </div>
