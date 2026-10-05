@@ -26,6 +26,8 @@ import { useCart } from '../../context/CartContext';
 import { MetodoPago, TipoEntrega, CourierOption } from '../../types/database';
 import { createRealOrder, CreatedOrderResult } from '../../services/checkoutService';
 import { getSupabaseClient } from '../../lib/supabase';
+import { saveOrderReceipt, updateOrderVoucher, StoredOrderReceipt } from '../../utils/orderReceiptStorage';
+import { compressImageFile } from '../../utils/imageOptimizer';
 
 // NÚMEROS Y CUENTAS OFICIALES SUMINISTRADAS POR EL CLIENTE:
 export const YAPPY_PAY_PHONE = '6215-0251';
@@ -434,36 +436,52 @@ export const CheckoutDemoModal: React.FC = () => {
 
   if (!isCheckoutOpen) return null;
 
-  const handleVoucherFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVoucherFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 15 * 1024 * 1024) {
-      alert('La imagen no debe superar los 15MB.');
+    if (file.size > 20 * 1024 * 1024) {
+      alert('La imagen no debe superar los 20MB.');
       return;
     }
 
     setVoucherFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
+    try {
+      // Optimizar y comprimir captura de forma inteligente antes de guardar
+      const compressed = await compressImageFile(file, {
+        maxWidth: 1200,
+        maxHeight: 1200,
+        quality: 0.82,
+      });
+      const dataUrl = compressed.dataUrl;
       setVoucherImage(dataUrl);
       setIsVoucherAttached(true);
 
-      // Si el pedido ya existe en Supabase, registrar actualización
-      if (confirmedOrder?.orderId) {
-        try {
-          const supabase = getSupabaseClient();
-          await supabase
-            .from('pedidos')
-            .update({ comprobante_pago: `Captura adjuntada (${file.name})` } as any)
-            .eq('id', confirmedOrder.orderId);
-        } catch (err) {
-          console.warn('Sync voucher status:', err);
-        }
+      // Si el pedido ya existe, actualizar de inmediato en almacén persistente y Supabase
+      if (confirmedOrder) {
+        updateOrderVoucher(
+          confirmedOrder.orderId || confirmedOrder.orderNumber,
+          dataUrl,
+          file.name
+        );
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.warn('Compresión de comprobante:', err);
+      const reader = new FileReader();
+      reader.onload = () => {
+        const fallbackUrl = reader.result as string;
+        setVoucherImage(fallbackUrl);
+        setIsVoucherAttached(true);
+        if (confirmedOrder) {
+          updateOrderVoucher(
+            confirmedOrder.orderId || confirmedOrder.orderNumber,
+            fallbackUrl,
+            file.name
+          );
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleRemoveVoucher = () => {
@@ -579,6 +597,40 @@ export const CheckoutDemoModal: React.FC = () => {
     setCheckoutStep('review');
     setIsSubmitting(false);
 
+    // Guardar borrador del pedido en el almacén de recibos
+    saveOrderReceipt({
+      orderId: instantSummary.orderId,
+      orderNumber: instantSummary.orderNumber,
+      date: instantSummary.date,
+      nombre: instantSummary.nombre,
+      telefono: instantSummary.telefono,
+      email: instantSummary.email,
+      direccion: instantSummary.direccion,
+      metodoPago: instantSummary.metodoPago,
+      tipoEntrega: instantSummary.tipoEntrega,
+      courier: instantSummary.courier,
+      subtotal: instantSummary.subtotal,
+      discount: instantSummary.discount,
+      promoTitle: instantSummary.promoTitle,
+      shipping: instantSummary.shipping,
+      total: instantSummary.total,
+      itemCount: instantSummary.itemCount,
+      items: (instantSummary.items || []).map((it) => ({
+        product: {
+          id: it.product.id,
+          nombre: it.product.nombre,
+          precio: it.product.precio,
+          imagen_url: it.product.imagen_url || undefined,
+        },
+        quantity: it.quantity,
+        subtotal: it.subtotal,
+      })),
+      notas: instantSummary.notas,
+      comprobanteUrl: voucherImage || null,
+      comprobanteFileName: voucherFileName || null,
+      createdAt: new Date().toISOString(),
+    });
+
     // 2. Guardar en Supabase en segundo plano con el costo de envío sumado
     createRealOrder({
       items,
@@ -597,6 +649,9 @@ export const CheckoutDemoModal: React.FC = () => {
     }).then((realOrder) => {
       if (realOrder) {
         setConfirmedOrder((prev) => (prev ? { ...prev, orderId: realOrder.orderId } : realOrder));
+        if (voucherImage) {
+          updateOrderVoucher(realOrder.orderId, voucherImage, voucherFileName || undefined);
+        }
       }
     }).catch((err) => {
       console.warn('Persistencia en segundo plano:', err);
@@ -610,17 +665,61 @@ export const CheckoutDemoModal: React.FC = () => {
       return;
     }
 
-    if (confirmedOrder?.orderId && voucherFileName) {
+    // 1. Guardar recibo completo con la captura del comprobante en el almacén persistente
+    if (confirmedOrder) {
+      const receiptToSave: StoredOrderReceipt = {
+        orderId: confirmedOrder.orderId || confirmedOrder.orderNumber,
+        orderNumber: confirmedOrder.orderNumber,
+        date: confirmedOrder.date,
+        nombre: confirmedOrder.nombre,
+        telefono: confirmedOrder.telefono,
+        email: confirmedOrder.email,
+        direccion: confirmedOrder.direccion,
+        metodoPago: confirmedOrder.metodoPago,
+        tipoEntrega: confirmedOrder.tipoEntrega,
+        courier: confirmedOrder.courier,
+        subtotal: confirmedOrder.subtotal,
+        discount: confirmedOrder.discount,
+        promoTitle: confirmedOrder.promoTitle,
+        shipping: confirmedOrder.shipping,
+        total: confirmedOrder.total,
+        itemCount: confirmedOrder.itemCount,
+        items: (confirmedOrder.items || []).map((it) => ({
+          product: {
+            id: it.product.id,
+            nombre: it.product.nombre,
+            precio: it.product.precio,
+            imagen_url: it.product.imagen_url || undefined,
+          },
+          quantity: it.quantity,
+          subtotal: it.subtotal,
+        })),
+        notas: confirmedOrder.notas,
+        comprobanteUrl: voucherImage,
+        comprobanteFileName: voucherFileName || 'comprobante_pago.jpg',
+        createdAt: new Date().toISOString(),
+      };
+
+      saveOrderReceipt(receiptToSave);
+      setConfirmedOrder((prev) => (prev ? { ...prev, comprobantePago: voucherImage } : prev));
+    }
+
+    // 2. Sincronizar en Supabase de forma segura
+    if (confirmedOrder?.orderId) {
       try {
         const supabase = getSupabaseClient();
         await supabase
           .from('pedidos')
-          .update({ comprobante_pago: `Captura adjuntada: ${voucherFileName}` } as any)
+          .update({
+            comprobante_pago: voucherImage,
+            updated_at: new Date().toISOString(),
+          } as any)
           .eq('id', confirmedOrder.orderId);
       } catch (e) {
         console.warn('Sync voucher status:', e);
       }
     }
+
     // Pasar a la pantalla del Recibo Oficial
     setCheckoutStep('receipt');
     setHasOpenedWhatsApp(true);

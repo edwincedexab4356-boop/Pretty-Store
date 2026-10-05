@@ -79,6 +79,8 @@ export interface Pedido {
   notas: string | null;
   tipo_entrega?: TipoEntrega;
   courier?: CourierOption;
+  comprobante_pago?: string | null;
+  factura_oficial?: string | null;
   created_at?: string;
   updated_at?: string;
   // Relaciones
@@ -108,6 +110,7 @@ export interface Cliente {
   pedidos_count?: number;
   total_gastado?: number;
   ultimo_pedido?: string;
+  pedidos?: Pedido[];
 }
 
 export interface Venta {

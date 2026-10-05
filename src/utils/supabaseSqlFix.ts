@@ -183,9 +183,17 @@ CREATE TABLE IF NOT EXISTS public.pedidos (
   notas text,
   tipo_entrega text DEFAULT 'delivery',
   courier text,
+  comprobante_pago text,
+  factura_oficial text,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now()
 );
+
+-- Asegurar columnas si la tabla ya existía previamente
+ALTER TABLE IF EXISTS public.pedidos ADD COLUMN IF NOT EXISTS comprobante_pago text;
+ALTER TABLE IF EXISTS public.pedidos ADD COLUMN IF NOT EXISTS factura_oficial text;
+ALTER TABLE IF EXISTS public.pedidos ADD COLUMN IF NOT EXISTS courier text;
+ALTER TABLE IF EXISTS public.pedidos ADD COLUMN IF NOT EXISTS tipo_entrega text DEFAULT 'delivery';
 
 -- 10. TABLA: detalle_pedidos
 CREATE TABLE IF NOT EXISTS public.detalle_pedidos (

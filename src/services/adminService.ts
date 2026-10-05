@@ -1,6 +1,7 @@
 import { getSupabaseClient } from '../lib/supabase';
 import { compressImageFile } from '../utils/imageOptimizer';
 import { sortCategoriesWithOrder, persistCategoryOrder, fetchRemoteCategoryOrder } from '../utils/categoryOrderUtils';
+import { getAllOrderReceipts, StoredOrderReceipt } from '../utils/orderReceiptStorage';
 import {
   Categoria,
   Producto,
@@ -1728,11 +1729,106 @@ export async function getAdminOrders(statusFilter?: EstadoPedido): Promise<Pedid
     });
   }
 
-  return (orders || []).map((o) => ({
-    ...o,
-    cliente: o.cliente_id ? clientMap.get(o.cliente_id) : undefined,
-    detalles: detailsByOrder[o.id] || [],
-  }));
+  // Enriquecer con recibos y comprobantes persistentes
+  const localReceipts = getAllOrderReceipts();
+  const receiptMap = new Map<string, StoredOrderReceipt>();
+  localReceipts.forEach((r) => {
+    if (r.orderId) receiptMap.set(String(r.orderId).trim(), r);
+    if (r.orderNumber) receiptMap.set(String(r.orderNumber).trim(), r);
+  });
+
+  const mappedOrders: Pedido[] = (orders || []).map((o) => {
+    const rawId = String(o.id || '');
+    const orderCode = `#PED-${rawId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+    const rec = receiptMap.get(rawId) || receiptMap.get(orderCode);
+
+    const voucherUrl =
+      (o.comprobante_pago?.startsWith('data:') ||
+      o.comprobante_pago?.startsWith('http') ||
+      o.comprobante_pago?.startsWith('/')
+        ? o.comprobante_pago
+        : null) ||
+      rec?.comprobanteUrl ||
+      o.comprobante_pago ||
+      null;
+
+    const dbDetails = detailsByOrder[o.id] || [];
+    const finalDetails =
+      dbDetails.length > 0
+        ? dbDetails
+        : (rec?.items || []).map((it) => ({
+            id: it.product.id,
+            pedido_id: o.id,
+            producto_id: it.product.id,
+            cantidad: it.quantity,
+            precio_unitario: it.product.precio,
+            subtotal: it.subtotal,
+            producto: it.product as Producto,
+          }));
+
+    return {
+      ...o,
+      comprobante_pago: voucherUrl,
+      cliente: o.cliente_id
+        ? clientMap.get(o.cliente_id)
+        : rec
+        ? {
+            id: 'client-' + rawId,
+            nombre: rec.nombre,
+            email: rec.email,
+            telefono: rec.telefono,
+            direccion: rec.direccion,
+          }
+        : undefined,
+      detalles: finalDetails,
+    };
+  });
+
+  // Agregar pedidos registrados localmente si aún no existen en la base de datos
+  const existingOrderKeys = new Set<string>();
+  mappedOrders.forEach((o) => {
+    existingOrderKeys.add(String(o.id));
+    existingOrderKeys.add(`#PED-${String(o.id).replace(/-/g, '').slice(0, 6).toUpperCase()}`);
+  });
+
+  localReceipts.forEach((r) => {
+    const cleanId = String(r.orderId || r.orderNumber).trim();
+    if (!existingOrderKeys.has(cleanId) && !existingOrderKeys.has(r.orderNumber)) {
+      mappedOrders.push({
+        id: r.orderId,
+        cliente_id: null,
+        direccion: r.direccion,
+        subtotal: r.subtotal,
+        total: r.total,
+        estado: 'pendiente',
+        metodo_pago: (r.metodoPago as MetodoPago) || 'yappy',
+        notas: r.notas || null,
+        tipo_entrega: (r.tipoEntrega as TipoEntrega) || 'delivery',
+        courier: (r.courier as CourierOption) || undefined,
+        comprobante_pago: r.comprobanteUrl || null,
+        created_at: r.createdAt || new Date().toISOString(),
+        cliente: {
+          id: 'client-' + r.orderId,
+          nombre: r.nombre,
+          email: r.email,
+          telefono: r.telefono,
+          direccion: r.direccion,
+        },
+        detalles: (r.items || []).map((it) => ({
+          id: it.product.id,
+          pedido_id: r.orderId,
+          producto_id: it.product.id,
+          cantidad: it.quantity,
+          precio_unitario: it.product.precio,
+          subtotal: it.subtotal,
+          producto: it.product as Producto,
+        })),
+      });
+      existingOrderKeys.add(cleanId);
+    }
+  });
+
+  return mappedOrders;
 }
 
 export async function updateOrderStatus(orderId: string, estado: EstadoPedido) {

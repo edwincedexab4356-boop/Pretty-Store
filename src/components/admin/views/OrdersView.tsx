@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ShoppingBag,
   Search,
@@ -21,12 +21,19 @@ import {
   FileText,
   Plus,
   Trash2,
+  Image as ImageIcon,
+  Download,
+  Upload,
+  ZoomIn,
 } from 'lucide-react';
 import { getAdminOrders, updateOrderStatus, deleteAdminSale } from '../../../services/adminService';
 import { Pedido, EstadoPedido } from '../../../types/database';
 import { isPermissionError } from '../../../utils/supabaseSqlFix';
 import { PermissionErrorBanner } from '../PermissionErrorBanner';
 import { ManualSaleModal } from '../ManualSaleModal';
+import { OfficialInvoiceModal } from '../OfficialInvoiceModal';
+import { getOrderReceipt, updateOrderVoucher } from '../../../utils/orderReceiptStorage';
+import { compressImageFile } from '../../../utils/imageOptimizer';
 
 interface OrdersViewProps {
   initialSelectedOrder?: Pedido | null;
@@ -47,6 +54,58 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
   const [isManualSaleOpen, setIsManualSaleOpen] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<Pedido | null>(null);
   const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+
+  // Factura y Comprobantes de Pago
+  const [invoiceOrder, setInvoiceOrder] = useState<Pedido | null>(null);
+  const [invoiceInitialTab, setInvoiceInitialTab] = useState<'factura' | 'comprobante' | 'pedido'>('factura');
+  const [isUploadingVoucher, setIsUploadingVoucher] = useState(false);
+  const voucherFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleOpenInvoice = (order: Pedido, tab: 'factura' | 'comprobante' | 'pedido' = 'factura') => {
+    setInvoiceOrder(order);
+    setInvoiceInitialTab(tab);
+  };
+
+  const handleUploadVoucherForOrder = async (e: React.ChangeEvent<HTMLInputElement>, orderId: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 20 * 1024 * 1024) {
+      setActionMessage({ type: 'error', text: 'La imagen supera los 20MB permitidos.' });
+      return;
+    }
+
+    setIsUploadingVoucher(true);
+    try {
+      const compressed = await compressImageFile(file, {
+        maxWidth: 1200,
+        maxHeight: 1200,
+        quality: 0.82,
+      });
+
+      await updateOrderVoucher(orderId, compressed.dataUrl, file.name);
+
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, comprobante_pago: compressed.dataUrl } : o))
+      );
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder({ ...selectedOrder, comprobante_pago: compressed.dataUrl });
+      }
+
+      setActionMessage({
+        type: 'success',
+        text: '¡Captura del comprobante guardada y vinculada al pedido exitosamente!',
+      });
+    } catch (err: any) {
+      setActionMessage({
+        type: 'error',
+        text: err?.message || 'Error al guardar la captura del comprobante.',
+      });
+    } finally {
+      setIsUploadingVoucher(false);
+      if (voucherFileInputRef.current) voucherFileInputRef.current.value = '';
+    }
+  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -318,10 +377,50 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
                 {filteredOrders.map((order) => {
                   const rawOrderId = String(order.id || '');
                   const orderCode = `#PED-${rawOrderId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+                  const storedReceipt = getOrderReceipt(rawOrderId) || getOrderReceipt(orderCode);
+                  const hasCapture = Boolean(
+                    order.comprobante_pago?.startsWith('data:') ||
+                    order.comprobante_pago?.startsWith('http') ||
+                    order.comprobante_pago?.startsWith('/') ||
+                    storedReceipt?.comprobanteUrl
+                  );
+
                   return (
                     <tr key={order.id} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="py-3.5 px-4 font-mono font-semibold text-[#c5a059]">
-                        {orderCode}
+                      <td className="py-3.5 px-4">
+                        <div className="font-mono font-semibold text-[#c5a059]">
+                          {orderCode}
+                        </div>
+                        {/* Indicadores rápidos de Factura y Captura */}
+                        <div className="flex items-center gap-1 mt-1">
+                          {hasCapture ? (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenInvoice(order, 'comprobante')}
+                              className="inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors cursor-pointer"
+                              title="Ver captura del comprobante enviada por el cliente"
+                            >
+                              <ImageIcon size={9} />
+                              <span>Captura</span>
+                            </button>
+                          ) : (
+                            <span
+                              className="inline-flex items-center gap-1 text-[9px] font-light px-1.5 py-0.5 rounded bg-white/5 text-stone-500"
+                              title="Sin captura adjunta"
+                            >
+                              <span>Sin captura</span>
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenInvoice(order, 'factura')}
+                            className="inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#c5a059]/10 text-[#c5a059] border border-[#c5a059]/20 hover:bg-[#c5a059]/25 transition-colors cursor-pointer"
+                            title="Ver Factura Oficial"
+                          >
+                            <FileText size={9} />
+                            <span>Factura</span>
+                          </button>
+                        </div>
                       </td>
                       <td className="py-3.5 px-4 text-stone-400 whitespace-nowrap font-light">
                         {order.created_at
@@ -387,9 +486,31 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
+                            type="button"
+                            onClick={() => handleOpenInvoice(order, 'factura')}
+                            className="px-2.5 py-1.5 rounded-lg bg-[#c5a059]/10 hover:bg-[#c5a059]/20 text-[#c5a059] border border-[#c5a059]/30 text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1"
+                            title="Ver Factura Oficial"
+                          >
+                            <FileText size={12} />
+                            <span>Factura</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenInvoice(order, 'comprobante')}
+                            className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1 ${
+                              hasCapture
+                                ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                : 'bg-white/[0.04] hover:bg-white/[0.08] text-stone-400 border-white/[0.08]'
+                            }`}
+                            title="Ver captura del comprobante"
+                          >
+                            <ImageIcon size={12} />
+                            <span>Captura</span>
+                          </button>
+                          <button
                             onClick={() => handleOpenDetail(order)}
-                            className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-[#c5a059] border border-white/[0.08] hover:border-white/20 text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5"
-                            title="Ver detalles del pedido"
+                            className="px-2.5 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-stone-200 border border-white/[0.08] hover:border-white/20 text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1"
+                            title="Ver detalles completos del pedido"
                           >
                             <Eye size={12} />
                             <span>Detalle</span>
@@ -490,6 +611,54 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
                 <X size={18} />
               </button>
             </div>
+
+            {/* Quick Action Bar for Invoice & Voucher */}
+            {(() => {
+              const rawOrderId = String(selectedOrder.id || '');
+              const orderCode = `#PED-${rawOrderId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+              const storedReceipt = getOrderReceipt(rawOrderId) || getOrderReceipt(orderCode);
+              const selectedVoucher =
+                (selectedOrder.comprobante_pago?.startsWith('data:') ||
+                selectedOrder.comprobante_pago?.startsWith('http') ||
+                selectedOrder.comprobante_pago?.startsWith('/')
+                  ? selectedOrder.comprobante_pago
+                  : null) || storedReceipt?.comprobanteUrl || null;
+
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-6">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenInvoice(selectedOrder, 'factura')}
+                    className="p-3 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d4af37] text-black font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#c5a059]/20 hover:opacity-95 cursor-pointer transition-all"
+                  >
+                    <FileText size={15} />
+                    <span>Factura Oficial</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenInvoice(selectedOrder, 'comprobante')}
+                    className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      selectedVoucher
+                        ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25'
+                        : 'bg-white/[0.04] border-white/10 text-stone-300 hover:bg-white/[0.08]'
+                    }`}
+                  >
+                    <ImageIcon size={15} />
+                    <span>{selectedVoucher ? 'Ver Captura Adjunta' : 'Ver / Adjuntar Captura'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenInvoice(selectedOrder, 'pedido')}
+                    className="p-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-200 border border-white/10 font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <ShoppingBag size={15} />
+                    <span>Hoja del Pedido</span>
+                  </button>
+                </div>
+              );
+            })()}
 
             {/* Client Info Card */}
             <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08] space-y-3 mb-6">
@@ -629,6 +798,114 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
               </div>
             </div>
 
+            {/* Payment Proof / Voucher Section */}
+            {(() => {
+              const rawOrderId = String(selectedOrder.id || '');
+              const orderCode = `#PED-${rawOrderId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+              const storedReceipt = getOrderReceipt(rawOrderId) || getOrderReceipt(orderCode);
+              const selectedVoucher =
+                (selectedOrder.comprobante_pago?.startsWith('data:') ||
+                selectedOrder.comprobante_pago?.startsWith('http') ||
+                selectedOrder.comprobante_pago?.startsWith('/')
+                  ? selectedOrder.comprobante_pago
+                  : null) || storedReceipt?.comprobanteUrl || null;
+
+              return (
+                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08] space-y-3 mb-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-[#c5a059] uppercase tracking-wider block">
+                      Captura del Comprobante de Pago
+                    </span>
+                    {selectedVoucher && (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-mono">
+                        <CheckCircle2 size={12} />
+                        <span>Captura Guardada</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {selectedVoucher ? (
+                    <div className="p-3 bg-black/40 border border-white/10 rounded-xl flex flex-col sm:flex-row items-center gap-4">
+                      <div
+                        onClick={() => handleOpenInvoice(selectedOrder, 'comprobante')}
+                        className="relative group cursor-pointer shrink-0 rounded-lg overflow-hidden border border-white/20 hover:border-[#c5a059] transition-all bg-black"
+                      >
+                        <img
+                          src={selectedVoucher}
+                          alt="Comprobante"
+                          className="w-24 h-24 object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] gap-1 font-semibold">
+                          <ZoomIn size={14} />
+                          <span>Ver</span>
+                        </div>
+                      </div>
+
+                      <div className="flex-1 space-y-1.5 text-center sm:text-left">
+                        <p className="text-xs font-semibold text-white">Comprobante guardado para este pedido</p>
+                        <p className="text-[11px] text-stone-400 font-light">
+                          Captura enviada por el cliente para conciliar el pago por <strong>{selectedOrder.metodo_pago.toUpperCase()}</strong>.
+                        </p>
+                        <div className="flex items-center justify-center sm:justify-start gap-2 pt-1 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenInvoice(selectedOrder, 'comprobante')}
+                            className="px-2.5 py-1 rounded bg-[#c5a059] text-black font-semibold text-xs flex items-center gap-1 hover:bg-[#b5914a] cursor-pointer"
+                          >
+                            <Eye size={12} />
+                            <span>Pantalla Completa</span>
+                          </button>
+                          <a
+                            href={selectedVoucher}
+                            download={`comprobante_${orderCode}.jpg`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-2.5 py-1 rounded border border-white/20 text-stone-300 hover:text-white text-xs flex items-center gap-1"
+                          >
+                            <Download size={12} />
+                            <span>Descargar</span>
+                          </a>
+                          <label className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-stone-300 hover:text-white text-xs flex items-center gap-1 cursor-pointer transition-all">
+                            <Upload size={12} />
+                            <span>{isUploadingVoucher ? 'Guardando...' : 'Reemplazar'}</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              ref={voucherFileInputRef}
+                              disabled={isUploadingVoucher}
+                              onChange={(e) => handleUploadVoucherForOrder(e, selectedOrder.id)}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                      <div className="space-y-0.5 text-center sm:text-left">
+                        <p className="font-semibold text-amber-300">Sin captura adjuntada digitalmente</p>
+                        <p className="text-[11px] text-stone-400 font-light">
+                          Si el cliente te envió el comprobante por WhatsApp, súbelo aquí para que quede archivado junto a la factura oficial.
+                        </p>
+                      </div>
+                      <label className="px-3.5 py-2 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold text-xs flex items-center gap-1.5 cursor-pointer shrink-0 transition-all shadow-md">
+                        <Upload size={13} />
+                        <span>{isUploadingVoucher ? 'Subiendo...' : 'Adjuntar Captura de WhatsApp'}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          ref={voucherFileInputRef}
+                          disabled={isUploadingVoucher}
+                          onChange={(e) => handleUploadVoucherForOrder(e, selectedOrder.id)}
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Status Change Form */}
             <div className="p-4 rounded-xl bg-white/[0.02] border border-[#c5a059]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -693,6 +970,15 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
           loadData();
         }}
       />
+
+      {/* Official Invoice and Payment Proof Modal */}
+      {invoiceOrder && (
+        <OfficialInvoiceModal
+          order={invoiceOrder}
+          initialTab={invoiceInitialTab}
+          onClose={() => setInvoiceOrder(null)}
+        />
+      )}
     </div>
   );
 };

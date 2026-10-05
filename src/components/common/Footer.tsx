@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Smartphone, Mail, MapPin, Instagram, Lock, MessageCircle } from 'lucide-react';
+import { Smartphone, Mail, MapPin, Instagram, MessageCircle } from 'lucide-react';
 import { Categoria } from '../../types/database';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 import { LegalModal, LegalTab } from './LegalModal';
@@ -365,20 +365,6 @@ export const Footer: React.FC<FooterProps> = ({
             </button>
           </div>
         </div>
-
-        {/* Botón de admin al final de todo, bien protegido */}
-        {onOpenAdmin && (
-          <div className="mt-8 pt-2 flex justify-end items-center border-t border-white/[0.02]">
-            <button
-              onClick={onOpenAdmin}
-              className="opacity-10 hover:opacity-80 transition-opacity p-1.5 text-stone-600 hover:text-[#c5a059] cursor-pointer focus:outline-none"
-              aria-label="Acceso privado administrativo"
-              title=""
-            >
-              <Lock size={10} />
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Modal de Privacidad, Términos y Soporte */}

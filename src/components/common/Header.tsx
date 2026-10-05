@@ -260,7 +260,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </nav>
 
-          {/* Right Zone: Actions (Search, Cart, Admin) */}
+          {/* Right Zone: Actions (Search, Cart) */}
           <div className="flex items-center gap-2 sm:gap-4">
             {/* Search Icon */}
             <button
