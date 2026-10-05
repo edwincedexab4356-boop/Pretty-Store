@@ -193,7 +193,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({
                     <span>Correo Electrónico</span>
                   </div>
                   <p className="text-xs text-stone-300 font-mono truncate">
-                    {config.email || 'contacto@pretty store.com'}
+                    {config.email || 'contacto@prettystore.store'}
                   </p>
                   <p className="text-[11px] text-stone-500">Consultas corporativas y soporte</p>
                 </div>

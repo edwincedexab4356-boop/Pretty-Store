@@ -21,6 +21,12 @@ import {
   ShoppingBag,
   FileCheck,
   Lock,
+  Printer,
+  Download,
+  ZoomIn,
+  FileText,
+  Image as ImageIcon,
+  Eye,
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { MetodoPago, TipoEntrega, CourierOption } from '../../types/database';
@@ -28,6 +34,7 @@ import { createRealOrder, CreatedOrderResult } from '../../services/checkoutServ
 import { getSupabaseClient } from '../../lib/supabase';
 import { saveOrderReceipt, updateOrderVoucher, StoredOrderReceipt } from '../../utils/orderReceiptStorage';
 import { compressImageFile } from '../../utils/imageOptimizer';
+import { OfficialInvoiceModal } from '../admin/OfficialInvoiceModal';
 
 // NÚMEROS Y CUENTAS OFICIALES SUMINISTRADAS POR EL CLIENTE:
 export const YAPPY_PAY_PHONE = '6215-0251';
@@ -349,6 +356,10 @@ export const CheckoutDemoModal: React.FC = () => {
   const [confirmedOrder, setConfirmedOrder] = useState<CreatedOrderResult | null>(null);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
 
+  // Visualizadores de Factura Oficial y Captura
+  const [showFullInvoiceModal, setShowFullInvoiceModal] = useState(false);
+  const [isZoomingVoucher, setIsZoomingVoucher] = useState(false);
+
   // REINICIAR TODO EL ESTADO PARA UN NUEVO PEDIDO
   const resetCheckout = () => {
     setCheckoutStep('form');
@@ -363,19 +374,14 @@ export const CheckoutDemoModal: React.FC = () => {
     setNotas('');
     setFormErrors({});
     setSubmissionError(null);
+    setShowFullInvoiceModal(false);
+    setIsZoomingVoucher(false);
     if (voucherInputRef.current) voucherInputRef.current.value = '';
   };
 
-  // Si se cierra el modal estando en 'receipt', reiniciar para que el próximo pedido empiece 100% limpio
+  // Si se cierra el modal estando en 'receipt', reiniciar para que el próximo pedido empiece limpio
   useEffect(() => {
     if (!isCheckoutOpen && checkoutStep === 'receipt') {
-      resetCheckout();
-    }
-  }, [isCheckoutOpen, checkoutStep]);
-
-  // Si se abre el modal y estaba en 'receipt', forzar inicio limpio en 'form'
-  useEffect(() => {
-    if (isCheckoutOpen && checkoutStep === 'receipt') {
       resetCheckout();
     }
   }, [isCheckoutOpen, checkoutStep]);
@@ -658,33 +664,80 @@ export const CheckoutDemoModal: React.FC = () => {
     });
   };
 
-  // PASO 3 -> PASO 4: "Confirmar Comprobante" después de subir comprobante (OBLIGATORIO)
+  // PASO 3 -> PASO 4: "Confirmar Pedido" después de subir comprobante (OBLIGATORIO)
   const handleFinalOrderConfirmation = async () => {
     if (!voucherImage) {
       alert('Debes ingresar la captura de tu comprobante de pago para continuar.');
       return;
     }
 
-    // 1. Guardar recibo completo con la captura del comprobante en el almacén persistente
-    if (confirmedOrder) {
+    setIsSubmitting(true);
+    setSubmissionError(null);
+
+    try {
+      // 1. Asegurar el objeto completo del pedido confirmado
+      const resolvedOrderNumber = String(
+        confirmedOrder?.orderNumber ||
+        `#PED-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+      );
+      const resolvedOrderId = String(
+        confirmedOrder?.orderId || `PED-${Date.now().toString().slice(-6)}`
+      );
+
+      const fallbackAddress =
+        tipoEntrega === 'retiro'
+          ? 'Retiro en el Local / Tienda física (Pretty Store)'
+          : (courier === 'Servientrega' && servientregaModalidad === 'domicilio')
+            ? (direccion.trim() || `Entrega a Domicilio (${provincia})`)
+            : `Sucursal de envío (${courier || 'Courier'}) (${provincia})`;
+
+      const currentOrderSummary: CreatedOrderResult = {
+        orderId: resolvedOrderId,
+        orderNumber: resolvedOrderNumber,
+        date:
+          confirmedOrder?.date ||
+          new Date().toLocaleDateString('es-PA', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          }),
+        nombre: confirmedOrder?.nombre || nombre.trim(),
+        telefono: confirmedOrder?.telefono || telefono.trim(),
+        email: confirmedOrder?.email || `${telefono.replace(/\D/g, '')}@prettystore.com`,
+        direccion: confirmedOrder?.direccion || fallbackAddress,
+        metodoPago: confirmedOrder?.metodoPago || metodoPago,
+        tipoEntrega: confirmedOrder?.tipoEntrega || tipoEntrega,
+        courier: confirmedOrder?.courier || (tipoEntrega === 'delivery' ? courier : undefined),
+        subtotal: confirmedOrder?.subtotal ?? subtotal,
+        discount: confirmedOrder?.discount ?? discount,
+        promoTitle: confirmedOrder?.promoTitle || promo.promoTitle,
+        shipping: confirmedOrder?.shipping ?? numericalShipping,
+        total: confirmedOrder?.total ?? finalTotal,
+        itemCount: confirmedOrder?.itemCount ?? items.reduce((acc, i) => acc + i.quantity, 0),
+        items: confirmedOrder?.items && confirmedOrder.items.length > 0 ? confirmedOrder.items : items,
+        notas: confirmedOrder?.notas || notas.trim() || undefined,
+        comprobantePago: voucherImage,
+      };
+
+      // 2. Guardar recibo completo con la captura del comprobante en el almacén persistente
       const receiptToSave: StoredOrderReceipt = {
-        orderId: confirmedOrder.orderId || confirmedOrder.orderNumber,
-        orderNumber: confirmedOrder.orderNumber,
-        date: confirmedOrder.date,
-        nombre: confirmedOrder.nombre,
-        telefono: confirmedOrder.telefono,
-        email: confirmedOrder.email,
-        direccion: confirmedOrder.direccion,
-        metodoPago: confirmedOrder.metodoPago,
-        tipoEntrega: confirmedOrder.tipoEntrega,
-        courier: confirmedOrder.courier,
-        subtotal: confirmedOrder.subtotal,
-        discount: confirmedOrder.discount,
-        promoTitle: confirmedOrder.promoTitle,
-        shipping: confirmedOrder.shipping,
-        total: confirmedOrder.total,
-        itemCount: confirmedOrder.itemCount,
-        items: (confirmedOrder.items || []).map((it) => ({
+        orderId: currentOrderSummary.orderId,
+        orderNumber: currentOrderSummary.orderNumber,
+        date: currentOrderSummary.date,
+        nombre: currentOrderSummary.nombre,
+        telefono: currentOrderSummary.telefono,
+        email: currentOrderSummary.email,
+        direccion: currentOrderSummary.direccion,
+        metodoPago: currentOrderSummary.metodoPago,
+        tipoEntrega: currentOrderSummary.tipoEntrega,
+        courier: currentOrderSummary.courier,
+        subtotal: currentOrderSummary.subtotal,
+        discount: currentOrderSummary.discount,
+        promoTitle: currentOrderSummary.promoTitle,
+        shipping: currentOrderSummary.shipping,
+        total: currentOrderSummary.total,
+        itemCount: currentOrderSummary.itemCount,
+        items: (currentOrderSummary.items || items).map((it) => ({
           product: {
             id: it.product.id,
             nombre: it.product.nombre,
@@ -694,38 +747,41 @@ export const CheckoutDemoModal: React.FC = () => {
           quantity: it.quantity,
           subtotal: it.subtotal,
         })),
-        notas: confirmedOrder.notas,
+        notas: currentOrderSummary.notas,
         comprobanteUrl: voucherImage,
         comprobanteFileName: voucherFileName || 'comprobante_pago.jpg',
         createdAt: new Date().toISOString(),
       };
 
       saveOrderReceipt(receiptToSave);
-      setConfirmedOrder((prev) => (prev ? { ...prev, comprobantePago: voucherImage } : prev));
-    }
+      updateOrderVoucher(String(receiptToSave.orderId), voucherImage, voucherFileName || 'comprobante_pago.jpg');
+      updateOrderVoucher(String(receiptToSave.orderNumber), voucherImage, voucherFileName || 'comprobante_pago.jpg');
 
-    // 2. Sincronizar en Supabase de forma segura
-    if (confirmedOrder?.orderId) {
-      try {
-        const supabase = getSupabaseClient();
-        await supabase
-          .from('pedidos')
-          .update({
-            comprobante_pago: voucherImage,
-            updated_at: new Date().toISOString(),
-          } as any)
-          .eq('id', confirmedOrder.orderId);
-      } catch (e) {
-        console.warn('Sync voucher status:', e);
+      // 3. Sincronizar en Supabase de forma segura si ya tenemos el id
+      const orderIdStr = String(currentOrderSummary.orderId || '');
+      if (orderIdStr && !orderIdStr.startsWith('temp-')) {
+        try {
+          const supabase = getSupabaseClient();
+          await supabase
+            .from('pedidos')
+            .update({
+              comprobante_pago: voucherImage,
+              updated_at: new Date().toISOString(),
+            } as any)
+            .eq('id', currentOrderSummary.orderId);
+        } catch (e) {
+          console.warn('Sync voucher status in Supabase:', e);
+        }
       }
+
+      setConfirmedOrder(currentOrderSummary);
+      setCheckoutStep('receipt');
+    } catch (err) {
+      console.error('Error confirming order:', err);
+      setCheckoutStep('receipt');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Pasar a la pantalla del Recibo Oficial
-    setCheckoutStep('receipt');
-    setHasOpenedWhatsApp(true);
-
-    // Se envía / abre automáticamente a WhatsApp apenas se confirma el comprobante
-    handleSendToWhatsApp();
   };
 
   // Función para enviar captura y recibo por WhatsApp (soporte nativo para móviles + portapapeles en PC)
@@ -872,13 +928,9 @@ ${voucherStatus}`;
     return `https://wa.me/${WHATSAPP_ORDERS_PHONE}?text=${encodeURIComponent(msg)}`;
   };
 
-  // REGRESAR A LA TIENDA (No permite salir en el paso de recibo hasta enviar por WhatsApp)
+  // REGRESAR A LA TIENDA
   const handleReturnToStore = () => {
     if (checkoutStep === 'receipt') {
-      if (!hasOpenedWhatsApp) {
-        alert('Debes presionar "Enviar Captura y Recibo por WhatsApp" antes de regresar a la tienda.');
-        return;
-      }
       clearCart();
       resetCheckout();
       setIsCheckoutOpen(false);
@@ -887,12 +939,8 @@ ${voucherStatus}`;
     setIsCheckoutOpen(false);
   };
 
-  // CERRAR PEDIDO (Se habilita después de ingresar al link de WhatsApp y reinicia todo para el siguiente pedido)
+  // CERRAR PEDIDO (Finaliza el pedido, vacía el carrito y reinicia para el siguiente)
   const handleCloseOrder = () => {
-    if (!hasOpenedWhatsApp) {
-      alert('Debes presionar "Enviar Captura y Recibo por WhatsApp" antes de cerrar tu pedido.');
-      return;
-    }
     clearCart();
     resetCheckout();
     setIsCheckoutOpen(false);
@@ -1787,11 +1835,11 @@ ${voucherStatus}`;
               )}
             </div>
 
-            {/* 3. LUEGO: "CONFIRMAR COMPROBANTE" (BLOQUEADO HASTA QUE MONTE EL COMPROBANTE) */}
+            {/* 3. LUEGO: "CONFIRMAR PEDIDO" (BLOQUEADO HASTA QUE MONTE EL COMPROBANTE) */}
             <div className="space-y-2.5 pt-1">
               <button
                 type="button"
-                disabled={!voucherImage}
+                disabled={!voucherImage || isSubmitting}
                 onClick={handleFinalOrderConfirmation}
                 className={`w-full py-4 px-6 rounded-xl font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-xl min-h-[48px] ${
                   !voucherImage
@@ -1802,11 +1850,13 @@ ${voucherStatus}`;
                 {!voucherImage ? (
                   <>
                     <AlertCircle size={18} className="text-amber-400 shrink-0" />
-                    <span>Adjunta la captura del comprobante para confirmar comprobante</span>
+                    <span>Adjunta la captura del comprobante para confirmar pedido</span>
                   </>
+                ) : isSubmitting ? (
+                  <span>Registrando pedido y generando recibo...</span>
                 ) : (
                   <>
-                    <span>Confirmar Comprobante</span>
+                    <span>Confirmar Pedido y Ver Recibo Oficial</span>
                     <CheckCircle2 size={20} />
                   </>
                 )}
@@ -1835,74 +1885,126 @@ ${voucherStatus}`;
         )}
 
         {/* ========================================================================= */}
-        {/* PASO 3: Y DESPUÉS LE SALE EL RECIBO Y QUE ENVÍE LA CAPTURA Y RECIBO POR WASAP */}
+        {/* PASO 4: RECIBO OFICIAL DE COMPRA, CAPTURA Y ENVÍO POR WHATSAPP */}
         {/* ========================================================================= */}
         {checkoutStep === 'receipt' && confirmedOrder && (
           <div className="overflow-y-auto overscroll-contain touch-scroll p-4 sm:p-6 lg:p-7 space-y-5 text-center pb-8 sm:pb-6">
             {/* Encabezado del Recibo */}
             <div className="space-y-1">
-              <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono uppercase font-bold inline-block mb-1">
-                ✓ Pedido Confirmado
+              <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono uppercase font-bold inline-flex items-center gap-1 mb-1">
+                <CheckCircle2 size={12} />
+                <span>Pedido Confirmado & Comprobante Guardado</span>
               </span>
               <h2 className="text-2xl sm:text-4xl font-mono font-extrabold text-[#fbbf24]">
                 #{confirmedOrder.orderNumber}
               </h2>
-              <p className="text-xs text-stone-400 font-light">
-                Recibo Oficial listo para enviar
+              <p className="text-xs text-stone-300 font-light max-w-md mx-auto">
+                Tu orden ha sido registrada en el sistema de Pretty Store con su factura oficial y comprobante adjunto.
               </p>
             </div>
 
+            {/* Barra de Acciones Rápidas */}
+            <div className="max-w-xl mx-auto flex items-center justify-center gap-2.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setShowFullInvoiceModal(true)}
+                className="px-4 py-2.5 rounded-xl bg-[#fbbf24] hover:bg-[#f59e0b] text-black font-bold text-xs flex items-center gap-2 transition-all shadow-md shadow-[#fbbf24]/20 cursor-pointer active:scale-95"
+              >
+                <Printer size={15} />
+                <span>Imprimir / Ver Factura Oficial (PDF)</span>
+              </button>
+
+              {voucherImage && (
+                <button
+                  type="button"
+                  onClick={() => setIsZoomingVoucher(true)}
+                  className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer border border-white/15"
+                >
+                  <ZoomIn size={14} />
+                  <span>Ver Captura en Grande</span>
+                </button>
+              )}
+            </div>
+
             {/* Recibo Oficial Estructurado */}
-            <div className="max-w-xl mx-auto p-4 sm:p-5 rounded-2xl bg-black/90 border border-white/15 text-left space-y-4 text-xs font-sans shadow-2xl">
-              <div className="border-b border-white/10 pb-2.5 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wide">
-                    Recibo Oficial de Compra
-                  </h3>
-                  <p className="text-[11px] text-[#fbbf24] font-mono mt-0.5">
-                    #{confirmedOrder.orderNumber}
-                  </p>
+            <div className="max-w-xl mx-auto p-4 sm:p-6 rounded-2xl bg-black/90 border border-white/15 text-left space-y-4 text-xs font-sans shadow-2xl">
+              {/* Header Recibo */}
+              <div className="border-b border-white/10 pb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-black border border-white/20 shrink-0">
+                    <img src="/images/logo/logotipo.jpeg" alt="Pretty Store" className="w-full h-full object-cover" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider font-serif-luxury">
+                      PRETTY STORE · RECIBO OFICIAL
+                    </h3>
+                    <p className="text-[11px] text-[#fbbf24] font-mono">
+                      #{confirmedOrder.orderNumber}
+                    </p>
+                  </div>
                 </div>
-                <span className="text-stone-400 text-[10px]">
-                  {new Date().toLocaleDateString('es-PA')}
-                </span>
+                <div className="text-right">
+                  <span className="text-stone-400 text-[10px] block font-mono">
+                    {confirmedOrder.date || new Date().toLocaleDateString('es-PA')}
+                  </span>
+                  <span className="text-emerald-400 text-[10px] font-semibold">
+                    Estado: Pendiente
+                  </span>
+                </div>
               </div>
 
               {/* Datos Cliente y Entrega */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-b border-white/10 pb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-b border-white/10 pb-3 text-xs">
                 <div>
-                  <span className="text-stone-400 text-[10px] block">Cliente:</span>
+                  <span className="text-stone-400 text-[10px] uppercase tracking-wider block mb-0.5">Cliente:</span>
                   <span className="text-white font-medium block">{nombre}</span>
-                  <span className="text-stone-300 font-mono text-[10px]">{telefono}</span>
+                  <span className="text-stone-300 font-mono text-[11px]">{telefono}</span>
                 </div>
                 <div>
-                  <span className="text-stone-400 text-[10px] block">Método de Pago:</span>
+                  <span className="text-stone-400 text-[10px] uppercase tracking-wider block mb-0.5">Método de Pago:</span>
                   <span className="text-[#fbbf24] font-bold block capitalize">
-                    {metodoPago === 'yappy' ? 'Yappy (6215-0251)' : metodoPago === 'transferencia' ? 'Banco General (ACH)' : 'Tarjeta de Débito o Crédito'}
+                    {metodoPago === 'yappy'
+                      ? 'Yappy (6215-0251)'
+                      : metodoPago === 'transferencia'
+                      ? 'Banco General (ACH 0472985946850)'
+                      : 'Tarjeta de Débito o Crédito'}
                   </span>
                 </div>
                 <div className="col-span-1 sm:col-span-2 pt-1">
-                  <span className="text-stone-400 text-[10px] block">Modalidad de Entrega:</span>
-                  <span className="text-white font-medium block">
+                  <span className="text-stone-400 text-[10px] uppercase tracking-wider block mb-0.5">Modalidad de Entrega:</span>
+                  <span className="text-stone-200 font-medium block">
                     {tipoEntrega === 'retiro'
-                      ? 'Retiro en el Local'
-                      : `Envío express (${courier}) en ${provincia} - ${courier === 'Servientrega' && servientregaModalidad === 'domicilio' ? direccion : sucursalRetiro}`}
+                      ? 'Retiro en el Local / Tienda física'
+                      : `Envío express (${courier}) en ${provincia} - ${
+                          courier === 'Servientrega' && servientregaModalidad === 'domicilio'
+                            ? direccion
+                            : sucursalRetiro
+                        }`}
                   </span>
                 </div>
               </div>
 
               {/* Productos */}
               <div className="space-y-2 border-b border-white/10 pb-3">
-                <span className="text-stone-300 font-semibold block text-xs">
-                  Detalle de Productos:
+                <span className="text-stone-300 font-semibold block text-xs uppercase tracking-wider">
+                  Detalle de Productos Comprados:
                 </span>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {(confirmedOrder.items || items).map((it, idx) => (
-                    <div key={idx} className="flex justify-between items-center text-xs">
-                      <span className="text-white truncate">
-                        {it.product.nombre} <span className="text-stone-400 font-mono">({it.quantity}x)</span>
-                      </span>
-                      <span className="font-mono text-white font-bold">
+                    <div key={idx} className="flex justify-between items-center text-xs gap-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {it.product.imagen_url && (
+                          <img
+                            src={it.product.imagen_url}
+                            alt={it.product.nombre}
+                            className="w-8 h-8 rounded object-cover border border-white/10 shrink-0"
+                          />
+                        )}
+                        <span className="text-white truncate">
+                          {it.product.nombre} <span className="text-stone-400 font-mono">({it.quantity}x)</span>
+                        </span>
+                      </div>
+                      <span className="font-mono text-white font-bold shrink-0">
                         ${(it.quantity * it.product.precio).toFixed(2)}
                       </span>
                     </div>
@@ -1910,20 +2012,20 @@ ${voucherStatus}`;
                 </div>
               </div>
 
-              {/* Desglose de Precios con Envío sumado */}
+              {/* Desglose de Precios */}
               <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between text-stone-300">
                   <span>Subtotal productos:</span>
-                  <span className="font-mono text-white">${confirmedOrder.subtotal.toFixed(2)}</span>
+                  <span className="font-mono text-white">${confirmedOrder.subtotal.toFixed(2)} USD</span>
                 </div>
                 {confirmedOrder.discount > 0 && (
                   <div className="flex justify-between text-emerald-400 font-semibold">
                     <span>Descuento Promo:</span>
-                    <span className="font-mono">-${confirmedOrder.discount.toFixed(2)}</span>
+                    <span className="font-mono">-${confirmedOrder.discount.toFixed(2)} USD</span>
                   </div>
                 )}
                 <div className="flex justify-between text-stone-300">
-                  <span>Envío express ({confirmedOrder.courier || courier}):</span>
+                  <span>Envío express ({confirmedOrder.courier || courier || 'Retiro'}):</span>
                   <span className="font-mono text-[#fbbf24] font-bold">
                     {confirmedOrder.shipping > 0
                       ? `+$${confirmedOrder.shipping.toFixed(2)} USD`
@@ -1931,39 +2033,70 @@ ${voucherStatus}`;
                   </span>
                 </div>
                 <div className="pt-2 border-t border-white/10 flex justify-between items-center text-sm font-bold">
-                  <span className="text-white uppercase tracking-wider text-xs">Total Cancelado:</span>
+                  <span className="text-white uppercase tracking-wider text-xs">Total de la Orden:</span>
                   <span className="text-xl font-mono text-[#fbbf24]">
                     ${confirmedOrder.total.toFixed(2)} USD
                   </span>
                 </div>
               </div>
 
-              {/* Comprobante adjuntado */}
+              {/* Captura del Comprobante Guardada */}
               {voucherImage && (
-                <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <img
-                      src={voucherImage}
-                      alt="Comprobante"
-                      className="w-12 h-12 object-cover rounded-lg border border-white/20 bg-stone-800 shrink-0"
-                    />
-                    <div className="min-w-0">
-                      <span className="text-emerald-400 text-xs font-semibold block">
-                        ✓ Captura de comprobante montada
+                <div className="pt-3 border-t border-white/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-stone-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <FileCheck size={14} className="text-emerald-400" />
+                      <span>Captura del Comprobante Guardada:</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsZoomingVoucher(true)}
+                      className="text-[10px] text-[#fbbf24] hover:underline cursor-pointer inline-flex items-center gap-1"
+                    >
+                      <ZoomIn size={12} />
+                      <span>Ver en grande</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.03] border border-white/10">
+                    <div
+                      onClick={() => setIsZoomingVoucher(true)}
+                      className="relative group cursor-pointer w-14 h-14 rounded-lg overflow-hidden border border-white/20 hover:border-[#fbbf24] shrink-0 bg-stone-900"
+                    >
+                      <img
+                        src={voucherImage}
+                        alt="Comprobante"
+                        className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                        <ZoomIn size={14} />
+                      </div>
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <span className="text-emerald-400 text-xs font-semibold block truncate">
+                        ✓ Comprobante verificado y montado
                       </span>
                       <span className="text-[10px] text-stone-400 font-mono truncate block">
-                        {voucherFileName || 'captura_adjuntada.png'}
+                        {voucherFileName || 'comprobante_pago.jpg'}
+                      </span>
+                      <span className="text-[10px] text-stone-500 block">
+                        Almacenado con el pedido #{confirmedOrder.orderNumber}
                       </span>
                     </div>
+                    <a
+                      href={voucherImage}
+                      download={voucherFileName || `comprobante_${confirmedOrder.orderNumber}.jpg`}
+                      className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-stone-300 hover:text-white cursor-pointer"
+                      title="Descargar comprobante"
+                    >
+                      <Download size={14} />
+                    </a>
                   </div>
-                  <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono shrink-0">
-                    Lista para enviar
-                  </span>
                 </div>
               )}
             </div>
 
-            {/* BOTÓN OFICIAL DE WHATSAPP: "ENVIAR LA CAPTURA Y EL RECIBO POR WASAP DE UNA VEZ" */}
+            {/* BOTÓN OFICIAL DE WHATSAPP: ENVIAR CAPTURA Y RECIBO */}
             <div className="max-w-xl mx-auto space-y-3 pt-1">
               <a
                 href={generateWhatsAppUrl()}
@@ -1979,14 +2112,14 @@ ${voucherStatus}`;
                 <span>Enviar Captura y Recibo por WhatsApp</span>
               </a>
 
-              {/* Indicación clara de envío de la captura */}
+              {/* Indicación clara de envío */}
               <div className="p-3.5 rounded-xl bg-stone-900 border border-white/10 text-stone-300 text-xs text-left space-y-1">
                 <div className="flex items-center gap-2 text-emerald-400 font-semibold text-[11px]">
                   <FileCheck size={15} />
                   <span>Tu comprobante y recibo están listos para enviar al +507 6215-0251</span>
                 </div>
                 <p className="text-[11px] text-stone-400 leading-relaxed font-light">
-                  Al pulsar el botón verde se abre WhatsApp con tu recibo ya escrito. En el chat con Pretty Store, dale <strong>Pegar</strong> o presiona el botón de <strong>adjuntar (+)</strong> para enviar la captura que ya seleccionaste.
+                  Al pulsar el botón verde se abre WhatsApp con tu recibo ya redactado. En el chat oficial de Pretty Store, adjunta la captura o presiona pegar para confirmar la coordinación del despacho.
                 </p>
               </div>
             </div>
@@ -1999,52 +2132,78 @@ ${voucherStatus}`;
               </span>
             </div>
 
-            {/* Acciones finales: Cerrar Pedido y Regresar a la Tienda (Se habilitan solo tras enviar/ingresar a WhatsApp) */}
+            {/* Acciones finales */}
             <div className="pt-2 max-w-xl mx-auto space-y-2">
               <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5">
-                {/* Botón Cerrar Pedido: Se habilita después de que la persona ingrese a WhatsApp */}
                 <button
                   type="button"
-                  disabled={!hasOpenedWhatsApp}
                   onClick={handleCloseOrder}
-                  className={`w-full sm:flex-1 py-3.5 px-5 rounded-xl font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2 transition-all min-h-[46px] ${
-                    !hasOpenedWhatsApp
-                      ? 'bg-stone-800 text-stone-500 border border-white/10 cursor-not-allowed opacity-60'
-                      : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20 cursor-pointer active:scale-[0.98]'
-                  }`}
-                  title={!hasOpenedWhatsApp ? 'Habilitado al presionar el botón de WhatsApp' : 'Finalizar y cerrar pedido'}
+                  className="w-full sm:flex-1 py-3.5 px-5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold uppercase tracking-wider text-xs flex items-center justify-center gap-2 transition-all min-h-[46px] shadow-lg shadow-emerald-500/20 cursor-pointer active:scale-[0.98]"
+                  title="Finalizar y cerrar pedido"
                 >
-                  {!hasOpenedWhatsApp ? <Lock size={15} /> : <CheckCircle2 size={16} />}
-                  <span>Cerrar Pedido</span>
+                  <CheckCircle2 size={16} />
+                  <span>Finalizar y Cerrar Pedido</span>
                 </button>
 
-                {/* Botón Regresar a la Tienda: También bloqueado hasta ingresar a WhatsApp */}
                 <button
                   type="button"
-                  disabled={!hasOpenedWhatsApp}
                   onClick={handleReturnToStore}
-                  className={`w-full sm:flex-1 py-3.5 px-5 rounded-xl border font-semibold uppercase tracking-wider text-xs flex items-center justify-center gap-2 transition-all min-h-[46px] ${
-                    !hasOpenedWhatsApp
-                      ? 'border-white/10 bg-black/40 text-stone-500 cursor-not-allowed opacity-60'
-                      : 'border-white/15 bg-white/5 hover:bg-white/10 text-white cursor-pointer active:scale-[0.98]'
-                  }`}
-                  title={!hasOpenedWhatsApp ? 'Habilitado al presionar el botón de WhatsApp' : 'Regresar al catálogo'}
+                  className="w-full sm:flex-1 py-3.5 px-5 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 text-white font-semibold uppercase tracking-wider text-xs flex items-center justify-center gap-2 transition-all min-h-[46px] cursor-pointer active:scale-[0.98]"
+                  title="Regresar al catálogo"
                 >
-                  {!hasOpenedWhatsApp && <Lock size={14} />}
-                  <span>Regresar a la Tienda</span>
+                  <span>Seguir Comprando en la Tienda</span>
                 </button>
               </div>
-
-              {!hasOpenedWhatsApp && (
-                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-medium flex items-center justify-center gap-2">
-                  <Lock size={14} className="text-amber-400 shrink-0" />
-                  <span>Presiona primero el botón verde para enviar tu recibo por WhatsApp y habilitar las opciones.</span>
-                </div>
-              )}
             </div>
           </div>
         )}
       </div>
+
+      {/* Modal de Pantalla Completa para Zoom del Comprobante */}
+      {isZoomingVoucher && voucherImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md">
+          <div className="relative max-w-3xl max-h-[90vh] flex flex-col items-center">
+            <button
+              type="button"
+              onClick={() => setIsZoomingVoucher(false)}
+              className="absolute -top-10 right-0 p-2 text-stone-400 hover:text-white cursor-pointer"
+            >
+              <X size={24} />
+            </button>
+            <img
+              src={voucherImage}
+              alt="Comprobante en grande"
+              className="max-h-[80vh] max-w-full object-contain rounded-xl border border-white/20 shadow-2xl"
+            />
+            <div className="mt-3 flex items-center gap-3">
+              <a
+                href={voucherImage}
+                download={voucherFileName || 'comprobante_pago.jpg'}
+                className="px-4 py-2 rounded-xl bg-[#fbbf24] text-black font-bold text-xs flex items-center gap-2 hover:bg-[#f59e0b] cursor-pointer"
+              >
+                <Download size={14} />
+                <span>Descargar Imagen</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => setIsZoomingVoucher(false)}
+                className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs hover:bg-white/20 cursor-pointer"
+              >
+                Cerrar Visor
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Completo de Factura Oficial Imprimible */}
+      {showFullInvoiceModal && confirmedOrder && (
+        <OfficialInvoiceModal
+          order={confirmedOrder as any}
+          voucherImage={voucherImage}
+          onClose={() => setShowFullInvoiceModal(false)}
+        />
+      )}
     </div>
   );
 };

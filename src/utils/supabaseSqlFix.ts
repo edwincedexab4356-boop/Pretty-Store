@@ -1,5 +1,5 @@
 /**
- * Pretty-Store Boutique - Script Maestro de Inicialización y Seguridad Supabase
+ * Pretty Store Boutique - Script Maestro de Inicialización y Seguridad Supabase
  * Diseñado para proyectos nuevos o existentes.
  * 
  * Contiene:
@@ -13,7 +13,7 @@
  */
 
 export const SUPABASE_FIX_SQL = `-- ==============================================================================
--- PRETTY-STORE: SCRIPT MAESTRO DE INICIALIZACIÓN Y PRIVILEGIOS SUPABASE
+-- PRETTY STORE: SCRIPT MAESTRO DE INICIALIZACIÓN Y PRIVILEGIOS SUPABASE
 -- Ejecutar en: Supabase Dashboard -> SQL Editor -> New Query -> Run
 -- ==============================================================================
 
@@ -229,7 +229,7 @@ CREATE TABLE IF NOT EXISTS public.gastos (
 -- 13. TABLA: configuracion
 CREATE TABLE IF NOT EXISTS public.configuracion (
   id integer PRIMARY KEY DEFAULT 1,
-  nombre_tienda text NOT NULL DEFAULT 'Pretty-Store',
+  nombre_tienda text NOT NULL DEFAULT 'Pretty Store',
   descripcion text DEFAULT 'Boutique exclusiva de alta relojería, perfumería selecta y accesorios.',
   logo_url text DEFAULT '/images/logo/logotipo.jpeg',
   hero_video_url text DEFAULT '/videos/hero.mp4',
@@ -237,21 +237,21 @@ CREATE TABLE IF NOT EXISTS public.configuracion (
   catalog_video_url text DEFAULT '',
   telefono text DEFAULT '+507 6215-0251',
   whatsapp text DEFAULT '+507 6215-0251',
-  email text DEFAULT 'contacto@pretty-store.com',
+  email text DEFAULT 'contacto@prettystore.store',
   direccion text DEFAULT 'https://maps.app.goo.gl/PxA3suMXNZxuFF5X7',
   instagram text DEFAULT 'https://instagram.com',
   tiktok text DEFAULT 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS',
   facebook text DEFAULT 'https://facebook.com',
   twitter text DEFAULT 'https://twitter.com',
   yappy_numero text DEFAULT '6402-8245',
-  banco_datos text DEFAULT 'Banco General - Cuenta Corriente #03-01-01-123456-7 a nombre de Pretty-Store Inc.',
+  banco_datos text DEFAULT 'Banco General - Cuenta Corriente #03-01-01-123456-7 a nombre de Pretty Store Inc.',
   pasarela_tarjeta text DEFAULT 'PagueloFacil',
   link_pago_tarjeta text DEFAULT 'https://checkout.paguelofacil.com/gorras',
   updated_at timestamp with time zone DEFAULT now()
 );
 
 INSERT INTO public.configuracion (id, nombre_tienda)
-VALUES (1, 'Pretty-Store')
+VALUES (1, 'Pretty Store')
 ON CONFLICT (id) DO NOTHING;
 
 -- 14. PERMISOS Y PRIVILEGIOS DE ESQUEMA (GRANTS)
@@ -521,7 +521,7 @@ export function formatSupabaseErrorMessage(error: any): string {
 }
 
 export const SUPABASE_UNLOCK_DELETE_SQL = `-- ==============================================================================
--- PRETTY-STORE: SCRIPT DE DESBLOQUEO DE ELIMINACIÓN Y GESTIÓN DIRECTA EN SUPABASE
+-- PRETTY STORE: SCRIPT DE DESBLOQUEO DE ELIMINACIÓN Y GESTIÓN DIRECTA EN SUPABASE
 -- Ejecutar en: Supabase Dashboard -> SQL Editor -> New Query -> Run
 -- ==============================================================================
 

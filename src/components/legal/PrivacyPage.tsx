@@ -64,7 +64,7 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({
             <p><span className="text-stone-400">Razón Social o Nombre Legal:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Razón Social o Nombre Legal del Titular]</span></p>
             <p><span className="text-stone-400">RUC y DV:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Número de RUC y Dígito Verificador]</span></p>
             <p><span className="text-stone-400">Responsable / Oficial de Privacidad:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Nombre del Oficial o Contacto de Protección de Datos]</span></p>
-            <p><span className="text-stone-400">Correo para Asuntos de Privacidad:</span> <span className="text-white">{config.email || 'contacto@pretty store.com'}</span></p>
+            <p><span className="text-stone-400">Correo para Asuntos de Privacidad:</span> <span className="text-white">{config.email || 'contacto@prettystore.store'}</span></p>
             <p><span className="text-stone-400">Dirección para Notificaciones Físicas:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Dirección Física en Panamá]</span></p>
           </div>
         </section>
