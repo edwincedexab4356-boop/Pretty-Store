@@ -521,29 +521,169 @@ export function formatSupabaseErrorMessage(error: any): string {
 }
 
 export const SUPABASE_UNLOCK_DELETE_SQL = `-- ==============================================================================
--- PRETTY STORE: SCRIPT DE DESBLOQUEO DE ELIMINACIÓN Y GESTIÓN DIRECTA EN SUPABASE
+-- PRETTY STORE: SCRIPT DE DESBLOQUEO TOTAL, ALMACENAMIENTO DE CAPTURAS Y STOCK
 -- Ejecutar en: Supabase Dashboard -> SQL Editor -> New Query -> Run
 -- ==============================================================================
 
 -- 1. HABILITAR PERMISOS COMPLETOS (SELECT, INSERT, UPDATE, DELETE) A TODAS LAS TABLAS
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated;
 
--- 2. DESACTIVAR RLS PARA PERMITIR GESTIÓN DIRECTA DESDE EL PANEL DE ADMINISTRACIÓN
+-- 2. ASEGURAR COLUMNA COMPROBANTE_PAGO EN LA TABLA PEDIDOS
+ALTER TABLE IF EXISTS public.pedidos ADD COLUMN IF NOT EXISTS comprobante_pago text;
+ALTER TABLE IF EXISTS public.pedidos ALTER COLUMN cliente_id DROP NOT NULL;
+
+-- 3. QUITAR BLOQUEO DE CLAVES FORÁNEAS (FOREIGN KEYS)
+-- Permite eliminar clientes sin error de clave foránea (los pedidos quedan con cliente_id = null)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE constraint_type = 'FOREIGN KEY' 
+    AND table_name = 'pedidos' 
+    AND constraint_name = 'pedidos_cliente_id_fkey'
+  ) THEN
+    ALTER TABLE public.pedidos DROP CONSTRAINT pedidos_cliente_id_fkey;
+  END IF;
+  ALTER TABLE public.pedidos 
+    ADD CONSTRAINT pedidos_cliente_id_fkey 
+    FOREIGN KEY (cliente_id) REFERENCES public.clientes(id) ON DELETE SET NULL;
+END $$;
+
+-- Permite eliminar pedidos sin error de clave foránea (los detalles y ventas se eliminan en cascada)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE constraint_type = 'FOREIGN KEY' 
+    AND table_name = 'detalle_pedidos' 
+    AND constraint_name = 'detalle_pedidos_pedido_id_fkey'
+  ) THEN
+    ALTER TABLE public.detalle_pedidos DROP CONSTRAINT detalle_pedidos_pedido_id_fkey;
+  END IF;
+  ALTER TABLE public.detalle_pedidos 
+    ADD CONSTRAINT detalle_pedidos_pedido_id_fkey 
+    FOREIGN KEY (pedido_id) REFERENCES public.pedidos(id) ON DELETE CASCADE;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE constraint_type = 'FOREIGN KEY' 
+    AND table_name = 'ventas' 
+    AND constraint_name = 'ventas_pedido_id_fkey'
+  ) THEN
+    ALTER TABLE public.ventas DROP CONSTRAINT ventas_pedido_id_fkey;
+  END IF;
+  ALTER TABLE public.ventas 
+    ADD CONSTRAINT ventas_pedido_id_fkey 
+    FOREIGN KEY (pedido_id) REFERENCES public.pedidos(id) ON DELETE CASCADE;
+END $$;
+
+-- 4. DESACTIVAR RLS PARA PERMITIR GESTIÓN Y ELIMINACIÓN DIRECTA DESDE EL MODO ADMIN
 ALTER TABLE IF EXISTS public.clientes DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.productos DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.pedidos DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.detalle_pedidos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.ventas DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.productos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.inventario DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.categorias DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.gastos DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.ventas DISABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.inventario DISABLE ROW LEVEL SECURITY;
 
--- 3. PERMITIR QUE AL ELIMINAR UN CLIENTE SUS PEDIDOS NO GENEREN CONFLICTO DE FOREIGN KEY
-ALTER TABLE IF EXISTS public.pedidos ALTER COLUMN cliente_id DROP NOT NULL;
+-- 5. STORAGE BUCKET: HABILITAR SUBIDA PÚBLICA DE CAPTURAS AL BUCKET EXISTENTE
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('product-images', 'product-images', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('comprobantes', 'comprobantes', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Public Upload Product Images" ON storage.objects;
+CREATE POLICY "Public Upload Product Images" ON storage.objects
+  FOR INSERT TO anon, authenticated
+  WITH CHECK (bucket_id IN ('product-images', 'comprobantes', 'assets', 'productos', 'products'));
+
+DROP POLICY IF EXISTS "Public Read Product Images" ON storage.objects;
+CREATE POLICY "Public Read Product Images" ON storage.objects
+  FOR SELECT TO anon, authenticated
+  USING (bucket_id IN ('product-images', 'comprobantes', 'assets', 'productos', 'products'));
+
+DROP POLICY IF EXISTS "Public Delete Product Images" ON storage.objects;
+CREATE POLICY "Public Delete Product Images" ON storage.objects
+  FOR DELETE TO anon, authenticated
+  USING (bucket_id IN ('product-images', 'comprobantes', 'assets', 'productos', 'products'));
+
+-- 6. DESCUENTO AUTOMÁTICO DE STOCK E INVENTARIO AL COMPRAR PRODUCTOS
+CREATE OR REPLACE FUNCTION public.fn_descontar_stock_automatico()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- 1. Descontar en tabla productos
+  UPDATE public.productos
+  SET stock = GREATEST(0, COALESCE(stock, 0) - NEW.cantidad),
+      updated_at = now()
+  WHERE id::text = NEW.producto_id::text;
+
+  -- 2. Descontar en tabla inventario
+  UPDATE public.inventario
+  SET stock_actual = GREATEST(0, COALESCE(stock_actual, 0) - NEW.cantidad),
+      updated_at = now()
+  WHERE producto_id::text = NEW.producto_id::text;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS tr_descontar_stock_automatico ON public.detalle_pedidos;
+CREATE TRIGGER tr_descontar_stock_automatico
+AFTER INSERT ON public.detalle_pedidos
+FOR EACH ROW EXECUTE FUNCTION public.fn_descontar_stock_automatico();
+
+-- 7. FUNCIONES SEGURAS DE GESTIÓN (SECURITY DEFINER)
+CREATE OR REPLACE FUNCTION public.set_pedido_comprobante(p_pedido_id text, p_comprobante_pago text)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE public.pedidos
+  SET comprobante_pago = p_comprobante_pago,
+      updated_at = now()
+  WHERE id::text = p_pedido_id::text;
+  RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.delete_pedido_safe(p_pedido_id text)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  DELETE FROM public.detalle_pedidos WHERE pedido_id::text = p_pedido_id::text;
+  DELETE FROM public.ventas WHERE pedido_id::text = p_pedido_id::text;
+  DELETE FROM public.pedidos WHERE id::text = p_pedido_id::text;
+  RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.delete_cliente_safe(p_cliente_id text)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE public.pedidos SET cliente_id = NULL WHERE cliente_id::text = p_cliente_id::text;
+  UPDATE public.ventas SET cliente_id = NULL WHERE cliente_id::text = p_cliente_id::text;
+  DELETE FROM public.clientes WHERE id::text = p_cliente_id::text;
+  RETURN true;
+END;
+$$;
 `;
 
 export function getFixScriptDescription(): string {

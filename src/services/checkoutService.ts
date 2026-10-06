@@ -1,6 +1,7 @@
 import { getSupabaseClient } from '../lib/supabase';
 import { CartItem, MetodoPago, TipoEntrega, CourierOption } from '../types/database';
 import { calculateLegendaryCapsPromo } from '../utils/promoUtils';
+import { compressImageFile } from '../utils/imageOptimizer';
 
 export interface CreateOrderParams {
   items: CartItem[];
