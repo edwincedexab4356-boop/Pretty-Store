@@ -124,7 +124,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@pretty store.com o usuario"
+              placeholder="admin@prettystore.store o usuario"
               className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 text-sm text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] focus:ring-1 focus:ring-[#c5a059]/40 transition-colors"
             />
           </div>

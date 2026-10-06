@@ -3,7 +3,6 @@ import { Smartphone, Mail, MapPin, Instagram, MessageCircle } from 'lucide-react
 import { Categoria } from '../../types/database';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 import { LegalModal, LegalTab } from './LegalModal';
-import { ContactModal } from './ContactModal';
 
 interface FooterProps {
   categories: Categoria[];
@@ -22,7 +21,6 @@ export const Footer: React.FC<FooterProps> = ({
 }) => {
   const { config } = useStoreConfig();
   const [isLegalOpen, setIsLegalOpen] = useState(false);
-  const [isContactOpen, setIsContactOpen] = useState(false);
   const [legalTab, setLegalTab] = useState<LegalTab>('privacidad');
 
   const [footerTaps, setFooterTaps] = useState(0);
@@ -49,7 +47,7 @@ export const Footer: React.FC<FooterProps> = ({
   };
 
   return (
-    <footer className="bg-[#070709] border-t border-white/[0.08] text-stone-400 text-xs">
+    <footer id="contacto" className="bg-[#070709] border-t border-white/[0.08] text-stone-400 text-xs scroll-mt-10">
       <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12 py-16 sm:py-20">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-12">
           {/* Brand Info (4 cols) */}
@@ -210,10 +208,12 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <button
-                  onClick={() => setIsContactOpen(true)}
-                  className="hover:text-white text-[#e8c872] font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                  onClick={() => {
+                    document.getElementById('contacto')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="hover:text-white text-[#fbbf24] font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
                 >
-                  <MessageCircle size={13} className="text-[#e8c872]" />
+                  <MessageCircle size={13} className="text-[#fbbf24]" />
                   <span>Contáctanos</span>
                 </button>
               </li>
@@ -293,7 +293,7 @@ export const Footer: React.FC<FooterProps> = ({
               </p>
               <p className="flex items-center gap-2 text-stone-300">
                 <Mail size={13} className="text-[#c5a059]" />
-                <span>{config.email || 'contacto@pretty store.com'}</span>
+                <span>{config.email || 'contacto@prettystore.store'}</span>
               </p>
               <a
                 href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7"
@@ -358,7 +358,10 @@ export const Footer: React.FC<FooterProps> = ({
             </a>
             <span className="text-stone-700">•</span>
             <button
-              onClick={() => openLegal('contacto')}
+              onClick={() => {
+                const footerEl = document.getElementById('contacto') || document.querySelector('footer');
+                footerEl?.scrollIntoView({ behavior: 'smooth' });
+              }}
               className="hover:text-white transition-colors cursor-pointer"
             >
               Contacto
@@ -372,12 +375,6 @@ export const Footer: React.FC<FooterProps> = ({
         isOpen={isLegalOpen}
         onClose={() => setIsLegalOpen(false)}
         initialTab={legalTab}
-      />
-
-      {/* Modal Oficial de Contacto */}
-      <ContactModal
-        isOpen={isContactOpen}
-        onClose={() => setIsContactOpen(false)}
       />
     </footer>
   );

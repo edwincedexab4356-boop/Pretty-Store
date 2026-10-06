@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { X, ShieldCheck, FileText, Mail, Phone, MapPin } from 'lucide-react';
+import { X, ShieldCheck, FileText } from 'lucide-react';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 
-export type LegalTab = 'privacidad' | 'terminos' | 'contacto';
+export type LegalTab = 'privacidad' | 'terminos';
 
 interface LegalModalProps {
   isOpen: boolean;
@@ -67,18 +67,6 @@ export const LegalModal: React.FC<LegalModalProps> = ({
           >
             <FileText size={14} className={activeTab === 'terminos' ? 'text-[#c5a059]' : 'text-stone-400'} />
             <span>Términos y Condiciones</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('contacto')}
-            className={`flex items-center gap-2 px-4 py-3 border-b-2 cursor-pointer transition-colors whitespace-nowrap ${
-              activeTab === 'contacto'
-                ? 'border-[#c5a059] text-white bg-white/[0.02]'
-                : 'border-transparent text-stone-400 hover:text-white'
-            }`}
-          >
-            <Mail size={14} className={activeTab === 'contacto' ? 'text-[#c5a059]' : 'text-stone-400'} />
-            <span>Contacto</span>
           </button>
         </div>
 
@@ -160,59 +148,6 @@ export const LegalModal: React.FC<LegalModalProps> = ({
                 <p>
                   El registro de un pedido genera un comprobante con estado 'Pendiente'. La confirmación y despacho de la orden queda sujeta a la validación efectiva del pago por parte de nuestro departamento de administración o a la confirmación de la pasarela autorizada.
                 </p>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'contacto' && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  Canales Oficiales de Atención al Cliente
-                </h3>
-                <p className="mb-4">
-                  Para consultas sobre pedidos, disponibilidad de piezas exclusivas, asesoría personalizada o solicitudes de privacidad:
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.08] space-y-1.5">
-                  <div className="flex items-center gap-2 text-stone-300 font-medium">
-                    <Phone size={14} className="text-[#c5a059]" />
-                    <span>WhatsApp & Teléfono</span>
-                  </div>
-                  <p className="text-xs text-[#c5a059] font-mono">
-                    {config.whatsapp || config.telefono || '+507 6215-0251'}
-                  </p>
-                  <p className="text-[11px] text-stone-500">Atención personalizada y seguimiento</p>
-                </div>
-
-                <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.08] space-y-1.5">
-                  <div className="flex items-center gap-2 text-stone-300 font-medium">
-                    <Mail size={14} className="text-[#c5a059]" />
-                    <span>Correo Electrónico</span>
-                  </div>
-                  <p className="text-xs text-stone-300 font-mono truncate">
-                    {config.email || 'contacto@prettystore.store'}
-                  </p>
-                  <p className="text-[11px] text-stone-500">Consultas corporativas y soporte</p>
-                </div>
-
-                <div className="sm:col-span-2 p-4 rounded-xl bg-white/[0.03] border border-white/[0.08] space-y-1.5">
-                  <div className="flex items-center gap-2 text-stone-300 font-medium">
-                    <MapPin size={14} className="text-[#c5a059]" />
-                    <span>Ubicación de la Boutique</span>
-                  </div>
-                  <a
-                    href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs text-[#c5a059] hover:underline underline-offset-4 cursor-pointer"
-                  >
-                    <span>Ver Ubicación en Google Maps (maps.app.goo.gl)</span>
-                  </a>
-                  <p className="text-[11px] text-stone-500">Atención en boutique física previa coordinación</p>
-                </div>
               </div>
             </div>
           )}

@@ -322,7 +322,7 @@ export const TermsPage: React.FC<TermsPageProps> = ({
               <Mail size={15} className="text-[#c5a059] shrink-0" />
               <div>
                 <span className="text-stone-400 block text-[10px]">Correo Electrónico:</span>
-                <span className="text-white font-medium">{config.email || 'contacto@pretty store.com'}</span>
+                <span className="text-white font-medium">{config.email || 'contacto@prettystore.store'}</span>
               </div>
             </div>
             <div className="p-3 bg-white/[0.02] border border-white/10 rounded-lg flex items-center gap-2.5">

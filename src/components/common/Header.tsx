@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingBag, Menu, X, Search, ChevronDown, Layers, MessageCircle } from 'lucide-react';
+import { ShoppingBag, Menu, X, Search, ChevronDown, Layers } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 import { Categoria } from '../../types/database';
-import { ContactModal } from './ContactModal';
 
 interface HeaderProps {
   categories?: Categoria[];
@@ -27,7 +26,6 @@ export const Header: React.FC<HeaderProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(false);
   const [desktopDropdownOpen, setDesktopDropdownOpen] = useState(false);
-  const [isContactOpen, setIsContactOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -74,11 +72,24 @@ export const Header: React.FC<HeaderProps> = ({
     setMobileMenuOpen(false);
     setMobileCategoriesOpen(false);
     setDesktopDropdownOpen(false);
-    if (onNavigateSection) {
+    if (sectionId === 'hero') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (sectionId === 'contacto') {
+      const footerEl = document.getElementById('contacto') || document.querySelector('footer');
+      if (footerEl) {
+        footerEl.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }
+      return;
+    }
+    const el = document.getElementById(sectionId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    } else if (onNavigateSection) {
       onNavigateSection(sectionId);
-    } else {
-      const el = document.getElementById(sectionId);
-      if (el) el.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
@@ -242,21 +253,21 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
 
+            {/* Contáctanos (colocado entre Categorías y Sobre Nosotros) */}
+            <button
+              onClick={() => handleNavClick('contacto')}
+              className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]"
+            >
+              <span>Contáctanos</span>
+              <span className="absolute bottom-0 left-0 w-0 h-[2.5px] bg-[#fbbf24] group-hover:w-full transition-all duration-300 rounded-full" />
+            </button>
+
             <button
               onClick={() => handleNavClick('editoriales')}
               className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]"
             >
               <span>Sobre Nosotros</span>
               <span className="absolute bottom-0 left-0 w-0 h-[2.5px] bg-[#fbbf24] group-hover:w-full transition-all duration-300 rounded-full" />
-            </button>
-
-            {/* Contáctanos Link */}
-            <button
-              onClick={() => setIsContactOpen(true)}
-              className="px-4 py-2 rounded-full bg-gradient-to-r from-amber-500/25 via-[#fbbf24]/25 to-amber-500/20 border border-[#fbbf24]/50 hover:border-[#fbbf24] text-[#fef08a] hover:text-white transition-all duration-200 cursor-pointer flex items-center gap-2 shadow-sm hover:shadow-[#fbbf24]/30 hover:scale-105"
-            >
-              <MessageCircle size={15} className="text-[#fbbf24]" />
-              <span>Contáctanos</span>
             </button>
           </nav>
 
@@ -372,29 +383,23 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
 
+            {/* Contáctanos (colocado entre Categorías y Sobre Nosotros) */}
+            <button
+              onClick={() => handleNavClick('contacto')}
+              className="text-left py-2.5 px-3 text-[#fbbf24] hover:text-white hover:bg-white/5 rounded-xl transition-colors drop-shadow-[0_1px_4px_rgba(251,191,36,0.3)] font-extrabold"
+            >
+              Contáctanos
+            </button>
+
             <button
               onClick={() => handleNavClick('editoriales')}
               className="text-left py-2.5 px-3 text-[#fbbf24] hover:text-white hover:bg-white/5 rounded-xl transition-colors drop-shadow-[0_1px_4px_rgba(251,191,36,0.3)]"
             >
               Sobre Nosotros
             </button>
-
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                setIsContactOpen(true);
-              }}
-              className="text-left py-3 px-3.5 rounded-xl bg-gradient-to-r from-amber-500/25 via-[#fbbf24]/20 to-amber-500/20 border border-[#fbbf24]/50 text-[#fef08a] font-bold hover:text-white hover:bg-amber-500/30 transition-all flex items-center gap-2 mt-1 shadow-md shadow-[#fbbf24]/10"
-            >
-              <MessageCircle size={18} className="text-[#fbbf24]" />
-              <span>Contáctanos</span>
-            </button>
           </div>
         )}
       </div>
-
-      {/* Modal de Contacto Oficial */}
-      <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} />
     </header>
   );
 };

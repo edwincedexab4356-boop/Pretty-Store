@@ -30,7 +30,12 @@ import {
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { MetodoPago, TipoEntrega, CourierOption } from '../../types/database';
-import { createRealOrder, CreatedOrderResult } from '../../services/checkoutService';
+import {
+  createRealOrder,
+  CreatedOrderResult,
+  updateOrderPaymentVoucher,
+  uploadVoucherToSupabaseStorage,
+} from '../../services/checkoutService';
 import { getSupabaseClient } from '../../lib/supabase';
 import { saveOrderReceipt, updateOrderVoucher, StoredOrderReceipt } from '../../utils/orderReceiptStorage';
 import { compressImageFile } from '../../utils/imageOptimizer';
@@ -345,10 +350,12 @@ export const CheckoutDemoModal: React.FC = () => {
   const [copiedLink, setCopiedLink] = useState(false);
 
   // 6. Voucher / Captura de Pago
+  const [voucherRawFile, setVoucherRawFile] = useState<File | null>(null);
   const [voucherImage, setVoucherImage] = useState<string | null>(null);
   const [voucherFileName, setVoucherFileName] = useState<string | null>(null);
   const [isVoucherAttached, setIsVoucherAttached] = useState(false);
   const voucherInputRef = useRef<HTMLInputElement | null>(null);
+  const realSupabaseOrderIdRef = useRef<number | string | null>(null);
 
   // Pedido Confirmado
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -451,6 +458,7 @@ export const CheckoutDemoModal: React.FC = () => {
       return;
     }
 
+    setVoucherRawFile(file);
     setVoucherFileName(file.name);
     try {
       // Optimizar y comprimir captura de forma inteligente antes de guardar
@@ -491,6 +499,7 @@ export const CheckoutDemoModal: React.FC = () => {
   };
 
   const handleRemoveVoucher = () => {
+    setVoucherRawFile(null);
     setVoucherImage(null);
     setVoucherFileName(null);
     setIsVoucherAttached(false);
@@ -597,10 +606,10 @@ export const CheckoutDemoModal: React.FC = () => {
       notas: notas.trim() || undefined,
     };
 
-    // 1. Mostrar de inmediato la vista del Número de Pedido y la Hojita de lo que pidió
+    // 1. Mostrar de inmediato la vista de Pago con Número de Pedido
     // ¡EL CARRITO NO SE ELIMINA AQUÍ! Se mantiene para que pueda regresar libremente.
     setConfirmedOrder(instantSummary);
-    setCheckoutStep('review');
+    setCheckoutStep('payment');
     setIsSubmitting(false);
 
     // Guardar borrador del pedido en el almacén de recibos
@@ -654,6 +663,7 @@ export const CheckoutDemoModal: React.FC = () => {
       notas: notas.trim() || undefined,
     }).then((realOrder) => {
       if (realOrder) {
+        realSupabaseOrderIdRef.current = realOrder.orderId;
         setConfirmedOrder((prev) => (prev ? { ...prev, orderId: realOrder.orderId } : realOrder));
         if (voucherImage) {
           updateOrderVoucher(realOrder.orderId, voucherImage, voucherFileName || undefined);
@@ -675,13 +685,34 @@ export const CheckoutDemoModal: React.FC = () => {
     setSubmissionError(null);
 
     try {
-      // 1. Asegurar el objeto completo del pedido confirmado
-      const resolvedOrderNumber = String(
+      const orderNum = String(
         confirmedOrder?.orderNumber ||
         `#PED-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
       );
-      const resolvedOrderId = String(
-        confirmedOrder?.orderId || `PED-${Date.now().toString().slice(-6)}`
+
+      // 1. SUBIR LA CAPTURA AL STORAGE DE SUPABASE ('product-images' / 'comprobantes')
+      let publicVoucherUrl = voucherImage;
+      try {
+        const uploadRes = await uploadVoucherToSupabaseStorage(
+          voucherRawFile || voucherImage,
+          voucherFileName || 'comprobante.jpg',
+          orderNum
+        );
+        if (uploadRes.url) {
+          publicVoucherUrl = uploadRes.url;
+        }
+      } catch (uploadErr) {
+        console.warn('[Storage] Error al subir captura a Supabase Storage, usando dataURL:', uploadErr);
+      }
+
+      setVoucherImage(publicVoucherUrl);
+
+      // 2. VINCULAR LA CAPTURA CON EL PEDIDO EN SUPABASE
+      let resolvedDbOrderId = realSupabaseOrderIdRef.current || confirmedOrder?.orderId;
+      const isNumericDbId = Boolean(
+        resolvedDbOrderId &&
+        !String(resolvedDbOrderId).startsWith('PED-') &&
+        !String(resolvedDbOrderId).startsWith('temp-')
       );
 
       const fallbackAddress =
@@ -691,9 +722,40 @@ export const CheckoutDemoModal: React.FC = () => {
             ? (direccion.trim() || `Entrega a Domicilio (${provincia})`)
             : `Sucursal de envío (${courier || 'Courier'}) (${provincia})`;
 
+      if (isNumericDbId && resolvedDbOrderId) {
+        // El pedido ya tiene ID en la BD de Supabase: actualizamos su comprobante_pago
+        await updateOrderPaymentVoucher(resolvedDbOrderId, publicVoucherUrl);
+      } else {
+        // Si aún no se creó o no tenemos ID numérico, registrar directamente con el comprobante en Supabase
+        try {
+          const realOrder = await createRealOrder({
+            items,
+            subtotal,
+            discount,
+            promoTitle: promo.promoTitle,
+            shipping: numericalShipping,
+            total: finalTotal,
+            nombre: nombre.trim(),
+            telefono: telefono.trim(),
+            direccion: fallbackAddress,
+            metodoPago,
+            tipoEntrega,
+            courier: tipoEntrega === 'delivery' ? courier : undefined,
+            comprobantePago: publicVoucherUrl,
+            notas: notas.trim() || undefined,
+          });
+          if (realOrder) {
+            resolvedDbOrderId = realOrder.orderId;
+            realSupabaseOrderIdRef.current = realOrder.orderId;
+          }
+        } catch (dbErr) {
+          console.warn('[Supabase] Creación directa de pedido con comprobante:', dbErr);
+        }
+      }
+
       const currentOrderSummary: CreatedOrderResult = {
-        orderId: resolvedOrderId,
-        orderNumber: resolvedOrderNumber,
+        orderId: String(resolvedDbOrderId || `PED-${Date.now().toString().slice(-6)}`),
+        orderNumber: orderNum,
         date:
           confirmedOrder?.date ||
           new Date().toLocaleDateString('es-PA', {
@@ -716,10 +778,10 @@ export const CheckoutDemoModal: React.FC = () => {
         itemCount: confirmedOrder?.itemCount ?? items.reduce((acc, i) => acc + i.quantity, 0),
         items: confirmedOrder?.items && confirmedOrder.items.length > 0 ? confirmedOrder.items : items,
         notas: confirmedOrder?.notas || notas.trim() || undefined,
-        comprobantePago: voucherImage,
+        comprobantePago: publicVoucherUrl,
       };
 
-      // 2. Guardar recibo completo con la captura del comprobante en el almacén persistente
+      // 3. Guardar recibo completo con la captura del comprobante en el almacén persistente
       const receiptToSave: StoredOrderReceipt = {
         orderId: currentOrderSummary.orderId,
         orderNumber: currentOrderSummary.orderNumber,
@@ -748,31 +810,14 @@ export const CheckoutDemoModal: React.FC = () => {
           subtotal: it.subtotal,
         })),
         notas: currentOrderSummary.notas,
-        comprobanteUrl: voucherImage,
+        comprobanteUrl: publicVoucherUrl,
         comprobanteFileName: voucherFileName || 'comprobante_pago.jpg',
         createdAt: new Date().toISOString(),
       };
 
       saveOrderReceipt(receiptToSave);
-      updateOrderVoucher(String(receiptToSave.orderId), voucherImage, voucherFileName || 'comprobante_pago.jpg');
-      updateOrderVoucher(String(receiptToSave.orderNumber), voucherImage, voucherFileName || 'comprobante_pago.jpg');
-
-      // 3. Sincronizar en Supabase de forma segura si ya tenemos el id
-      const orderIdStr = String(currentOrderSummary.orderId || '');
-      if (orderIdStr && !orderIdStr.startsWith('temp-')) {
-        try {
-          const supabase = getSupabaseClient();
-          await supabase
-            .from('pedidos')
-            .update({
-              comprobante_pago: voucherImage,
-              updated_at: new Date().toISOString(),
-            } as any)
-            .eq('id', currentOrderSummary.orderId);
-        } catch (e) {
-          console.warn('Sync voucher status in Supabase:', e);
-        }
-      }
+      updateOrderVoucher(String(receiptToSave.orderId), publicVoucherUrl, voucherFileName || 'comprobante_pago.jpg');
+      updateOrderVoucher(String(receiptToSave.orderNumber), publicVoucherUrl, voucherFileName || 'comprobante_pago.jpg');
 
       setConfirmedOrder(currentOrderSummary);
       setCheckoutStep('receipt');
@@ -955,7 +1000,6 @@ ${voucherStatus}`;
             <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24] shadow-sm shadow-[#fbbf24]/50" />
             <span className="text-xs uppercase tracking-[0.2em] text-[#fbbf24] font-bold truncate">
               {checkoutStep === 'form' && 'Pretty Store · Datos del Pedido'}
-              {checkoutStep === 'review' && 'Pretty Store · Confirma tu Pedido'}
               {checkoutStep === 'payment' && 'Pretty Store · Pago y Comprobante'}
               {checkoutStep === 'receipt' && 'Pretty Store · Recibo Oficial'}
             </span>
@@ -1451,169 +1495,18 @@ ${voucherStatus}`;
                 </div>
               </div>
 
-              {/* Botón para avanzar a la pantalla de Pago con Número de Pedido */}
-              <div className="space-y-2.5">
+              {/* Botón único para ir a pagar */}
+              <div className="pt-2">
                 <button
                   type="submit"
                   disabled={isSubmitting}
                   className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] hover:from-[#f59e0b] hover:to-[#fbbf24] text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-xl shadow-[#fbbf24]/20 active:scale-[0.99] min-h-[48px]"
                 >
-                  <span>Confirmar Pedido</span>
+                  <span>Ir a pagar</span>
                   <ArrowRight size={18} />
-                </button>
-
-                {/* Botón de Regresar a la Tienda (Manteniendo carrito intacto) */}
-                <button
-                  type="button"
-                  onClick={handleReturnToStore}
-                  className="w-full py-3 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-400 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[44px]"
-                >
-                  <ArrowLeft size={15} />
-                  <span>Regresar a la tienda (Conservar bolsa)</span>
                 </button>
               </div>
             </form>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* PASO 2: HOJITA CON ESTÁS A PUNTO DE HACER TU COMPRA REVISA TU PEDIDO      */}
-        {/*         BOTÓN: "Continuar con el pedido"                                   */}
-        {/* ========================================================================= */}
-        {checkoutStep === 'review' && confirmedOrder && (
-          <div className="overflow-y-auto overscroll-contain touch-scroll p-4 sm:p-6 lg:p-7 space-y-5 pb-8 sm:pb-6">
-            {/* Tarjeta con el diseño exacto de la primera imagen ("ESTÁS A PUNTO DE HACER TU COMPRA REVISA TU PEDIDO") */}
-            <div className="p-5 sm:p-6 rounded-2xl bg-black border border-white/10 text-left space-y-4 text-xs font-sans shadow-2xl">
-              {/* Encabezado: Título solicitado + Fecha */}
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-wider">
-                    ESTÁS A PUNTO DE HACER TU COMPRA REVISA TU PEDIDO
-                  </h3>
-                  <p className="text-xs sm:text-sm text-[#fbbf24] font-mono font-bold mt-0.5">
-                    #{confirmedOrder.orderNumber}
-                  </p>
-                </div>
-                <span className="text-stone-400 text-xs font-mono">
-                  {new Date().toLocaleDateString('es-PA')}
-                </span>
-              </div>
-
-              {/* Fila: Cliente y Método de Pago */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <span className="text-stone-400 text-xs block font-medium">Cliente:</span>
-                  <span className="text-white font-bold text-sm block mt-0.5">{nombre}</span>
-                  <span className="text-stone-400 font-mono text-xs block">{telefono}</span>
-                </div>
-                <div>
-                  <span className="text-stone-400 text-xs block font-medium">Método de Pago:</span>
-                  <span className="text-[#fbbf24] font-bold text-sm block mt-0.5">
-                    {metodoPago === 'yappy'
-                      ? 'Yappy (6215-0251)'
-                      : metodoPago === 'transferencia'
-                      ? 'Banco General (ACH)'
-                      : 'Tarjeta de Débito o Crédito'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Modalidad de Entrega */}
-              <div>
-                <span className="text-stone-400 text-xs block font-medium">Modalidad de Entrega:</span>
-                <span className="text-white font-bold text-sm block mt-0.5">
-                  {tipoEntrega === 'retiro'
-                    ? 'Retiro en el Local'
-                    : `Envío express (${courier}) en ${provincia} - ${
-                        courier === 'Servientrega' && servientregaModalidad === 'domicilio'
-                          ? direccion
-                          : sucursalRetiro
-                      }`}
-                </span>
-              </div>
-
-              {/* Detalle de Productos */}
-              <div className="border-t border-white/10 pt-3 space-y-2">
-                <span className="text-stone-300 font-bold text-xs block">
-                  Detalle de Productos:
-                </span>
-                <div className="space-y-1.5">
-                  {(confirmedOrder.items || items).map((it, idx) => (
-                    <div key={idx} className="flex justify-between items-center text-xs">
-                      <span className="text-white font-semibold">
-                        {it.product.nombre} <span className="text-stone-400 font-mono font-normal">({it.quantity}x)</span>
-                      </span>
-                      <span className="font-mono text-white font-bold text-xs">
-                        ${(it.quantity * it.product.precio).toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Subtotal y Envío */}
-              <div className="border-t border-white/10 pt-3 space-y-1.5 text-xs">
-                <div className="flex justify-between text-stone-300">
-                  <span>Subtotal productos:</span>
-                  <span className="font-mono text-white">${confirmedOrder.subtotal.toFixed(2)}</span>
-                </div>
-                {confirmedOrder.discount > 0 && (
-                  <div className="flex justify-between text-emerald-400 font-semibold">
-                    <span>Descuento aplicado:</span>
-                    <span className="font-mono">-${confirmedOrder.discount.toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-stone-300">
-                  <span>Envío express ({confirmedOrder.courier || courier}):</span>
-                  <span className="font-mono text-[#fbbf24] font-bold">
-                    {confirmedOrder.shipping > 0
-                      ? `+$${confirmedOrder.shipping.toFixed(2)} USD`
-                      : 'Gratis ($0.00)'}
-                  </span>
-                </div>
-              </div>
-
-              {/* TOTAL CANCELADO */}
-              <div className="border-t border-white/10 pt-3 flex justify-between items-center">
-                <span className="text-white font-extrabold uppercase tracking-wider text-sm sm:text-base">
-                  TOTAL CANCELADO:
-                </span>
-                <span className="text-2xl sm:text-3xl font-mono font-black text-[#fbbf24]">
-                  ${confirmedOrder.total.toFixed(2)} USD
-                </span>
-              </div>
-            </div>
-
-            {/* BOTÓN: "Continuar con el pedido" */}
-            <div className="space-y-2.5 pt-1">
-              <button
-                type="button"
-                onClick={() => setCheckoutStep('payment')}
-                className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] hover:from-[#f59e0b] hover:to-[#fbbf24] text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xl shadow-[#fbbf24]/20 active:scale-[0.99] min-h-[48px]"
-              >
-                <span>Continuar con el pedido</span>
-                <ArrowRight size={18} />
-              </button>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCheckoutStep('form')}
-                  className="flex-1 py-3 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[44px]"
-                >
-                  <ArrowLeft size={14} />
-                  <span>Modificar Datos</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleReturnToStore}
-                  className="flex-1 py-3 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-400 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[44px]"
-                >
-                  <span>Regresar a la Tienda</span>
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
@@ -1865,11 +1758,11 @@ ${voucherStatus}`;
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setCheckoutStep('review')}
+                  onClick={() => setCheckoutStep('form')}
                   className="flex-1 py-3 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[44px]"
                 >
                   <ArrowLeft size={14} />
-                  <span>Volver a la hojita</span>
+                  <span>Modificar Datos</span>
                 </button>
 
                 <button

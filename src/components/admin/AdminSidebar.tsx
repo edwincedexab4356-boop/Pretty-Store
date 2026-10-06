@@ -145,7 +145,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               </span>
             </div>
             <p className="text-xs text-stone-300 truncate">
-              {user?.email || 'usuario@pretty store.com'}
+              {user?.email || 'usuario@prettystore.store'}
             </p>
           </div>
 

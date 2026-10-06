@@ -29,7 +29,7 @@ export const DEFAULT_STORE_CONFIG: StoreConfig = {
   catalog_video_url: '',
   telefono: '+507 6215-0251',
   whatsapp: '+507 6215-0251',
-  email: 'contacto@pretty store.com',
+  email: 'contacto@prettystore.store',
   direccion: 'https://maps.app.goo.gl/PxA3suMXNZxuFF5X7',
   instagram: 'https://instagram.com',
   tiktok: 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS',

@@ -85,7 +85,8 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
   const cleanEmail = sanitizeInput(email, 120);
   const cleanDireccion = sanitizeInput(direccion, 250);
   const cleanNotas = sanitizeInput(notas || '', 300);
-  const cleanComprobante = sanitizeInput(comprobantePago || '', 80);
+  // Preservar la URL o imagen completa del comprobante sin truncar a 80 caracteres
+  const cleanComprobante = comprobantePago ? String(comprobantePago).trim() : null;
 
   if (!cleanNombre || cleanNombre.length < 2) {
     throw new Error('Por favor ingresa un nombre válido.');
@@ -252,6 +253,7 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     estado: 'pendiente',
     metodo_pago: metodoPago,
     notas: finalNotes,
+    comprobante_pago: cleanComprobante || null,
   };
 
   if (clienteId) {
@@ -346,7 +348,7 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     metodoPago,
     tipoEntrega,
     courier,
-    comprobantePago: cleanComprobante,
+    comprobantePago: cleanComprobante || undefined,
     subtotal: trustedSubtotal,
     discount: trustedDiscount,
     promoTitle: promo.promoTitle,
@@ -357,4 +359,129 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     items,
   };
 }
+
+/**
+ * Actualiza el comprobante de pago de un pedido existente en la tabla public.pedidos
+ */
+export async function updateOrderPaymentVoucher(
+  orderId: string | number,
+  voucherUrl: string
+): Promise<boolean> {
+  if (!orderId || !voucherUrl) return false;
+  try {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('pedidos')
+      .update({
+        comprobante_pago: voucherUrl,
+        updated_at: new Date().toISOString(),
+      } as any)
+      .eq('id', orderId);
+
+    if (error) {
+      console.warn('[Supabase] Error actualizando comprobante de pago en pedidos:', error);
+      return false;
+    }
+    console.log('[Supabase] Comprobante de pago actualizado con éxito en pedido:', orderId);
+    return true;
+  } catch (err) {
+    console.warn('[Supabase] Fallo al actualizar comprobante:', err);
+    return false;
+  }
+}
+
+/**
+ * Sube la captura de pago al Storage de Supabase que ya tiene la tienda ('product-images' o 'comprobantes').
+ * Retorna la URL pública oficial en el CDN de Supabase.
+ * En caso de que el Storage de Supabase rechace la subida (por RLS pendiente de configurar),
+ * genera un respaldo comprimido para que la captura JAMÁS se pierda.
+ */
+export async function uploadVoucherToSupabaseStorage(
+  fileOrBlob: File | Blob | string,
+  fileName: string = 'comprobante.jpg',
+  orderNumber: string = 'PED-000000'
+): Promise<{ url: string; isStorageUrl: boolean }> {
+  if (!fileOrBlob) {
+    return { url: '', isStorageUrl: false };
+  }
+
+  // Si ya es una URL HTTP(S) pública, devolverla directamente
+  if (typeof fileOrBlob === 'string' && (fileOrBlob.startsWith('http://') || fileOrBlob.startsWith('https://'))) {
+    return { url: fileOrBlob, isStorageUrl: true };
+  }
+
+  const supabase = getSupabaseClient();
+  const cleanOrderNum = String(orderNumber).replace(/[^a-zA-Z0-9]/g, '_');
+  const timestamp = Date.now();
+  const ext = (fileName.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const filePath = `comprobantes/pago_${cleanOrderNum}_${timestamp}.${ext || 'jpg'}`;
+
+  // Convertir string dataURL a Blob si es necesario
+  let blobToUpload: Blob;
+  if (typeof fileOrBlob === 'string') {
+    if (fileOrBlob.startsWith('data:')) {
+      try {
+        const parts = fileOrBlob.split(',');
+        const mime = parts[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+        const bstr = atob(parts[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        blobToUpload = new Blob([u8arr], { type: mime });
+      } catch (e) {
+        return { url: fileOrBlob, isStorageUrl: false };
+      }
+    } else {
+      return { url: fileOrBlob, isStorageUrl: false };
+    }
+  } else {
+    blobToUpload = fileOrBlob;
+  }
+
+  const contentType = blobToUpload.type || (ext === 'png' ? 'image/png' : 'image/jpeg');
+
+  // Buckets candidatos:
+  // 1. 'product-images' (el bucket ya creado y activo que aloja los productos)
+  // 2. 'comprobantes' (por si el usuario lo creó específicamente)
+  const candidateBuckets = ['product-images', 'comprobantes', 'pedidos', 'assets'];
+
+  for (const bucket of candidateBuckets) {
+    try {
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .upload(filePath, blobToUpload, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType,
+        });
+
+      if (!error && data?.path) {
+        const { data: pubData } = supabase.storage.from(bucket).getPublicUrl(data.path);
+        if (pubData?.publicUrl) {
+          console.log(`[Storage] ✓ Captura subida con éxito al bucket '${bucket}':`, pubData.publicUrl);
+          return { url: pubData.publicUrl, isStorageUrl: true };
+        }
+      } else if (error) {
+        console.warn(`[Storage] No se pudo subir al bucket '${bucket}':`, error.message);
+      }
+    } catch (e) {
+      console.warn(`[Storage] Error al intentar subir al bucket '${bucket}':`, e);
+    }
+  }
+
+  // Si falló la subida por RLS del storage, asegurar un fallback dataURL para que la imagen no se pierda
+  if (typeof fileOrBlob === 'string' && fileOrBlob.startsWith('data:')) {
+    return { url: fileOrBlob, isStorageUrl: false };
+  }
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({ url: reader.result as string, isStorageUrl: false });
+    reader.onerror = () => resolve({ url: '', isStorageUrl: false });
+    reader.readAsDataURL(blobToUpload);
+  });
+}
+
 

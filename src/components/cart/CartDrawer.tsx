@@ -248,7 +248,7 @@ export const CartDrawer: React.FC = () => {
                 onClick={handleProceedToCheckout}
                 className="w-full py-4 bg-white hover:bg-stone-200 text-stone-950 font-sans-clean font-semibold uppercase tracking-[0.2em] text-xs transition-colors cursor-pointer flex items-center justify-center gap-2 active:scale-[0.98] min-h-[48px]"
               >
-                <span>Tramitar Pedido</span>
+                <span>Ir a pagar</span>
                 <ArrowRight size={14} className="stroke-[2]" />
               </button>
             </div>

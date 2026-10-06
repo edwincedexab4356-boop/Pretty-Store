@@ -197,7 +197,7 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({
             Para ejercer cualquiera de los derechos descritos, el titular o su apoderado debidamente acreditado deberá remitir una solicitud por correo electrónico a:
           </p>
           <div className="p-3.5 rounded-lg bg-black/40 border border-white/10 text-xs font-mono text-[#c5a059]">
-            {config.email || 'contacto@pretty store.com'}
+            {config.email || 'contacto@prettystore.store'}
           </div>
           <p className="text-xs sm:text-sm">
             La solicitud debe contener:
@@ -312,7 +312,7 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({
               <Mail size={15} className="text-[#c5a059] shrink-0" />
               <div>
                 <span className="text-stone-400 block text-[10px]">Atención de Privacidad:</span>
-                <span className="text-white font-medium">{config.email || 'contacto@pretty store.com'}</span>
+                <span className="text-white font-medium">{config.email || 'contacto@prettystore.store'}</span>
               </div>
             </div>
             <div className="p-3 bg-white/[0.02] border border-white/10 rounded-lg flex items-center gap-2.5">
