@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, ShoppingBag, X } from 'lucide-react';
+import { Check, ShoppingCart, X } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 
 export const ToastNotification: React.FC = () => {
@@ -30,7 +30,7 @@ export const ToastNotification: React.FC = () => {
 
         <div className="flex-1 min-w-0">
           <p className="text-[10px] uppercase tracking-[0.2em] font-medium text-[#c5a059] flex items-center gap-1">
-            <Check size={12} className="stroke-[2.5]" /> Añadido a la bolsa
+            <Check size={12} className="stroke-[2.5]" /> Añadido al carrito
           </p>
           <p className="text-xs font-serif-luxury font-normal text-white truncate mt-0.5">
             {notification.productName}
@@ -39,8 +39,8 @@ export const ToastNotification: React.FC = () => {
             onClick={handleOpenCart}
             className="text-[11px] text-stone-300 hover:text-white font-medium uppercase tracking-[0.16em] mt-1.5 inline-flex items-center gap-1.5 cursor-pointer"
           >
-            <ShoppingBag size={11} />
-            <span>Ver Bolsa</span>
+            <ShoppingCart size={11} />
+            <span>Ver Carrito</span>
           </button>
         </div>
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Check, ChevronLeft, ChevronRight, Play, Sparkles } from 'lucide-react';
+import { ShoppingCart, Check, ChevronLeft, ChevronRight, Play, Sparkles } from 'lucide-react';
 import { Producto } from '../../types/database';
 import { useCart } from '../../context/CartContext';
 import { getProductImages, isVideoMedia } from '../../utils/productImages';
@@ -277,7 +277,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 ? 'bg-[#c5a059] text-stone-950 font-semibold'
                 : 'bg-white hover:bg-stone-200 text-stone-950 active:scale-95'
             }`}
-            aria-label={`Añadir ${product.nombre} a la bolsa`}
+            aria-label={`Añadir ${product.nombre} al carrito`}
           >
             {isAdding ? (
               <>
@@ -290,7 +290,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               <span>En Carrito</span>
             ) : (
               <>
-                <ShoppingBag size={13} className="stroke-[2]" />
+                <ShoppingCart size={13} className="stroke-[2]" />
                 <span>Añadir</span>
               </>
             )}

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   X,
-  ShoppingBag,
+  ShoppingCart,
   Check,
   ShieldCheck,
   Truck,
@@ -348,7 +348,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     </span>
                   </div>
                   <p className="text-[11px] text-stone-300 font-light leading-relaxed">
-                    Lleva 2 gorras de esta colección (sean del mismo modelo o combinadas) y te quedan en <strong className="text-[#c5a059] font-mono font-semibold">$55.00 USD</strong>. El descuento de <strong className="text-emerald-400 font-mono">-$5.00 USD</strong> se aplica automáticamente en tu bolsa.
+                    Lleva 2 gorras de esta colección (sean del mismo modelo o combinadas) y te quedan en <strong className="text-[#c5a059] font-mono font-semibold">$55.00 USD</strong>. El descuento de <strong className="text-emerald-400 font-mono">-$5.00 USD</strong> se aplica automáticamente en tu carrito.
                   </p>
                 </div>
               )}
@@ -438,8 +438,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   <span>Límite de Stock en Carrito</span>
                 ) : (
                   <>
-                    <ShoppingBag size={16} />
-                    <span>Añadir a la Bolsa</span>
+                    <ShoppingCart size={16} />
+                    <span>Añadir al Carrito</span>
                   </>
                 )}
               </button>

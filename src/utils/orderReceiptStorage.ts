@@ -174,6 +174,29 @@ export function getOrderReceipt(orderIdOrNumber: string): StoredOrderReceipt | n
 }
 
 /**
+ * Elimina un recibo del almacén local cuando el administrador borra el pedido
+ */
+export function deleteOrderReceipt(orderIdOrNumber: string): void {
+  if (typeof window === 'undefined' || !orderIdOrNumber) return;
+  try {
+    const current = getAllOrderReceipts();
+    const clean = String(orderIdOrNumber).trim();
+    const cleanWithoutHash = clean.replace(/#/g, '').toUpperCase();
+    const filtered = current.filter((r) => {
+      if (r.orderId === clean) return false;
+      if (r.orderNumber === clean) return false;
+      if (r.orderNumber.replace(/#/g, '').toUpperCase() === cleanWithoutHash) return false;
+      const pedCode = `#PED-${String(r.orderId).replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+      if (pedCode === clean || pedCode === cleanWithoutHash) return false;
+      return true;
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+  } catch (e) {
+    console.warn('Error eliminando recibo local:', e);
+  }
+}
+
+/**
  * Obtiene todos los pedidos y comprobantes de un cliente específico por teléfono, nombre o email
  */
 export function getClientReceipts(telefono?: string, nombre?: string, email?: string): StoredOrderReceipt[] {

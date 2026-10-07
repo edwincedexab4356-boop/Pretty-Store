@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  ShoppingBag,
+  ShoppingCart,
   Search,
   Filter,
   Eye,
@@ -353,7 +353,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
           </div>
         ) : filteredOrders.length === 0 ? (
           <div className="p-12 text-center text-xs text-stone-400 space-y-2">
-            <ShoppingBag size={36} className="mx-auto text-stone-600 mb-2" />
+            <ShoppingCart size={36} className="mx-auto text-stone-600 mb-2" />
             <p className="font-serif-luxury font-semibold text-white text-base">No hay pedidos registrados</p>
             <p className="text-stone-500 max-w-sm mx-auto font-light">
               Las órdenes procesadas en el checkout de la tienda se registrarán aquí en tiempo real.
@@ -367,6 +367,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
                   <th className="py-3.5 px-4">Nº Pedido</th>
                   <th className="py-3.5 px-4">Fecha</th>
                   <th className="py-3.5 px-4">Cliente & Entrega</th>
+                  <th className="py-3.5 px-4">Productos</th>
                   <th className="py-3.5 px-4">Total</th>
                   <th className="py-3.5 px-4">Método</th>
                   <th className="py-3.5 px-4">Estado</th>
@@ -382,8 +383,30 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
                     order.comprobante_pago?.startsWith('data:') ||
                     order.comprobante_pago?.startsWith('http') ||
                     order.comprobante_pago?.startsWith('/') ||
-                    storedReceipt?.comprobanteUrl
+                    storedReceipt?.comprobanteUrl ||
+                    order.notas?.match(/(https?:\/\/[^\s|]+(?:supabase\.co|storage)[^\s|]+|https?:\/\/[^\s|]+\.(?:jpg|jpeg|png|webp|gif)[^\s|]*|data:image\/[a-zA-Z]+;base64,[^\s|]+)/i)
                   );
+
+                  // Obtener líneas del pedido con fotos (de Supabase o de respaldo persistente)
+                  const orderItems = (order.detalles && order.detalles.length > 0)
+                    ? order.detalles
+                    : (storedReceipt?.items || []).map((it, idx) => ({
+                        id: `${order.id}-${idx}`,
+                        pedido_id: order.id,
+                        producto_id: it.product.id,
+                        cantidad: it.quantity,
+                        precio_unitario: it.product.precio,
+                        subtotal: it.subtotal,
+                        producto: {
+                          id: it.product.id,
+                          nombre: it.product.nombre,
+                          imagen_url: it.product.imagen_url || '/images/products/gorra-1.webp',
+                          precio: it.product.precio,
+                          stock: 1,
+                          activo: true,
+                          categoria_id: '',
+                        },
+                      }));
 
                   return (
                     <tr key={order.id} className="hover:bg-white/[0.02] transition-colors">
@@ -461,6 +484,38 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
                           )}
                         </div>
                       </td>
+
+                      {/* Columna de Productos con Fotos */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex -space-x-2 overflow-hidden shrink-0">
+                            {orderItems.slice(0, 3).map((item, i) => (
+                              <img
+                                key={i}
+                                src={item.producto?.imagen_url || '/images/products/gorra-1.webp'}
+                                alt={item.producto?.nombre || 'Producto'}
+                                className="inline-block w-9 h-9 rounded-lg object-cover ring-2 ring-stone-900 border border-white/20 bg-black"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  if (!target.src.endsWith('/images/products/gorra-1.webp')) {
+                                    target.src = '/images/products/gorra-1.webp';
+                                  }
+                                }}
+                              />
+                            ))}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-white font-medium text-xs truncate max-w-[150px]">
+                              {orderItems[0]?.producto?.nombre || `${orderItems.length} producto(s)`}
+                            </p>
+                            <span className="text-[10px] text-stone-400">
+                              {orderItems.reduce((acc, i) => acc + (i.cantidad || 1), 0)} unid(s).
+                              {orderItems.length > 1 && ` (+${orderItems.length - 1} más)`}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
                       <td className="py-3.5 px-4 font-semibold text-white font-mono">
                         {formatMoney(order.total)}
                       </td>
@@ -653,7 +708,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
                     onClick={() => handleOpenInvoice(selectedOrder, 'pedido')}
                     className="p-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-200 border border-white/10 font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
                   >
-                    <ShoppingBag size={15} />
+                    <ShoppingCart size={15} />
                     <span>Hoja del Pedido</span>
                   </button>
                 </div>
@@ -735,52 +790,79 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
             </div>
 
             {/* Products List */}
-            <div className="mb-6 space-y-3">
-              <span className="text-xs font-medium text-white uppercase tracking-wider block">
-                Productos Comprados ({selectedOrder.detalles?.length || 0})
-              </span>
+            {(() => {
+              const rawOrderId = String(selectedOrder.id || '');
+              const orderCode = `#PED-${rawOrderId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+              const storedReceipt = getOrderReceipt(rawOrderId) || getOrderReceipt(orderCode);
+              const drawerItems = (selectedOrder.detalles && selectedOrder.detalles.length > 0)
+                ? selectedOrder.detalles
+                : (storedReceipt?.items || []).map((it, idx) => ({
+                    id: `${selectedOrder.id}-${idx}`,
+                    pedido_id: selectedOrder.id,
+                    producto_id: it.product.id,
+                    cantidad: it.quantity,
+                    precio_unitario: it.product.precio,
+                    subtotal: it.subtotal,
+                    producto: {
+                      id: it.product.id,
+                      nombre: it.product.nombre,
+                      imagen_url: it.product.imagen_url || '/images/products/gorra-1.webp',
+                      precio: it.product.precio,
+                      stock: 1,
+                      activo: true,
+                      categoria_id: '',
+                    },
+                  }));
 
-              {(!selectedOrder.detalles || selectedOrder.detalles.length === 0) ? (
-                <div className="p-4 rounded-xl bg-white/[0.02] text-xs text-stone-500 text-center font-light">
-                  Líneas de detalle no registradas para este pedido.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {selectedOrder.detalles.map((d) => (
-                    <div
-                      key={d.id}
-                      className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between text-xs"
-                    >
-                      <div className="flex items-center gap-3">
-                        {d.producto?.imagen_url ? (
-                          <img
-                            src={d.producto.imagen_url}
-                            alt={d.producto.nombre}
-                            className="w-10 h-10 rounded-lg object-cover bg-black border border-white/10"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-lg bg-stone-900 border border-white/10 flex items-center justify-center text-stone-500">
-                            <Package size={16} />
-                          </div>
-                        )}
-                        <div>
-                          <p className="font-medium text-white">
-                            {d.producto?.nombre || 'Producto'}
-                          </p>
-                          <p className="text-[11px] text-stone-400 font-light">
-                            {d.cantidad} x {formatMoney(d.precio_unitario)}
-                          </p>
-                        </div>
-                      </div>
+              return (
+                <div className="mb-6 space-y-3">
+                  <span className="text-xs font-medium text-white uppercase tracking-wider block">
+                    Productos Comprados ({drawerItems.length})
+                  </span>
 
-                      <span className="font-mono font-medium text-[#c5a059]">
-                        {formatMoney(d.subtotal)}
-                      </span>
+                  {drawerItems.length === 0 ? (
+                    <div className="p-4 rounded-xl bg-white/[0.02] text-xs text-stone-500 text-center font-light">
+                      Líneas de detalle no registradas para este pedido.
                     </div>
-                  ))}
+                  ) : (
+                    <div className="space-y-2">
+                      {drawerItems.map((d) => (
+                        <div
+                          key={d.id}
+                          className="p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-between text-xs"
+                        >
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={d.producto?.imagen_url || '/images/products/gorra-1.webp'}
+                              alt={d.producto?.nombre || 'Producto'}
+                              className="w-12 h-12 rounded-xl object-cover bg-black border border-white/10 shrink-0"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                if (!target.src.endsWith('/images/products/gorra-1.webp')) {
+                                  target.src = '/images/products/gorra-1.webp';
+                                }
+                              }}
+                            />
+                            <div>
+                              <p className="font-semibold text-white text-sm">
+                                {d.producto?.nombre || 'Producto Pretty Store'}
+                              </p>
+                              <p className="text-[11px] text-stone-300 font-light mt-0.5">
+                                {d.cantidad} x {formatMoney(d.precio_unitario)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <span className="font-mono font-bold text-sm text-[#c5a059]">
+                            {formatMoney(d.subtotal)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
             {/* Financial Summary */}
             <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08] space-y-2 text-xs mb-6 font-mono">
@@ -808,7 +890,10 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
                 selectedOrder.comprobante_pago?.startsWith('http') ||
                 selectedOrder.comprobante_pago?.startsWith('/')
                   ? selectedOrder.comprobante_pago
-                  : null) || storedReceipt?.comprobanteUrl || null;
+                  : null) ||
+                storedReceipt?.comprobanteUrl ||
+                (selectedOrder.notas?.match(/(https?:\/\/[^\s|]+(?:supabase\.co|storage)[^\s|]+|https?:\/\/[^\s|]+\.(?:jpg|jpeg|png|webp|gif)[^\s|]*|data:image\/[a-zA-Z]+;base64,[^\s|]+)/i)?.[1]) ||
+                null;
 
               return (
                 <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08] space-y-3 mb-6">

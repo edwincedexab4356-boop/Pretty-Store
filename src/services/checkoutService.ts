@@ -273,14 +273,20 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
 
   const orderId = createdOrder.id;
 
-  // 7. CREAR DETALLES EN public.detalle_pedidos CON PRECIOS OFICIALES
-  const detailsPayload = verifiedOrderLines.map((line) => ({
-    pedido_id: orderId,
-    producto_id: line.product.id,
-    cantidad: line.quantity,
-    precio_unitario: line.product.precio,
-    subtotal: line.subtotal,
-  }));
+  // 7. CREAR DETALLES EN public.detalle_pedidos CON PRECIOS OFICIALES E IMÁGENES
+  const detailsPayload = verifiedOrderLines.map((line) => {
+    const origItem = items.find((it) => String(it.product.id) === String(line.product.id));
+    const prodImg = origItem?.product.imagen_url || (line.product as any).imagen_url || null;
+    return {
+      pedido_id: orderId,
+      producto_id: line.product.id,
+      producto_nombre: line.product.nombre,
+      producto_imagen: prodImg,
+      cantidad: line.quantity,
+      precio_unitario: line.product.precio,
+      subtotal: line.subtotal,
+    };
+  });
 
   const { error: detailsErr } = await supabase
     .from('detalle_pedidos')
@@ -290,45 +296,75 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     console.warn('Detalle de pedidos guardado parcialmente:', detailsErr.message);
   }
 
-  // 8. DESCUENTO DE STOCK Y VENTAS EN SEGUNDO PLANO (Ultra Rápido, no bloquea el pedido)
-  (async () => {
-    try {
-      for (const line of verifiedOrderLines) {
-        const qtyToDeduct = line.quantity;
-        const pId = line.product.id;
-        try {
-          const { data: rpcRes, error: rpcErr } = await supabase.rpc('deduct_product_stock_safe', {
-            p_producto_id: pId,
-            p_cantidad: qtyToDeduct,
-          });
-          if (!rpcErr && rpcRes === true) continue;
-        } catch {
-          // ignore
+  // 8. DESCUENTO AUTOMÁTICO DE STOCK E INVENTARIO
+  // Descontamos tanto en public.productos (stock) como en public.inventario (stock_actual)
+  try {
+    for (const line of verifiedOrderLines) {
+      const qtyToDeduct = line.quantity;
+      const pId = line.product.id;
+      
+      let rpcSucceeded = false;
+      try {
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('deduct_product_stock_safe', {
+          p_producto_id: pId,
+          p_cantidad: qtyToDeduct,
+        });
+        if (!rpcErr && rpcRes === true) {
+          rpcSucceeded = true;
         }
+      } catch {}
 
+      if (!rpcSucceeded) {
+        // A) Actualizar tabla productos (stock)
         try {
-          const { data: curProd } = await supabase.from('productos').select('stock').eq('id', pId).single();
+          const { data: curProd } = await supabase
+            .from('productos')
+            .select('stock')
+            .eq('id', pId)
+            .single();
           if (curProd) {
             const currentStock = Number(curProd.stock) || 0;
             const newStock = Math.max(0, currentStock - qtyToDeduct);
-            await supabase.from('productos').update({ stock: newStock, updated_at: new Date().toISOString() }).eq('id', pId);
+            await supabase
+              .from('productos')
+              .update({ stock: newStock, updated_at: new Date().toISOString() })
+              .eq('id', pId);
           }
         } catch (stockErr) {
-          console.warn('Actualización de existencias protegida:', stockErr);
+          console.warn('Actualización de stock en productos:', stockErr);
+        }
+
+        // B) Actualizar tabla inventario (stock_actual)
+        try {
+          const { data: curInv } = await supabase
+            .from('inventario')
+            .select('id, stock_actual')
+            .eq('producto_id', pId)
+            .limit(1);
+          if (curInv && curInv.length > 0) {
+            const currentStockActual = Number(curInv[0].stock_actual) || 0;
+            const newStockActual = Math.max(0, currentStockActual - qtyToDeduct);
+            await supabase
+              .from('inventario')
+              .update({ stock_actual: newStockActual, updated_at: new Date().toISOString() })
+              .eq('id', curInv[0].id);
+          }
+        } catch (invErr) {
+          console.warn('Actualización de inventario:', invErr);
         }
       }
-
-      await supabase.from('ventas').insert([
-        {
-          pedido_id: orderId,
-          total: trustedTotal,
-          fecha: new Date().toISOString(),
-        },
-      ]);
-    } catch {
-      // background tasks
     }
-  })();
+
+    await supabase.from('ventas').insert([
+      {
+        pedido_id: orderId,
+        total: trustedTotal,
+        fecha: new Date().toISOString(),
+      },
+    ]);
+  } catch (err) {
+    console.warn('Error en descuento de existencias:', err);
+  }
 
   const orderNumber = `PED-${String(orderId || '').replace(/-/g, '').slice(0, 6).toUpperCase()}`;
 
@@ -369,18 +405,65 @@ export async function updateOrderPaymentVoucher(
   voucherUrl: string
 ): Promise<boolean> {
   if (!orderId || !voucherUrl) return false;
+  const supabase = getSupabaseClient();
+  const cleanId = String(orderId).trim();
+  const numId = Number(cleanId);
+  const isNumeric = !isNaN(numId) && cleanId !== '';
+
   try {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
+    // 1. Intentar RPC seguro si existe en la base de datos
+    try {
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('set_pedido_comprobante', {
+        p_pedido_id: cleanId,
+        p_comprobante_pago: voucherUrl,
+      });
+      if (!rpcErr && rpcRes === true) {
+        console.log('[Supabase] Comprobante actualizado vía RPC:', cleanId);
+        return true;
+      }
+    } catch {}
+
+    // 2. Actualizar directamente tabla pedidos (columna comprobante_pago)
+    let updateRes = await supabase
       .from('pedidos')
       .update({
         comprobante_pago: voucherUrl,
         updated_at: new Date().toISOString(),
       } as any)
-      .eq('id', orderId);
+      .eq('id', cleanId);
 
-    if (error) {
-      console.warn('[Supabase] Error actualizando comprobante de pago en pedidos:', error);
+    if (updateRes.error && isNumeric) {
+      updateRes = await supabase
+        .from('pedidos')
+        .update({
+          comprobante_pago: voucherUrl,
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq('id', numId);
+    }
+
+    // 3. Respaldo en campo notas para garantizar que NUNCA se pierda aunque falte la columna comprobante_pago
+    try {
+      const { data: orderData } = await supabase
+        .from('pedidos')
+        .select('notas')
+        .eq('id', isNumeric ? numId : cleanId)
+        .single();
+
+      const currentNotes = orderData?.notas || '';
+      if (!currentNotes.includes(voucherUrl)) {
+        const appendedNotes = currentNotes
+          ? `${currentNotes} | [COMPROBANTE: ${voucherUrl}]`
+          : `[COMPROBANTE: ${voucherUrl}]`;
+        await supabase
+          .from('pedidos')
+          .update({ notas: appendedNotes } as any)
+          .eq('id', isNumeric ? numId : cleanId);
+      }
+    } catch {}
+
+    if (updateRes.error) {
+      console.warn('[Supabase] Error actualizando comprobante de pago en pedidos:', updateRes.error);
       return false;
     }
     console.log('[Supabase] Comprobante de pago actualizado con éxito en pedido:', orderId);
@@ -394,8 +477,7 @@ export async function updateOrderPaymentVoucher(
 /**
  * Sube la captura de pago al Storage de Supabase que ya tiene la tienda ('product-images' o 'comprobantes').
  * Retorna la URL pública oficial en el CDN de Supabase.
- * En caso de que el Storage de Supabase rechace la subida (por RLS pendiente de configurar),
- * genera un respaldo comprimido para que la captura JAMÁS se pierda.
+ * Optimiza la imagen mediante canvas a ~100KB antes de subir para carga ultrarrápida.
  */
 export async function uploadVoucherToSupabaseStorage(
   fileOrBlob: File | Blob | string,
@@ -415,12 +497,27 @@ export async function uploadVoucherToSupabaseStorage(
   const cleanOrderNum = String(orderNumber).replace(/[^a-zA-Z0-9]/g, '_');
   const timestamp = Date.now();
   const ext = (fileName.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const filePath = `comprobantes/pago_${cleanOrderNum}_${timestamp}.${ext || 'jpg'}`;
 
-  // Convertir string dataURL a Blob si es necesario
   let blobToUpload: Blob;
-  if (typeof fileOrBlob === 'string') {
+  let fallbackDataUrl = '';
+
+  // Optimizar con compressImageFile si es File
+  if (fileOrBlob instanceof File) {
+    try {
+      const compressed = await compressImageFile(fileOrBlob, {
+        maxWidth: 1280,
+        maxHeight: 1280,
+        quality: 0.82,
+        mimeType: 'image/jpeg',
+      });
+      blobToUpload = compressed.file;
+      fallbackDataUrl = compressed.dataUrl;
+    } catch {
+      blobToUpload = fileOrBlob;
+    }
+  } else if (typeof fileOrBlob === 'string') {
     if (fileOrBlob.startsWith('data:')) {
+      fallbackDataUrl = fileOrBlob;
       try {
         const parts = fileOrBlob.split(',');
         const mime = parts[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
@@ -443,38 +540,42 @@ export async function uploadVoucherToSupabaseStorage(
 
   const contentType = blobToUpload.type || (ext === 'png' ? 'image/png' : 'image/jpeg');
 
-  // Buckets candidatos:
-  // 1. 'product-images' (el bucket ya creado y activo que aloja los productos)
-  // 2. 'comprobantes' (por si el usuario lo creó específicamente)
+  // Buckets candidatos: 'product-images' (el bucket ya creado y activo), luego 'comprobantes'
   const candidateBuckets = ['product-images', 'comprobantes', 'pedidos', 'assets'];
 
-  for (const bucket of candidateBuckets) {
-    try {
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(filePath, blobToUpload, {
-          cacheControl: '3600',
-          upsert: true,
-          contentType,
-        });
+  // Probar rutas: tanto en carpeta comprobantes como en la raíz del bucket
+  const filePaths = [
+    `comprobantes/pago_${cleanOrderNum}_${timestamp}.${ext || 'jpg'}`,
+    `pago_${cleanOrderNum}_${timestamp}.${ext || 'jpg'}`
+  ];
 
-      if (!error && data?.path) {
-        const { data: pubData } = supabase.storage.from(bucket).getPublicUrl(data.path);
-        if (pubData?.publicUrl) {
-          console.log(`[Storage] ✓ Captura subida con éxito al bucket '${bucket}':`, pubData.publicUrl);
-          return { url: pubData.publicUrl, isStorageUrl: true };
+  for (const bucket of candidateBuckets) {
+    for (const filePath of filePaths) {
+      try {
+        const { data, error } = await supabase.storage
+          .from(bucket)
+          .upload(filePath, blobToUpload, {
+            cacheControl: '3600',
+            upsert: true,
+            contentType,
+          });
+
+        if (!error && data?.path) {
+          const { data: pubData } = supabase.storage.from(bucket).getPublicUrl(data.path);
+          if (pubData?.publicUrl) {
+            console.log(`[Storage] ✓ Captura subida con éxito al bucket '${bucket}':`, pubData.publicUrl);
+            return { url: pubData.publicUrl, isStorageUrl: true };
+          }
         }
-      } else if (error) {
-        console.warn(`[Storage] No se pudo subir al bucket '${bucket}':`, error.message);
+      } catch (e) {
+        // intentar siguiente ruta / bucket
       }
-    } catch (e) {
-      console.warn(`[Storage] Error al intentar subir al bucket '${bucket}':`, e);
     }
   }
 
-  // Si falló la subida por RLS del storage, asegurar un fallback dataURL para que la imagen no se pierda
-  if (typeof fileOrBlob === 'string' && fileOrBlob.startsWith('data:')) {
-    return { url: fileOrBlob, isStorageUrl: false };
+  // Si falló la subida por RLS de storage, devolver el respaldo base64 comprimido
+  if (fallbackDataUrl) {
+    return { url: fallbackDataUrl, isStorageUrl: false };
   }
 
   return new Promise((resolve) => {

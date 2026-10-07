@@ -18,7 +18,7 @@ import {
   UploadCloud,
   Trash2,
   ArrowLeft,
-  ShoppingBag,
+  ShoppingCart,
   FileCheck,
   Lock,
   Printer,
@@ -49,8 +49,8 @@ export const BANCO_GENERAL_CUENTA = '0472985946850';
 export const TARJETA_PAY_LINK = 'https://checkout.paguelofacil.com/W_F9464GL';
 
 export type PanamaProvince =
-  | 'Panamá Oeste'
   | 'Panamá Capital'
+  | 'Panamá Oeste'
   | 'Colón'
   | 'Coclé'
   | 'Herrera'
@@ -66,8 +66,8 @@ export const PANAMA_PROVINCES: {
   name: string;
   tag: string;
 }[] = [
+  { id: 'Panamá Capital', name: 'Panamá Capital', tag: 'Ciudad de Panamá · Chepo' },
   { id: 'Panamá Oeste', name: 'Panamá Oeste', tag: 'La Chorrera · Arraiján' },
-  { id: 'Panamá Capital', name: 'Panamá Capital', tag: 'Ciudad de Panamá' },
   { id: 'Colón', name: 'Colón', tag: 'Costa Atlántica' },
   { id: 'Coclé', name: 'Coclé', tag: 'Penonomé · Aguadulce' },
   { id: 'Herrera', name: 'Herrera', tag: 'Chitré · Pesé' },
@@ -75,7 +75,7 @@ export const PANAMA_PROVINCES: {
   { id: 'Veraguas', name: 'Veraguas', tag: 'Santiago · Soná' },
   { id: 'Chiriquí', name: 'Chiriquí', tag: 'David · Boquete · Bugaba' },
   { id: 'Bocas del Toro', name: 'Bocas del Toro', tag: 'Changuinola · Isla Colón' },
-  { id: 'Darién', name: 'Darién', tag: 'Metetí · Chepo' },
+  { id: 'Darién', name: 'Darién', tag: 'Metetí' },
   { id: 'Comarcas', name: 'Comarcas', tag: 'Guna Yala · Ngäbe-Buglé' },
 ];
 
@@ -92,12 +92,6 @@ export interface SingleCourierBranch {
 
 // 1. SERVIENTREGA: Dos números (Primer número = Envío a la Sucursal, Segundo número = Envío a la Casa)
 export const SERVIENTREGA_SUCURSALES: Record<PanamaProvince, ServientregaBranchRate[]> = {
-  'Panamá Oeste': [
-    { branch: 'La Chorrera (Av. de las Américas)', branchRate: '$3.25', homeRate: '$5.61' },
-    { branch: 'AV Box to Box Costa Verde', branchRate: '$3.25', homeRate: '$5.61' },
-    { branch: 'AV Paquetexpress PTY Coronado', branchRate: '$3.25', homeRate: '$4.61' },
-    { branch: 'AV Ptybuy Express Arraiján', branchRate: '$3.25', homeRate: '$4.61' },
-  ],
   'Panamá Capital': [
     { branch: 'Dirección General - Parque Lefevre', branchRate: '$3.86', homeRate: '$5.79' },
     { branch: 'Vía España - Plaza Concordia', branchRate: '$3.86', homeRate: '$5.79' },
@@ -110,7 +104,7 @@ export const SERVIENTREGA_SUCURSALES: Record<PanamaProvince, ServientregaBranchR
     { branch: 'AV Mr. Mail - El Dorado', branchRate: '$3.86', homeRate: '$5.79' },
     { branch: 'AV Cargo Box Express Hato Pintado', branchRate: '$3.86', homeRate: '$5.79' },
     { branch: 'AV Mr. Mail Vía Argentina', branchRate: '$3.86', homeRate: '$5.79' },
-    { branch: 'AV Compucel Chepo', branchRate: '$3.86', homeRate: '$5.79' },
+    { branch: 'Chepo (AV Compucel)', branchRate: '$8.00', homeRate: '$8.00' },
     { branch: 'AV Shop Box DB Don Bosco', branchRate: '$3.86', homeRate: '$5.79' },
     { branch: 'AV Ebuy Panamá', branchRate: '$3.86', homeRate: '$5.79' },
     { branch: 'AV Costa del Este Tu Carga Express', branchRate: '$3.86', homeRate: '$5.79' },
@@ -119,6 +113,12 @@ export const SERVIENTREGA_SUCURSALES: Record<PanamaProvince, ServientregaBranchR
     { branch: 'AV Box to Box Versalles', branchRate: '$3.86', homeRate: '$5.79' },
     { branch: 'AV Box to Box Marbella', branchRate: '$3.86', homeRate: '$5.79' },
     { branch: 'AV Box to Box Villa Zaita', branchRate: '$3.86', homeRate: '$5.79' },
+  ],
+  'Panamá Oeste': [
+    { branch: 'La Chorrera (Av. de las Américas)', branchRate: '$3.25', homeRate: '$5.61' },
+    { branch: 'AV Box to Box Costa Verde', branchRate: '$3.25', homeRate: '$5.61' },
+    { branch: 'AV Paquetexpress PTY Coronado', branchRate: '$3.25', homeRate: '$4.61' },
+    { branch: 'AV Ptybuy Express Arraiján', branchRate: '$3.25', homeRate: '$4.61' },
   ],
   'Chiriquí': [
     { branch: 'David El Rocío / David Calle 4ta', branchRate: '$3.86', homeRate: '$5.79' },
@@ -169,6 +169,19 @@ export const SERVIENTREGA_SUCURSALES: Record<PanamaProvince, ServientregaBranchR
 
 // 2. FERGUSON: Tarifas oficiales del cuadro comparativo (1 solo número por punto)
 export const FERGUSON_SUCURSALES: Record<PanamaProvince, SingleCourierBranch[]> = {
+  'Panamá Capital': [
+    { branch: 'Vista Hermosa', rate: '$5.00' },
+    { branch: 'San Pedro', rate: '$5.00' },
+    { branch: '24 de Diciembre', rate: '$5.00' },
+    { branch: 'Justo Arosemena', rate: '$5.00' },
+    { branch: 'Calle 50', rate: '$5.00' },
+    { branch: 'Chepo', rate: '$8.00' },
+  ],
+  'Panamá Oeste': [
+    { branch: 'La Chorrera (Parque Feuillet)', rate: '$5.00' },
+    { branch: 'Vista Alegre', rate: '$5.00' },
+    { branch: 'Arraiján Cabecera', rate: '$5.00' },
+  ],
   'Chiriquí': [
     { branch: 'David – Edificio Garrido', rate: '$5.00' },
     { branch: 'David – Plaza Salamanca', rate: '$5.00' },
@@ -176,18 +189,6 @@ export const FERGUSON_SUCURSALES: Record<PanamaProvince, SingleCourierBranch[]> 
     { branch: 'Concepción – Bugaba', rate: '$6.00' },
     { branch: 'Volcán', rate: '$6.00' },
     { branch: 'Boquete', rate: '$6.00' },
-  ],
-  'Panamá Capital': [
-    { branch: 'Vista Hermosa', rate: '$5.00' },
-    { branch: 'San Pedro', rate: '$5.00' },
-    { branch: '24 de Diciembre', rate: '$5.00' },
-    { branch: 'Justo Arosemena', rate: '$5.00' },
-    { branch: 'Calle 50', rate: '$5.00' },
-  ],
-  'Panamá Oeste': [
-    { branch: 'La Chorrera (Parque Feuillet)', rate: '$5.00' },
-    { branch: 'Vista Alegre', rate: '$5.00' },
-    { branch: 'Arraiján Cabecera', rate: '$5.00' },
   ],
   'Coclé': [
     { branch: 'Penonomé (Central)', rate: '$5.00' },
@@ -214,7 +215,6 @@ export const FERGUSON_SUCURSALES: Record<PanamaProvince, SingleCourierBranch[]> 
   ],
   'Darién': [
     { branch: 'Darién – Metetí', rate: '$8.50' },
-    { branch: 'Chepo – paso por la vía (sin sucursal)', rate: '$8.50' },
   ],
   'Comarcas': [
     { branch: 'Agencia Principal / Más cercana', rate: '$8.50' },
@@ -242,6 +242,7 @@ export const UNO_EXPRESS_SUCURSALES: Record<PanamaProvince, SingleCourierBranch[
     { branch: 'Los Andes', rate: '$6.50' },
     { branch: 'Villa Zaita', rate: '$6.50' },
     { branch: 'El Dorado', rate: '$6.50' },
+    { branch: 'Chepo', rate: '$8.00' },
   ],
   'Panamá Oeste': [
     { branch: 'Gorgona', rate: '$6.50' },
@@ -288,7 +289,6 @@ export const UNO_EXPRESS_SUCURSALES: Record<PanamaProvince, SingleCourierBranch[
   ],
   'Darién': [
     { branch: 'Metetí', rate: '$9.50' },
-    { branch: 'Chepo', rate: '$7.50' },
   ],
   'Comarcas': [
     { branch: 'Agencia Principal / Más cercana', rate: '$9.50' },
@@ -308,6 +308,42 @@ export function parseShippingRateToNumber(rateStr: string): number {
   return 0;
 }
 
+/**
+ * Convierte un Blob o data URL de imagen a formato PNG estándar,
+ * requerido estrictamente por la Async Clipboard API de los navegadores (Chrome, Safari, Edge)
+ */
+async function convertToPngBlob(source: Blob | string): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob((blob) => {
+          resolve(blob);
+        }, 'image/png');
+      } catch (err) {
+        console.warn('Error al convertir comprobante a PNG en canvas:', err);
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    if (typeof source === 'string') {
+      img.src = source;
+    } else {
+      img.src = URL.createObjectURL(source);
+    }
+  });
+}
+
 type CheckoutStep = 'form' | 'review' | 'payment' | 'receipt';
 
 export const CheckoutDemoModal: React.FC = () => {
@@ -324,6 +360,8 @@ export const CheckoutDemoModal: React.FC = () => {
   // Pasos: 'form' -> 'review' (hojita y confirmación) -> 'payment' (números de pago y comprobante) -> 'receipt' (con WhatsApp)
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>('form');
   const [hasOpenedWhatsApp, setHasOpenedWhatsApp] = useState(false);
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+  const [copiedPhotoToast, setCopiedPhotoToast] = useState(false);
 
   // 1. Modalidad de Entrega
   const [tipoEntrega, setTipoEntrega] = useState<TipoEntrega>('delivery');
@@ -334,8 +372,8 @@ export const CheckoutDemoModal: React.FC = () => {
   const [servientregaModalidad, setServientregaModalidad] = useState<'sucursal' | 'domicilio'>('sucursal');
 
   // 3. Ubicación
-  const [provincia, setProvincia] = useState<PanamaProvince>('Panamá Oeste');
-  const [sucursalRetiro, setSucursalRetiro] = useState('La Chorrera (Av. de las Américas)');
+  const [provincia, setProvincia] = useState<PanamaProvince>('Panamá Capital');
+  const [sucursalRetiro, setSucursalRetiro] = useState('Dirección General - Parque Lefevre');
   const [direccion, setDireccion] = useState('');
 
   // 4. Datos del Cliente
@@ -606,10 +644,10 @@ export const CheckoutDemoModal: React.FC = () => {
       notas: notas.trim() || undefined,
     };
 
-    // 1. Mostrar de inmediato la vista de Pago con Número de Pedido
+    // 1. Mostrar de inmediato la Hojita de Revisión del Pedido antes de proceder al pago
     // ¡EL CARRITO NO SE ELIMINA AQUÍ! Se mantiene para que pueda regresar libremente.
     setConfirmedOrder(instantSummary);
-    setCheckoutStep('payment');
+    setCheckoutStep('review');
     setIsSubmitting(false);
 
     // Guardar borrador del pedido en el almacén de recibos
@@ -829,10 +867,8 @@ export const CheckoutDemoModal: React.FC = () => {
     }
   };
 
-  // Función para enviar captura y recibo por WhatsApp (soporte nativo para móviles + portapapeles en PC)
-  const handleSendToWhatsApp = async () => {
-    setHasOpenedWhatsApp(true);
-    const rawUrl = generateWhatsAppUrl();
+  // Generador del texto limpio del recibo para WhatsApp (sin enlaces ni links a fotos)
+  const generateWhatsAppMessageText = () => {
     const orderNum = confirmedOrder?.orderNumber || '#PEDIDO';
     const paymentLabel =
       metodoPago === 'yappy'
@@ -859,10 +895,10 @@ export const CheckoutDemoModal: React.FC = () => {
 
     const shippingLine =
       confirmedOrder?.shipping && confirmedOrder.shipping > 0
-        ? `*Envío (${confirmedOrder.courier}):* $${confirmedOrder.shipping.toFixed(2)} USD`
+        ? `*Envío (${confirmedOrder.courier || courier}):* $${confirmedOrder.shipping.toFixed(2)} USD`
         : '*Envío:* Gratis (Retiro en tienda)';
 
-    const msg = `*Recibo Oficial de Compra*
+    return `*Recibo Oficial de Compra - Pretty Store*
 *#${orderNum}*
 
 *Cliente:* ${nombre.trim()}
@@ -870,107 +906,100 @@ export const CheckoutDemoModal: React.FC = () => {
 *Método de Pago:* ${paymentLabel}
 *Entrega:* ${entregaLabel}
 
-*Productos:*
+*Productos Solicitados:*
 ${itemsText}
 
 *Subtotal:* $${(confirmedOrder?.subtotal || subtotal).toFixed(2)} USD
-${(confirmedOrder?.discount || discount) > 0 ? `*Descuento:* -$${(confirmedOrder?.discount || discount).toFixed(2)} USD\n` : ''}${shippingLine}
-*Total a Cancelar (con envío):* $${(confirmedOrder?.total || finalTotal).toFixed(2)} USD
-
-*Comprobante:*
-${isVoucherAttached ? `✓ Captura adjuntada (${voucherFileName || 'comprobante_pago.png'})` : 'Comprobante verificado'}`;
-
-    // 1. Si el dispositivo (iPhone, Android, tablet) soporta compartir archivos directamente:
-    if (voucherImage && navigator.share) {
-      try {
-        const res = await fetch(voucherImage);
-        const blob = await res.blob();
-        const file = new File([blob], voucherFileName || 'comprobante_pago.png', { type: blob.type || 'image/png' });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            title: `Recibo de Compra #${orderNum}`,
-            text: msg,
-            files: [file],
-          });
-          return;
-        }
-      } catch (shareErr) {
-        console.log('Native share not completed:', shareErr);
-      }
-    }
-
-    // 2. Si es computadora o no soporta compartir archivo directo, copiar al portapapeles:
-    if (voucherImage) {
-      try {
-        const res = await fetch(voucherImage);
-        const blob = await res.blob();
-        if (navigator.clipboard && (window as any).ClipboardItem) {
-          const item = new (window as any).ClipboardItem({ [blob.type]: blob });
-          await navigator.clipboard.write([item]);
-        }
-      } catch (clipErr) {
-        console.log('Clipboard auto-copy fallback:', clipErr);
-      }
-    }
-
-    // 3. Abrir WhatsApp directamente con el recibo estructurado
-    window.open(rawUrl, '_blank', 'noopener,noreferrer');
+${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(confirmedOrder?.discount || discount).toFixed(2)} USD\n` : ''}${shippingLine}
+*Total a Pagar (con envío):* $${(confirmedOrder?.total || finalTotal).toFixed(2)} USD`;
   };
 
-  // Generador del Recibo Oficial para WhatsApp con el envío sumado
+  // URL directa de WhatsApp con el recibo limpio (sin enlaces a fotos)
   const generateWhatsAppUrl = () => {
-    const orderNum = confirmedOrder?.orderNumber || '#PEDIDO';
-    const paymentLabel =
-      metodoPago === 'yappy'
-        ? 'Yappy (6215-0251)'
-        : metodoPago === 'transferencia'
-        ? 'Transferencia Bancaria (Banco General)'
-        : 'Tarjeta de Débito o Crédito';
+    const msg = generateWhatsAppMessageText();
+    return `https://wa.me/${WHATSAPP_ORDERS_PHONE}?text=${encodeURIComponent(msg)}`;
+  };
 
-    let entregaLabel = '';
-    if (tipoEntrega === 'retiro') {
-      entregaLabel = 'Retiro en el Local';
-    } else {
-      entregaLabel = `Envío express (${courier}) en ${provincia}`;
-      if (courier === 'Servientrega' && servientregaModalidad === 'domicilio') {
-        entregaLabel += ` - A Domicilio: ${direccion}`;
-      } else {
-        entregaLabel += ` - Sucursal: ${sucursalRetiro}`;
+  // Copia la foto real del comprobante directamente al portapapeles en formato PNG
+  const handleCopyPhotoToClipboard = async (): Promise<boolean> => {
+    if (!voucherImage && !voucherRawFile) return false;
+    try {
+      const pngBlob = await convertToPngBlob(voucherRawFile || voucherImage!);
+      if (pngBlob && navigator.clipboard && (window as any).ClipboardItem) {
+        const item = new (window as any).ClipboardItem({ 'image/png': pngBlob });
+        await navigator.clipboard.write([item]);
+        setCopiedPhotoToast(true);
+        setTimeout(() => setCopiedPhotoToast(false), 5000);
+        return true;
+      }
+    } catch (err) {
+      console.warn('Error al copiar foto al portapapeles:', err);
+    }
+    return false;
+  };
+
+  // Función para enviar LA FOTO REAL directamente por WhatsApp junto con el recibo (sin links ni enlaces)
+  const handleSendToWhatsApp = async () => {
+    setIsSendingWhatsApp(true);
+    setHasOpenedWhatsApp(true);
+    const msg = generateWhatsAppMessageText();
+
+    // 1. Obtener o construir el archivo real de la foto
+    let fileToSend: File | null = voucherRawFile || null;
+    if (!fileToSend && voucherImage) {
+      try {
+        if (voucherImage.startsWith('data:')) {
+          const arr = voucherImage.split(',');
+          const mimeMatch = arr[0].match(/:(.*?);/);
+          const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+          const bstr = atob(arr[1]);
+          let n = bstr.length;
+          const u8arr = new Uint8Array(n);
+          while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+          }
+          fileToSend = new File([u8arr], voucherFileName || 'comprobante_pago.jpg', { type: mime });
+        } else {
+          const res = await fetch(voucherImage);
+          const blob = await res.blob();
+          fileToSend = new File([blob], voucherFileName || 'comprobante_pago.jpg', {
+            type: blob.type || 'image/jpeg',
+          });
+        }
+      } catch (err) {
+        console.warn('Error al preparar archivo de imagen:', err);
       }
     }
 
-    const itemsText = (confirmedOrder?.items || items)
-      .map((it) => `• ${it.product.nombre} (Cant: ${it.quantity} × $${it.product.precio.toFixed(2)})`)
-      .join('\n');
+    // 2. EN TELÉFONOS MÓVILES (Android / iOS):
+    // La API nativa navigator.share permite adjuntar la FOTO REAL directamente dentro de WhatsApp
+    // con el texto del recibo como pie de foto (caption), sin ningún enlace
+    if (fileToSend && navigator.canShare && navigator.canShare({ files: [fileToSend] })) {
+      try {
+        await navigator.share({
+          title: `Recibo de Compra #${confirmedOrder?.orderNumber || ''}`,
+          text: msg,
+          files: [fileToSend],
+        });
+        setIsSendingWhatsApp(false);
+        return;
+      } catch (shareErr: any) {
+        if (shareErr.name === 'AbortError') {
+          setIsSendingWhatsApp(false);
+          return;
+        }
+        console.log('Compartir nativo cancelado o no disponible:', shareErr);
+      }
+    }
 
-    const voucherStatus = isVoucherAttached
-      ? `✓ Captura de comprobante montada (${voucherFileName || 'captura'}). Te la envío a continuación.`
-      : `Adjunto mi captura de comprobante a este mensaje.`;
+    // 3. EN COMPUTADORAS / WHATSAPP WEB:
+    // Copiar la foto real al portapapeles en formato PNG para que con solo presionar Ctrl+V (Pegar) aparezca la foto directa
+    await handleCopyPhotoToClipboard();
 
-    const shippingLine =
-      confirmedOrder?.shipping && confirmedOrder.shipping > 0
-        ? `*Envío (${confirmedOrder.courier}):* $${confirmedOrder.shipping.toFixed(2)} USD`
-        : '*Envío:* Gratis (Retiro en tienda)';
-
-    const msg = `*Recibo Oficial de Compra*
-*#${orderNum}*
-
-*Cliente:* ${nombre.trim()}
-*Teléfono:* ${telefono.trim()}
-*Método de Pago:* ${paymentLabel}
-*Entrega:* ${entregaLabel}
-
-*Productos:*
-${itemsText}
-
-*Subtotal:* $${(confirmedOrder?.subtotal || subtotal).toFixed(2)} USD
-${(confirmedOrder?.discount || discount) > 0 ? `*Descuento:* -$${(confirmedOrder?.discount || discount).toFixed(2)} USD\n` : ''}${shippingLine}
-*Total a Pagar (con envío):* $${(confirmedOrder?.total || finalTotal).toFixed(2)} USD
-
-*Comprobante:*
-${voucherStatus}`;
-
-    return `https://wa.me/${WHATSAPP_ORDERS_PHONE}?text=${encodeURIComponent(msg)}`;
+    // 4. Abrir WhatsApp directamente con el recibo estructurado (sin ningún link)
+    const rawUrl = generateWhatsAppUrl();
+    window.open(rawUrl, '_blank', 'noopener,noreferrer');
+    setIsSendingWhatsApp(false);
   };
 
   // REGRESAR A LA TIENDA
@@ -1000,6 +1029,7 @@ ${voucherStatus}`;
             <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24] shadow-sm shadow-[#fbbf24]/50" />
             <span className="text-xs uppercase tracking-[0.2em] text-[#fbbf24] font-bold truncate">
               {checkoutStep === 'form' && 'Pretty Store · Datos del Pedido'}
+              {checkoutStep === 'review' && 'Pretty Store · Revisión del Pedido'}
               {checkoutStep === 'payment' && 'Pretty Store · Pago y Comprobante'}
               {checkoutStep === 'receipt' && 'Pretty Store · Recibo Oficial'}
             </span>
@@ -1007,7 +1037,7 @@ ${voucherStatus}`;
           <button
             onClick={handleReturnToStore}
             className="p-2 rounded-lg text-stone-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-            title="Cerrar sin borrar bolsa"
+            title="Cerrar sin borrar carrito"
             aria-label="Cerrar modal"
           >
             <X size={20} />
@@ -1495,18 +1525,207 @@ ${voucherStatus}`;
                 </div>
               </div>
 
-              {/* Botón único para ir a pagar */}
+              {/* Botón para continuar a la revisión del pedido */}
               <div className="pt-2">
                 <button
                   type="submit"
                   disabled={isSubmitting}
                   className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] hover:from-[#f59e0b] hover:to-[#fbbf24] text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-xl shadow-[#fbbf24]/20 active:scale-[0.99] min-h-[48px]"
                 >
-                  <span>Ir a pagar</span>
+                  <span>Continuar</span>
                   <ArrowRight size={18} />
                 </button>
               </div>
             </form>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* PASO 2: HOJITA / PAPEL DE REVISIÓN OFICIAL DEL PEDIDO ANTES DE IR A PAGAR */}
+        {/* ========================================================================= */}
+        {checkoutStep === 'review' && confirmedOrder && (
+          <div className="overflow-y-auto overscroll-contain touch-scroll p-4 sm:p-6 lg:p-7 space-y-6 pb-8 sm:pb-6">
+            {/* Contenedor tipo Papel / Hojita de Factura Elegante */}
+            <div className="bg-[#121216] border border-[#fbbf24]/30 rounded-2xl p-5 sm:p-7 space-y-6 shadow-2xl relative text-left">
+              {/* Encabezado de la Hojita */}
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-5 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-black border border-white/20 flex items-center justify-center overflow-hidden shrink-0">
+                    <img
+                      src="/images/logo/logotipo.jpeg"
+                      alt="Pretty Store"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <h2 className="text-lg sm:text-xl font-serif-luxury font-black text-white tracking-wider">
+                      PRETTY STORE
+                    </h2>
+                    <p className="text-[10px] uppercase tracking-[0.25em] text-[#fbbf24] font-semibold">
+                      Boutique & Atelier Oficial · Panamá
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-left sm:text-right">
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-stone-400 block font-semibold">
+                    REVISIÓN DEL PEDIDO
+                  </span>
+                  <span className="font-mono font-bold text-[#fbbf24] text-base sm:text-lg block">
+                    #{confirmedOrder.orderNumber}
+                  </span>
+                  <span className="text-[11px] text-stone-400 font-mono">
+                    {confirmedOrder.date}
+                  </span>
+                </div>
+              </div>
+
+              {/* Datos del Cliente y Logística de Entrega */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className="p-3.5 rounded-xl bg-black/40 border border-white/10 space-y-1.5">
+                  <span className="text-[10px] uppercase tracking-wider text-[#fbbf24] font-bold block">
+                    Datos del Cliente
+                  </span>
+                  <p className="text-white font-medium text-sm">{confirmedOrder.nombre}</p>
+                  <p className="text-stone-300 font-mono">WhatsApp: {confirmedOrder.telefono}</p>
+                  <p className="text-stone-400 text-[11px]">
+                    Método de pago:{' '}
+                    <strong className="text-white uppercase font-mono">
+                      {confirmedOrder.metodoPago === 'yappy'
+                        ? 'Yappy (6215-0251)'
+                        : confirmedOrder.metodoPago === 'transferencia'
+                        ? 'Banco General (ACH)'
+                        : 'Tarjeta Débito o Crédito'}
+                    </strong>
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-black/40 border border-white/10 space-y-1.5">
+                  <span className="text-[10px] uppercase tracking-wider text-[#fbbf24] font-bold block flex items-center gap-1.5">
+                    <Truck size={13} className="text-[#fbbf24]" />
+                    <span>Entrega y Destino</span>
+                  </span>
+                  <p className="text-white font-medium">
+                    {confirmedOrder.tipoEntrega === 'retiro'
+                      ? 'Retiro en Tienda Física (Costa del Este)'
+                      : `Envío Express vía ${confirmedOrder.courier || courier}`}
+                  </p>
+                  <p className="text-stone-300 text-[11px] leading-relaxed">
+                    {confirmedOrder.direccion}
+                  </p>
+                  {confirmedOrder.notas && (
+                    <p className="text-[#fbbf24] text-[11px] font-mono pt-1 border-t border-white/5">
+                      Nota: {confirmedOrder.notas}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Lista de Productos con Imagen */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10 text-xs">
+                  <span className="font-bold text-[#fbbf24] uppercase tracking-wider">
+                    Productos Seleccionados ({(confirmedOrder.items || items).reduce((acc, i) => acc + i.quantity, 0)} unidades)
+                  </span>
+                  <span className="text-stone-400 font-mono text-[11px]">Detalle</span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {(confirmedOrder.items && confirmedOrder.items.length > 0 ? confirmedOrder.items : items).map((it, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 rounded-xl bg-black/50 border border-white/10 flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <img
+                          src={it.product.imagen_url || '/images/products/gorra-1.webp'}
+                          alt={it.product.nombre}
+                          className="w-12 h-12 rounded-xl object-cover bg-stone-900 border border-white/15 shrink-0"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            if (!target.src.endsWith('/images/products/gorra-1.webp')) {
+                              target.src = '/images/products/gorra-1.webp';
+                            }
+                          }}
+                        />
+                        <div className="min-w-0">
+                          <h4 className="font-semibold text-white text-xs sm:text-sm truncate">
+                            {it.product.nombre}
+                          </h4>
+                          <p className="text-[11px] text-stone-400 mt-0.5">
+                            Cant: <strong className="text-stone-200 font-mono">{it.quantity}x</strong> a ${it.product.precio.toFixed(2)} USD c/u
+                          </p>
+                        </div>
+                      </div>
+                      <span className="font-mono font-bold text-sm text-[#fbbf24] shrink-0">
+                        ${(it.subtotal || it.quantity * it.product.precio).toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Desglose Financiero */}
+              <div className="p-4 rounded-xl bg-black/60 border border-white/10 space-y-2 text-xs">
+                <div className="flex justify-between text-stone-400">
+                  <span>Subtotal productos:</span>
+                  <span className="font-mono text-white">${(confirmedOrder.subtotal || subtotal).toFixed(2)} USD</span>
+                </div>
+                {(confirmedOrder.discount || discount) > 0 && (
+                  <div className="flex justify-between text-emerald-400 font-semibold">
+                    <span>{confirmedOrder.promoTitle || promo.promoTitle || 'Descuento Promocional'}:</span>
+                    <span className="font-mono">-${(confirmedOrder.discount || discount).toFixed(2)} USD</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-stone-300">
+                  <span>
+                    {confirmedOrder.tipoEntrega === 'retiro'
+                      ? 'Retiro en tienda física:'
+                      : `Costo de envío (${confirmedOrder.courier || courier}):`}
+                  </span>
+                  <span className="font-mono text-[#fbbf24] font-bold">
+                    {confirmedOrder.tipoEntrega === 'retiro' || (confirmedOrder.shipping === 0)
+                      ? 'Gratis ($0.00)'
+                      : `+$${(confirmedOrder.shipping || numericalShipping).toFixed(2)} USD`}
+                  </span>
+                </div>
+                <div className="pt-2 border-t border-white/10 flex justify-between items-center text-sm font-bold">
+                  <span className="text-white">Total a Pagar (con envío):</span>
+                  <span className="text-xl sm:text-2xl font-mono text-[#fbbf24]">
+                    ${(confirmedOrder.total || finalTotal).toFixed(2)} USD
+                  </span>
+                </div>
+              </div>
+
+              {/* Aviso amigable */}
+              <p className="text-[11px] text-stone-400 text-center font-light">
+                Verifica que tus datos y artículos sean correctos. Al pulsar <strong className="text-white">"Ir a pagar"</strong> podrás ver los números de cuenta oficiales y adjuntar tu comprobante de pago.
+              </p>
+
+              {/* Botones de Acción */}
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setCheckoutStep('form')}
+                  className="px-4 sm:px-5 py-3.5 rounded-xl border border-white/20 text-stone-300 hover:text-white hover:bg-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[48px]"
+                >
+                  <ArrowLeft size={16} />
+                  <span>Modificar datos</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCheckoutStep('payment')}
+                  className="flex-1 py-4 px-6 rounded-xl bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] hover:from-[#f59e0b] hover:to-[#fbbf24] text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xl shadow-[#fbbf24]/20 active:scale-[0.99] min-h-[48px]"
+                >
+                  <span>Ir a pagar</span>
+                  <ArrowRight size={18} />
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1989,31 +2208,65 @@ ${voucherStatus}`;
               )}
             </div>
 
-            {/* BOTÓN OFICIAL DE WHATSAPP: ENVIAR CAPTURA Y RECIBO */}
+            {/* BOTÓN OFICIAL DE WHATSAPP: ENVIAR FOTO DIRECTA Y RECIBO */}
             <div className="max-w-xl mx-auto space-y-3 pt-1">
-              <a
-                href={generateWhatsAppUrl()}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => {
-                  setHasOpenedWhatsApp(true);
-                  handleSendToWhatsApp();
-                }}
-                className="w-full py-4 px-6 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2.5 transition-all shadow-xl shadow-[#25D366]/30 cursor-pointer active:scale-[0.99] min-h-[48px]"
+              <button
+                type="button"
+                onClick={handleSendToWhatsApp}
+                disabled={isSendingWhatsApp}
+                className="w-full py-4 px-6 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2.5 transition-all shadow-xl shadow-[#25D366]/30 cursor-pointer active:scale-[0.99] min-h-[50px]"
               >
-                <MessageSquare size={22} className="fill-black" />
-                <span>Enviar Captura y Recibo por WhatsApp</span>
-              </a>
+                <MessageSquare size={22} className="fill-black shrink-0" />
+                <span>
+                  {isSendingWhatsApp
+                    ? 'Preparando foto para WhatsApp...'
+                    : 'Enviar Foto y Recibo por WhatsApp'}
+                </span>
+              </button>
 
-              {/* Indicación clara de envío */}
-              <div className="p-3.5 rounded-xl bg-stone-900 border border-white/10 text-stone-300 text-xs text-left space-y-1">
+              {/* Botones secundarios de acción rápida para la foto */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyPhotoToClipboard}
+                  className={`py-2.5 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    copiedPhotoToast
+                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                      : 'bg-white/5 border-white/10 text-stone-300 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <Copy size={14} className={copiedPhotoToast ? 'text-emerald-400' : 'text-stone-400'} />
+                  <span>
+                    {copiedPhotoToast ? '✓ ¡Foto copiada al portapapeles!' : 'Copiar Foto para Pegar (Ctrl+V)'}
+                  </span>
+                </button>
+
+                {voucherImage && (
+                  <a
+                    href={voucherImage}
+                    download={voucherFileName || `comprobante_${confirmedOrder.orderNumber}.jpg`}
+                    className="py-2.5 px-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-stone-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer text-center"
+                  >
+                    <Download size={14} className="text-stone-400 shrink-0" />
+                    <span>Descargar Foto Directa</span>
+                  </a>
+                )}
+              </div>
+
+              {/* Indicación clara de envío: Foto directa en el mensaje sin enlaces */}
+              <div className="p-3.5 rounded-xl bg-stone-900 border border-white/10 text-stone-300 text-xs text-left space-y-2">
                 <div className="flex items-center gap-2 text-emerald-400 font-semibold text-[11px]">
-                  <FileCheck size={15} />
-                  <span>Tu comprobante y recibo están listos para enviar al +507 6215-0251</span>
+                  <FileCheck size={15} className="shrink-0" />
+                  <span>Tu foto va directamente en el mensaje (sin enlaces ni links externos)</span>
                 </div>
-                <p className="text-[11px] text-stone-400 leading-relaxed font-light">
-                  Al pulsar el botón verde se abre WhatsApp con tu recibo ya redactado. En el chat oficial de Pretty Store, adjunta la captura o presiona pegar para confirmar la coordinación del despacho.
-                </p>
+                <div className="text-[11px] text-stone-400 leading-relaxed font-light space-y-1">
+                  <p>
+                    • <strong className="text-stone-200">En celular:</strong> Al pulsar el botón verde, se abre WhatsApp adjuntando la <strong>foto real</strong> de tu comprobante con el recibo.
+                  </p>
+                  <p>
+                    • <strong className="text-stone-200">En computadora:</strong> La foto se copia automáticamente. En el chat de WhatsApp que se abre, presiona <strong className="text-amber-400 font-mono">Ctrl + V</strong> (Pegar) para enviar la foto de una vez.
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -2086,6 +2339,16 @@ ${voucherStatus}`;
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast Notificación cuando la foto se copia al portapapeles */}
+      {copiedPhotoToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#25D366] text-black font-bold px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 animate-in slide-in-from-bottom duration-200 border border-black/20">
+          <Check size={18} className="shrink-0 stroke-[3]" />
+          <span className="text-xs">
+            ¡Foto copiada! En WhatsApp presiona <strong>Ctrl + V</strong> para pegarla de una vez en el mensaje.
+          </span>
         </div>
       )}
 

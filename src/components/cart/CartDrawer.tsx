@@ -4,7 +4,7 @@ import {
   Trash2,
   Plus,
   Minus,
-  ShoppingBag,
+  ShoppingCart,
   ArrowRight,
   Sparkles,
   Tag,
@@ -72,10 +72,10 @@ export const CartDrawer: React.FC = () => {
           {/* Cart Header */}
           <div className="p-6 border-b border-white/[0.08] flex items-center justify-between bg-[#09090b]">
             <div className="flex items-center gap-3">
-              <ShoppingBag size={18} className="stroke-[1.5] text-stone-200" />
+              <ShoppingCart size={18} className="stroke-[1.5] text-[#fbbf24]" />
               <div>
                 <h2 id="cart-title" className="text-base font-serif-luxury font-medium tracking-wide text-white">
-                  Bolsa de Compras
+                  Carrito de Compras
                 </h2>
                 <p className="text-[11px] text-stone-400 font-light">
                   {totalItems} {totalItems === 1 ? 'artículo' : 'artículos'}
@@ -86,7 +86,7 @@ export const CartDrawer: React.FC = () => {
             <button
               onClick={() => setIsCartOpen(false)}
               className="p-1.5 text-stone-400 hover:text-white transition-colors cursor-pointer"
-              aria-label="Cerrar bolsa de compras"
+              aria-label="Cerrar carrito de compras"
             >
               <X size={18} />
             </button>
@@ -122,10 +122,10 @@ export const CartDrawer: React.FC = () => {
             {items.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center py-16">
                 <div className="w-14 h-14 rounded-full border border-white/10 flex items-center justify-center text-stone-500 mb-4 bg-stone-900/50">
-                  <ShoppingBag size={22} className="stroke-[1.5]" />
+                  <ShoppingCart size={22} className="stroke-[1.5]" />
                 </div>
                 <h3 className="text-base font-serif-luxury font-normal text-white mb-1">
-                  Tu bolsa está vacía
+                  Tu carrito está vacío
                 </h3>
                 <p className="text-xs text-stone-400 max-w-xs mb-6 font-light">
                   Descubre nuestras piezas de perfumería, relojería y accesorios exclusivos.

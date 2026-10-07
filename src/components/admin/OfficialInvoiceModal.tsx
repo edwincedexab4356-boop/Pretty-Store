@@ -17,7 +17,7 @@ import {
   ShieldCheck,
   FileText,
   Image as ImageIcon,
-  ShoppingBag,
+  ShoppingCart,
 } from 'lucide-react';
 import { Pedido } from '../../types/database';
 import { StoredOrderReceipt, getOrderReceipt } from '../../utils/orderReceiptStorage';
@@ -92,21 +92,33 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({
       ? (order as Pedido).detalles!.map((d) => ({
           product: {
             id: d.producto?.id || d.producto_id,
-            nombre: d.producto?.nombre || 'Producto',
+            nombre: d.producto?.nombre || (d as any).producto_nombre || 'Producto Pretty Store',
             precio: Number(d.precio_unitario || 0),
-            imagen_url: d.producto?.imagen_url,
+            imagen_url: d.producto?.imagen_url || (d as any).producto_imagen || '/images/products/gorra-1.webp',
           },
           quantity: d.cantidad || 1,
           subtotal: Number(d.subtotal || 0),
         }))
       : storedReceipt?.items || []);
 
-  const voucherUrl =
+  let voucherUrl =
     voucherImage ||
     (isStored ? (order as StoredOrderReceipt).comprobanteUrl : null) ||
     storedReceipt?.comprobanteUrl ||
     ((order as Pedido).comprobante_pago?.startsWith('data:') || (order as Pedido).comprobante_pago?.startsWith('http') || (order as Pedido).comprobante_pago?.startsWith('/') ? (order as Pedido).comprobante_pago : null) ||
     null;
+
+  if (!voucherUrl && (order as Pedido).notas && typeof (order as Pedido).notas === 'string') {
+    const match = (order as Pedido).notas!.match(/(https?:\/\/[^\s|]+(?:supabase\.co|storage)[^\s|]+|https?:\/\/[^\s|]+\.(?:jpg|jpeg|png|webp|gif)[^\s|]*|data:image\/[a-zA-Z]+;base64,[^\s|]+)/i);
+    if (match) {
+      voucherUrl = match[1];
+    } else {
+      const refMatch = (order as Pedido).notas!.match(/Comprobante\/Ref[^:]*:\s*([^\s|]+)/i);
+      if (refMatch && (refMatch[1].startsWith('http') || refMatch[1].startsWith('data:'))) {
+        voucherUrl = refMatch[1];
+      }
+    }
+  }
 
   const formattedDate = isStored
     ? (order as StoredOrderReceipt).date || new Date().toLocaleDateString('es-PA')
@@ -207,7 +219,7 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({
                 : 'text-stone-400 hover:text-white hover:bg-white/5'
             }`}
           >
-            <ShoppingBag size={13} />
+            <ShoppingCart size={13} />
             <span>Captura del Pedido ({items.length} prod.)</span>
           </button>
         </div>
@@ -323,13 +335,17 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({
                       <tr key={idx} className="hover:bg-white/[0.02]">
                         <td className="py-3 px-3">
                           <div className="flex items-center gap-2.5">
-                            {it.product.imagen_url && (
-                              <img
-                                src={it.product.imagen_url}
-                                alt={it.product.nombre}
-                                className="w-8 h-8 rounded-lg object-cover bg-black border border-white/10 print:hidden"
-                              />
-                            )}
+                            <img
+                              src={it.product.imagen_url || '/images/products/gorra-1.webp'}
+                              alt={it.product.nombre}
+                              className="w-10 h-10 rounded-lg object-cover bg-black border border-white/10 print:hidden shrink-0"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                if (!target.src.endsWith('/images/products/gorra-1.webp')) {
+                                  target.src = '/images/products/gorra-1.webp';
+                                }
+                              }}
+                            />
                             <span className="font-semibold text-white print:text-black">{it.product.nombre}</span>
                           </div>
                         </td>

@@ -37,6 +37,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenSqlFix }) =>
   const [filterState, setFilterState] = useState<'all' | 'out_of_stock' | 'low_stock' | 'in_stock'>('all');
   const [viewMode, setViewMode] = useState<'grouped' | 'list'>('grouped');
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
   // Category horizontal scroll ref
   const categoryScrollRef = useRef<HTMLDivElement>(null);
@@ -539,19 +540,29 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenSqlFix }) =>
                               {/* Product Info */}
                               <td className="py-3.5 px-4">
                                 <div className="flex items-center gap-3">
-                                  {item.imagen_url ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewImage({ url: item.imagen_url || '/images/products/gorra-1.webp', title: item.nombre_producto })}
+                                    className="relative group shrink-0 cursor-pointer"
+                                    title="Ver foto en tamaño completo"
+                                  >
                                     <img
-                                      src={item.imagen_url}
+                                      src={item.imagen_url || '/images/products/gorra-1.webp'}
                                       alt={item.nombre_producto}
-                                      className="w-10 h-10 rounded-xl object-cover bg-black/60 shrink-0 border border-white/10"
+                                      className="w-12 h-12 rounded-xl object-cover bg-black/60 border border-white/15 group-hover:border-[#fbbf24] transition-all shadow-sm"
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        if (!target.src.endsWith('/images/products/gorra-1.webp')) {
+                                          target.src = '/images/products/gorra-1.webp';
+                                        }
+                                      }}
                                     />
-                                  ) : (
-                                    <div className="w-10 h-10 rounded-xl bg-stone-900 border border-white/10 flex items-center justify-center text-stone-500 shrink-0">
-                                      <Package size={16} />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center text-white text-[10px]">
+                                      🔍
                                     </div>
-                                  )}
+                                  </button>
                                   <div className="min-w-0">
-                                    <p className="font-semibold text-white truncate max-w-[240px] sm:max-w-xs">
+                                    <p className="font-semibold text-white truncate max-w-[240px] sm:max-w-xs text-sm">
                                       {item.nombre_producto}
                                     </p>
                                     <p className="text-[10px] text-stone-400 font-mono">
@@ -702,23 +713,33 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenSqlFix }) =>
                       {/* Product */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
-                          {item.imagen_url ? (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewImage({ url: item.imagen_url || '/images/products/gorra-1.webp', title: item.nombre_producto })}
+                            className="relative group shrink-0 cursor-pointer"
+                            title="Ver foto en tamaño completo"
+                          >
                             <img
-                              src={item.imagen_url}
+                              src={item.imagen_url || '/images/products/gorra-1.webp'}
                               alt={item.nombre_producto}
-                              className="w-10 h-10 rounded-xl object-cover bg-black/60 shrink-0 border border-white/10"
+                              className="w-12 h-12 rounded-xl object-cover bg-black/60 border border-white/15 group-hover:border-[#fbbf24] transition-all shadow-sm"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                if (!target.src.endsWith('/images/products/gorra-1.webp')) {
+                                  target.src = '/images/products/gorra-1.webp';
+                                }
+                              }}
                             />
-                          ) : (
-                            <div className="w-10 h-10 rounded-xl bg-stone-900 border border-white/10 flex items-center justify-center text-stone-500 shrink-0">
-                              <Package size={16} />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center text-white text-[10px]">
+                              🔍
                             </div>
-                          )}
+                          </button>
                           <div>
-                            <p className="font-semibold text-white truncate max-w-[200px]">
+                            <p className="font-semibold text-white truncate max-w-[200px] text-sm">
                               {item.nombre_producto}
                             </p>
-                            <p className="text-[11px] text-stone-400 font-mono">
-                              ${item.precio.toFixed(2)}
+                            <p className="text-[11px] text-[#fbbf24] font-mono font-medium">
+                              ${item.precio.toFixed(2)} USD
                             </p>
                           </div>
                         </div>
@@ -831,6 +852,38 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenSqlFix }) =>
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+      {/* Modal de Vista Previa de Imagen del Producto */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="bg-[#121216] border border-white/15 rounded-2xl p-4 max-w-lg w-full max-h-[90vh] flex flex-col items-center shadow-2xl relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full flex items-center justify-between pb-3 border-b border-white/10 mb-3">
+              <span className="text-xs font-semibold text-white truncate pr-4">
+                {previewImage.title}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="p-1 rounded-lg text-stone-400 hover:text-white bg-white/5 hover:bg-white/10 cursor-pointer transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="w-full max-h-[70vh] flex items-center justify-center overflow-hidden rounded-xl bg-black">
+              <img
+                src={previewImage.url}
+                alt={previewImage.title}
+                className="max-h-[65vh] w-auto object-contain rounded-lg"
+              />
+            </div>
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 import { getSupabaseClient } from '../lib/supabase';
 import { compressImageFile } from '../utils/imageOptimizer';
 import { sortCategoriesWithOrder, persistCategoryOrder, fetchRemoteCategoryOrder } from '../utils/categoryOrderUtils';
-import { getAllOrderReceipts, StoredOrderReceipt } from '../utils/orderReceiptStorage';
+import { getAllOrderReceipts, StoredOrderReceipt, deleteOrderReceipt } from '../utils/orderReceiptStorage';
 import {
   Categoria,
   Producto,
@@ -1433,8 +1433,21 @@ export async function deleteAdminSale(orderId: string | number): Promise<{ succe
   const cleanId = String(orderId).trim();
   const numId = Number(cleanId);
   const isNumeric = !isNaN(numId) && cleanId !== '';
+  const orderCode = `#PED-${cleanId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
 
-  // 1. Eliminar items de detalle_pedidos asociados a este pedido
+  // 1. Probar RPC seguro de PostgreSQL si está instalado
+  try {
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc('delete_pedido_safe', {
+      p_pedido_id: cleanId,
+    });
+    if (!rpcErr && rpcRes === true) {
+      deleteOrderReceipt(cleanId);
+      deleteOrderReceipt(orderCode);
+      return { success: true };
+    }
+  } catch {}
+
+  // 2. Eliminar items de detalle_pedidos asociados a este pedido
   try {
     await supabase.from('detalle_pedidos').delete().eq('pedido_id', cleanId);
     if (isNumeric) {
@@ -1444,7 +1457,7 @@ export async function deleteAdminSale(orderId: string | number): Promise<{ succe
     console.warn('Aviso detalle_pedidos:', e);
   }
 
-  // 2. Eliminar de tabla ventas si existiese
+  // 3. Eliminar de tabla ventas si existiese
   try {
     await supabase.from('ventas').delete().eq('pedido_id', cleanId);
     await supabase.from('ventas').delete().eq('id', cleanId);
@@ -1454,11 +1467,15 @@ export async function deleteAdminSale(orderId: string | number): Promise<{ succe
     }
   } catch {}
 
-  // 3. Eliminar pedido de la tabla pedidos en Supabase
+  // 4. Eliminar pedido de la tabla pedidos en Supabase
   let res = await supabase.from('pedidos').delete().eq('id', cleanId);
   if (res.error && isNumeric) {
     res = await supabase.from('pedidos').delete().eq('id', numId);
   }
+
+  // Eliminar también del almacenamiento local de recibos
+  deleteOrderReceipt(cleanId);
+  deleteOrderReceipt(orderCode);
 
   if (res.error) {
     console.error('Error al eliminar pedido en Supabase:', res.error);
@@ -1605,7 +1622,7 @@ export async function getAdminInventory(): Promise<InventoryItemRow[]> {
 
   const { data: prods, error: pErr } = await supabase
     .from('productos')
-    .select('id, nombre, imagen_url, precio, stock, activo, categoria_id');
+    .select('id, nombre, imagen_url, imagenes, precio, stock, activo, categoria_id');
 
   if (pErr) throw new Error(`Error cargando inventario: ${pErr.message}`);
 
@@ -1627,11 +1644,27 @@ export async function getAdminInventory(): Promise<InventoryItemRow[]> {
 
   return (prods || []).map((p) => {
     const inv = invMap.get(p.id);
+
+    // Resolver imagen limpia sin formato JSON
+    let finalImg = p.imagen_url || '';
+    if (finalImg && typeof finalImg === 'string' && finalImg.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(finalImg);
+        if (Array.isArray(parsed) && parsed.length > 0) finalImg = parsed[0];
+      } catch {}
+    }
+    if (!finalImg && Array.isArray((p as any).imagenes) && (p as any).imagenes.length > 0) {
+      finalImg = (p as any).imagenes[0];
+    }
+    if (!finalImg) {
+      finalImg = '/images/products/gorra-1.webp';
+    }
+
     return {
       id: inv?.id || p.id,
       producto_id: p.id,
       nombre_producto: p.nombre,
-      imagen_url: p.imagen_url,
+      imagen_url: finalImg,
       categoria_nombre: catMap.get(p.categoria_id) || 'Sin categoría',
       categoria_id: p.categoria_id || '',
       stock_actual: inv ? inv.stock_actual : (p.stock || 0),
@@ -1712,19 +1745,59 @@ export async function getAdminOrders(statusFilter?: EstadoPedido): Promise<Pedid
 
   // Fetch detail lines
   const { data: details } = await supabase.from('detalle_pedidos').select('*');
-  const { data: prods } = await supabase.from('productos').select('id, nombre, imagen_url, precio');
+  const { data: prods } = await supabase.from('productos').select('id, nombre, imagen_url, imagenes, precio');
   const prodMap = new Map<string, Producto>();
-  if (prods) prods.forEach((p) => prodMap.set(p.id, p as Producto));
+  if (prods) {
+    prods.forEach((p) => {
+      let finalImg = p.imagen_url || '';
+      if (finalImg && typeof finalImg === 'string' && finalImg.trim().startsWith('[')) {
+        try {
+          const parsed = JSON.parse(finalImg);
+          if (Array.isArray(parsed) && parsed.length > 0) finalImg = parsed[0];
+        } catch {}
+      }
+      if (!finalImg && Array.isArray((p as any).imagenes) && (p as any).imagenes.length > 0) {
+        finalImg = (p as any).imagenes[0];
+      }
+      if (!finalImg) {
+        finalImg = '/images/products/gorra-1.webp';
+      }
+      prodMap.set(String(p.id).trim(), {
+        ...p,
+        imagen_url: finalImg,
+      } as Producto);
+    });
+  }
 
   const detailsByOrder: Record<string, DetallePedido[]> = {};
   if (details) {
     details.forEach((d) => {
-      if (!detailsByOrder[d.pedido_id]) {
-        detailsByOrder[d.pedido_id] = [];
+      const orderKeyStr = String(d.pedido_id).trim();
+      if (!detailsByOrder[orderKeyStr]) {
+        detailsByOrder[orderKeyStr] = [];
       }
-      detailsByOrder[d.pedido_id].push({
+      if (typeof d.pedido_id === 'number' && !detailsByOrder[String(d.pedido_id)]) {
+        detailsByOrder[String(d.pedido_id)] = detailsByOrder[orderKeyStr];
+      }
+
+      const prodIdStr = String(d.producto_id || '').trim();
+      const foundProd = prodMap.get(prodIdStr);
+
+      const resolvedProduct: Producto = foundProd || {
+        id: prodIdStr || 'prod-item',
+        nombre: (d as any).producto_nombre || 'Artículo Pretty Store',
+        imagen_url: (d as any).producto_imagen || '/images/products/gorra-1.webp',
+        precio: Number(d.precio_unitario) || 0,
+        costo: 0,
+        descripcion: null,
+        stock: 1,
+        activo: true,
+        categoria_id: '',
+      };
+
+      detailsByOrder[orderKeyStr].push({
         ...d,
-        producto: prodMap.get(d.producto_id),
+        producto: resolvedProduct,
       });
     });
   }
@@ -1742,7 +1815,7 @@ export async function getAdminOrders(statusFilter?: EstadoPedido): Promise<Pedid
     const orderCode = `#PED-${rawId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
     const rec = receiptMap.get(rawId) || receiptMap.get(orderCode);
 
-    const voucherUrl =
+    let voucherUrl =
       (o.comprobante_pago?.startsWith('data:') ||
       o.comprobante_pago?.startsWith('http') ||
       o.comprobante_pago?.startsWith('/')
@@ -1752,7 +1825,20 @@ export async function getAdminOrders(statusFilter?: EstadoPedido): Promise<Pedid
       o.comprobante_pago ||
       null;
 
-    const dbDetails = detailsByOrder[o.id] || [];
+    // Si aún no se encontró comprobante, extraer de notas por si vino en URL
+    if (!voucherUrl && o.notas && typeof o.notas === 'string') {
+      const match = o.notas.match(/(https?:\/\/[^\s|]+(?:supabase\.co|storage)[^\s|]+|https?:\/\/[^\s|]+\.(?:jpg|jpeg|png|webp|gif)[^\s|]*|data:image\/[a-zA-Z]+;base64,[^\s|]+)/i);
+      if (match) {
+        voucherUrl = match[1];
+      } else {
+        const refMatch = o.notas.match(/Comprobante\/Ref[^:]*:\s*([^\s|]+)/i);
+        if (refMatch && (refMatch[1].startsWith('http') || refMatch[1].startsWith('data:'))) {
+          voucherUrl = refMatch[1];
+        }
+      }
+    }
+
+    const dbDetails = detailsByOrder[rawId] || detailsByOrder[String(o.id)] || [];
     const finalDetails =
       dbDetails.length > 0
         ? dbDetails
@@ -1763,7 +1849,10 @@ export async function getAdminOrders(statusFilter?: EstadoPedido): Promise<Pedid
             cantidad: it.quantity,
             precio_unitario: it.product.precio,
             subtotal: it.subtotal,
-            producto: it.product as Producto,
+            producto: {
+              ...it.product,
+              imagen_url: it.product.imagen_url || '/images/products/gorra-1.webp',
+            } as Producto,
           }));
 
     return {
@@ -1933,7 +2022,19 @@ export async function deleteAdminClient(clientId: string | number): Promise<{ su
   const numId = Number(cleanId);
   const isNumeric = !isNaN(numId) && cleanId !== '';
 
-  // 1. Desvincular pedidos del cliente para evitar violación de Foreign Key (tanto numérico como texto)
+  // 1. Probar RPC seguro de PostgreSQL si está instalado
+  try {
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc('delete_cliente_safe', {
+      p_cliente_id: cleanId,
+    });
+    if (!rpcErr && rpcRes === true) {
+      removeExcludedClientId(cleanId);
+      if (isNumeric) removeExcludedClientId(String(numId));
+      return { success: true, localOnly: false };
+    }
+  } catch {}
+
+  // 2. Desvincular pedidos del cliente para evitar violación de Foreign Key (tanto numérico como texto)
   try {
     if (isNumeric) {
       await supabase
@@ -1949,7 +2050,7 @@ export async function deleteAdminClient(clientId: string | number): Promise<{ su
     console.warn('Advertencia desvinculando pedidos del cliente:', unlinkErr);
   }
 
-  // 2. Desvincular de ventas si existiese referencia directa
+  // 3. Desvincular de ventas si existiese referencia directa
   try {
     if (isNumeric) {
       await supabase.from('ventas').update({ cliente_id: null } as any).eq('cliente_id', numId);
@@ -1957,7 +2058,7 @@ export async function deleteAdminClient(clientId: string | number): Promise<{ su
     await supabase.from('ventas').update({ cliente_id: null } as any).eq('cliente_id', cleanId);
   } catch {}
 
-  // 3. Eliminar de la tabla clientes sin .select() para evitar requerir permisos de lectura sobre filas borradas
+  // 4. Eliminar de la tabla clientes sin .select() para evitar requerir permisos de lectura sobre filas borradas
   let deleteRes = isNumeric
     ? await supabase.from('clientes').delete().eq('id', numId)
     : await supabase.from('clientes').delete().eq('id', cleanId);

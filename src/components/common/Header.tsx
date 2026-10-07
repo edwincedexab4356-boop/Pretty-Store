@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingBag, Menu, X, Search, ChevronDown, Layers } from 'lucide-react';
+import { ShoppingCart, Menu, X, Search, ChevronDown, Layers } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 import { Categoria } from '../../types/database';
@@ -287,9 +287,9 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={() => setIsCartOpen(true)}
               className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-full text-stone-200 hover:text-white hover:bg-white/5 border border-white/10 hover:border-white/20 transition-all cursor-pointer"
-              aria-label={`Bolsa de compras (${totalItems} artículos)`}
+              aria-label={`Carrito de compras (${totalItems} artículos)`}
             >
-              <ShoppingBag size={17} className="stroke-[1.5]" />
+              <ShoppingCart size={17} className="stroke-[1.5]" />
               <span className="text-[11px] font-mono tabular-nums font-medium text-stone-200">
                 {totalItems}
               </span>
