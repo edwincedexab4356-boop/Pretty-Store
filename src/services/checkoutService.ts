@@ -237,7 +237,7 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     tipoEntrega === 'retiro'
       ? '[RETIRO EN EL LOCAL]'
       : `[DELIVERY VÍA ${courier ? courier.toUpperCase() : 'UNO EXPRESS'}]`,
-    cleanComprobante ? `Comprobante/Ref (${metodoPago}): ${cleanComprobante}` : null,
+    cleanComprobante ? `[COMPROBANTE: ${cleanComprobante}]` : null,
     tarjetaInfo?.numeroEnmascarado
       ? `Tarjeta: ${sanitizeInput(tarjetaInfo.numeroEnmascarado, 30)} (${sanitizeInput(tarjetaInfo.titular || '', 50)})`
       : null,
@@ -459,16 +459,29 @@ export async function updateOrderPaymentVoucher(
         comprobante_pago: voucherUrl,
         updated_at: new Date().toISOString(),
       } as any)
-      .eq('id', cleanId);
+      .eq('id', isNumeric ? numId : cleanId)
+      .select('id');
 
-    if (updateRes.error && isNumeric) {
+    if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
+      console.log('[Supabase] Comprobante de pago actualizado con éxito en pedido:', orderId);
+      return true;
+    }
+
+    // Si falló con id numérico/string, intentar con el otro formato
+    if (isNumeric) {
       updateRes = await supabase
         .from('pedidos')
         .update({
           comprobante_pago: voucherUrl,
           updated_at: new Date().toISOString(),
         } as any)
-        .eq('id', numId);
+        .eq('id', cleanId)
+        .select('id');
+
+      if (!updateRes.error && updateRes.data && updateRes.data.length > 0) {
+        console.log('[Supabase] Comprobante de pago actualizado con éxito en pedido:', orderId);
+        return true;
+      }
     }
 
     // 3. Respaldo en campo notas para garantizar que NUNCA se pierda aunque falte la columna comprobante_pago
@@ -484,18 +497,21 @@ export async function updateOrderPaymentVoucher(
         const appendedNotes = currentNotes
           ? `${currentNotes} | [COMPROBANTE: ${voucherUrl}]`
           : `[COMPROBANTE: ${voucherUrl}]`;
-        await supabase
+        const notesUpd = await supabase
           .from('pedidos')
           .update({ notas: appendedNotes } as any)
-          .eq('id', isNumeric ? numId : cleanId);
+          .eq('id', isNumeric ? numId : cleanId)
+          .select('id');
+        if (!notesUpd.error && notesUpd.data && notesUpd.data.length > 0) {
+          return true;
+        }
       }
     } catch {}
 
-    if (updateRes.error) {
-      console.warn('[Supabase] Error actualizando comprobante de pago en pedidos:', updateRes.error);
+    if (updateRes.error || !updateRes.data || updateRes.data.length === 0) {
+      console.warn('[Supabase] No se pudo actualizar comprobante en pedido existente (RLS o ID no encontrado)');
       return false;
     }
-    console.log('[Supabase] Comprobante de pago actualizado con éxito en pedido:', orderId);
     return true;
   } catch (err) {
     console.warn('[Supabase] Fallo al actualizar comprobante:', err);
@@ -567,10 +583,10 @@ export async function uploadVoucherToSupabaseStorage(
     blobToUpload = fileOrBlob;
   }
 
-  const contentType = blobToUpload.type || (ext === 'png' ? 'image/png' : 'image/jpeg');
+  const contentType = (blobToUpload.type && blobToUpload.type !== 'application/octet-stream') ? blobToUpload.type : (ext === 'png' ? 'image/png' : 'image/jpeg');
 
-  // Buckets candidatos: 'product-images' (el bucket ya creado y activo), luego 'comprobantes'
-  const candidateBuckets = ['product-images', 'comprobantes', 'pedidos', 'assets'];
+  // Buckets candidatos: 'comprobantes' (bucket dedicado verificado), luego 'product-images' y 'assets'
+  const candidateBuckets = ['comprobantes', 'product-images', 'assets'];
 
   // Probar rutas: tanto en carpeta comprobantes como en la raíz del bucket
   const filePaths = [

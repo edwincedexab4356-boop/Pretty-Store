@@ -367,6 +367,12 @@ CREATE POLICY "Pedidos Public Insert" ON public.pedidos
   FOR INSERT TO anon, authenticated
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Pedidos Public Update" ON public.pedidos;
+CREATE POLICY "Pedidos Public Update" ON public.pedidos
+  FOR UPDATE TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
+
 DROP POLICY IF EXISTS "Pedidos Staff All" ON public.pedidos;
 CREATE POLICY "Pedidos Staff All" ON public.pedidos
   FOR ALL TO anon, authenticated

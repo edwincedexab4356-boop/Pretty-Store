@@ -670,7 +670,7 @@ export const CheckoutDemoModal: React.FC = () => {
     setCheckoutStep('review');
     setIsSubmitting(false);
 
-    // Guardar borrador del pedido en el almacén de recibos
+    // Guardar borrador del pedido en el almacén local para la sesión
     saveOrderReceipt({
       orderId: instantSummary.orderId,
       orderNumber: instantSummary.orderNumber,
@@ -703,33 +703,6 @@ export const CheckoutDemoModal: React.FC = () => {
       comprobanteFileName: voucherFileName || null,
       createdAt: new Date().toISOString(),
     });
-
-    // 2. Guardar en Supabase en segundo plano con el costo de envío sumado
-    createRealOrder({
-      items,
-      subtotal,
-      discount,
-      promoTitle: promo.promoTitle,
-      shipping: numericalShipping,
-      total: finalTotal,
-      nombre: nombre.trim(),
-      telefono: telefono.trim(),
-      direccion: resolvedAddress,
-      metodoPago,
-      tipoEntrega,
-      courier: tipoEntrega === 'delivery' ? courier : undefined,
-      notas: notas.trim() || undefined,
-    }).then((realOrder) => {
-      if (realOrder) {
-        realSupabaseOrderIdRef.current = realOrder.orderId;
-        setConfirmedOrder((prev) => (prev ? { ...prev, orderId: realOrder.orderId } : realOrder));
-        if (voucherImage) {
-          updateOrderVoucher(realOrder.orderId, voucherImage, voucherFileName || undefined);
-        }
-      }
-    }).catch((err) => {
-      console.warn('Persistencia en segundo plano:', err);
-    });
   };
 
   // PASO 3 -> PASO 4: "Confirmar Pedido" después de subir comprobante (OBLIGATORIO)
@@ -748,7 +721,7 @@ export const CheckoutDemoModal: React.FC = () => {
         `#PED-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
       );
 
-      // 1. SUBIR LA CAPTURA AL STORAGE DE SUPABASE ('product-images' / 'comprobantes')
+      // 1. SUBIR LA CAPTURA AL STORAGE DE SUPABASE ('comprobantes' / 'product-images')
       let publicVoucherUrl = voucherImage;
       try {
         const uploadRes = await uploadVoucherToSupabaseStorage(
@@ -765,14 +738,6 @@ export const CheckoutDemoModal: React.FC = () => {
 
       setVoucherImage(publicVoucherUrl);
 
-      // 2. VINCULAR LA CAPTURA CON EL PEDIDO EN SUPABASE
-      let resolvedDbOrderId = realSupabaseOrderIdRef.current || confirmedOrder?.orderId;
-      const isNumericDbId = Boolean(
-        resolvedDbOrderId &&
-        !String(resolvedDbOrderId).startsWith('PED-') &&
-        !String(resolvedDbOrderId).startsWith('temp-')
-      );
-
       const fallbackAddress =
         tipoEntrega === 'retiro'
           ? 'Retiro en el Local / Tienda física (Pretty Store)'
@@ -780,11 +745,20 @@ export const CheckoutDemoModal: React.FC = () => {
             ? (direccion.trim() || `Entrega a Domicilio (${provincia})`)
             : `Sucursal de envío (${courier || 'Courier'}) (${provincia})`;
 
-      if (isNumericDbId && resolvedDbOrderId) {
-        // El pedido ya tiene ID en la BD de Supabase: actualizamos su comprobante_pago
-        await updateOrderPaymentVoucher(resolvedDbOrderId, publicVoucherUrl);
-      } else {
-        // Si aún no se creó o no tenemos ID numérico, registrar directamente con el comprobante en Supabase
+      // 2. VINCULAR LA CAPTURA Y REGISTRAR EL PEDIDO EN SUPABASE
+      let resolvedDbOrderId = realSupabaseOrderIdRef.current;
+      let orderSavedToDb = false;
+
+      // Si existía un ID numérico previo, intentar actualizarlo
+      if (resolvedDbOrderId && !String(resolvedDbOrderId).startsWith('PED-') && !String(resolvedDbOrderId).startsWith('temp-')) {
+        const updateOk = await updateOrderPaymentVoucher(resolvedDbOrderId, publicVoucherUrl);
+        if (updateOk) {
+          orderSavedToDb = true;
+        }
+      }
+
+      // Si no existía o la actualización no se pudo aplicar (por políticas RLS), registrar el pedido en Supabase con su comprobante de pago
+      if (!orderSavedToDb) {
         try {
           const realOrder = await createRealOrder({
             items,
@@ -805,9 +779,10 @@ export const CheckoutDemoModal: React.FC = () => {
           if (realOrder) {
             resolvedDbOrderId = realOrder.orderId;
             realSupabaseOrderIdRef.current = realOrder.orderId;
+            orderSavedToDb = true;
           }
         } catch (dbErr) {
-          console.warn('[Supabase] Creación directa de pedido con comprobante:', dbErr);
+          console.error('[Supabase] Error al crear pedido con comprobante:', dbErr);
         }
       }
 
@@ -924,18 +899,23 @@ export const CheckoutDemoModal: React.FC = () => {
 
     const totalToPay = (confirmedOrder?.total || finalTotal).toFixed(2);
     const effectiveVoucherUrl = confirmedOrder?.comprobantePago || voucherImage || '';
-    const voucherUrlLine =
-      effectiveVoucherUrl && effectiveVoucherUrl.startsWith('http')
-        ? `• *Foto del Comprobante:* ${effectiveVoucherUrl}\n`
-        : '';
+    const hasVoucherUrl = Boolean(effectiveVoucherUrl && effectiveVoucherUrl.startsWith('http'));
 
-    return `🧾 *COMPROBANTE DE PAGO ADJUNTO*
+    // 1° FOTO DEL COMPROBANTE ARRIBA (para que WhatsApp muestre la tarjeta/vista previa con la foto arriba)
+    // 2° DETALLE DE LO QUE PIDIÓ EL CLIENTE ABAJO
+    let message = '';
+    if (hasVoucherUrl) {
+      message += `📸 *FOTO DEL COMPROBANTE DE PAGO:*\n${effectiveVoucherUrl}\n\n`;
+    }
+
+    message += `🛍️ *PEDIDO OFICIAL (${orderNum}) - PRETTY STORE*
+
+🧾 *DATOS DEL PAGO:*
 • *Estado:* Pago realizado y verificado por el cliente
-• *Método de Pago:* ${paymentLabel}
-• *Archivo:* ${voucherFileName || 'comprobante_pago.jpg'}
-${voucherUrlLine}• *Monto Cancelado:* $${totalToPay} USD
-
-📋 *DETALLE DEL PEDIDO (${orderNum}):*
+• *Método:* ${paymentLabel}
+• *Monto Cancelado:* $${totalToPay} USD
+${voucherFileName ? `• *Archivo:* ${voucherFileName}\n` : ''}
+📋 *LO QUE PEDÍ (DETALLE DEL PEDIDO):*
 *Cliente:* ${nombre.trim()}
 *Teléfono:* ${telefono.trim()}
 *Modalidad:* ${entregaLabel}
@@ -945,72 +925,40 @@ ${itemsText}
 
 *Subtotal:* $${(confirmedOrder?.subtotal || subtotal).toFixed(2)} USD
 ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(confirmedOrder?.discount || discount).toFixed(2)} USD\n` : ''}${shippingLine}
-*Total Oficial a Pagar (con envío):* $${totalToPay} USD`;
+*Total Oficial Pagado:* $${totalToPay} USD
+
+_Enviado desde Pretty Store Oficial_`;
+
+    return message;
   };
 
-  // URL directa de WhatsApp (API universal directa al chat de la tienda)
+  // URL directa de WhatsApp oficial para abrir directamente en la app
   const generateWhatsAppUrl = () => {
     const msg = generateWhatsAppMessageText();
     return `https://api.whatsapp.com/send?phone=${WHATSAPP_ORDERS_PHONE}&text=${encodeURIComponent(msg)}`;
   };
 
-  // Enviar pedido y foto directamente a WhatsApp
-  const handleSendToWhatsApp = async () => {
+  // Redirección inmediata a WhatsApp (sin menú de compartir y sin usar el portapapeles)
+  const handleSendToWhatsApp = () => {
     setIsSendingWhatsApp(true);
     setHasOpenedWhatsApp(true);
 
-    const msg = generateWhatsAppMessageText();
-    const orderNum = confirmedOrder?.orderNumber || '#PEDIDO';
-
-    // 1. Enviar con la foto adjunta mediante Web Share API (en móviles Android / iPhone)
-    try {
-      let fileToSend: File | null = voucherRawFile;
-      if (!fileToSend && voucherImage) {
-        const pngBlob = await convertToPngBlob(voucherImage);
-        if (pngBlob) {
-          const extension = voucherFileName?.split('.').pop() || 'png';
-          fileToSend = new File([pngBlob], voucherFileName || `comprobante_${orderNum}.${extension}`, {
-            type: pngBlob.type || 'image/png',
-          });
-        }
-      }
-
-      if (fileToSend && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
-        const shareData = {
-          files: [fileToSend],
-          title: `Pedido ${orderNum} - Pretty Store`,
-          text: msg,
-        };
-
-        if (navigator.canShare(shareData)) {
-          await navigator.share(shareData);
-          setIsSendingWhatsApp(false);
-          return;
-        }
-      }
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        // El usuario canceló voluntariamente
-        setIsSendingWhatsApp(false);
-        return;
-      }
-      console.warn('Share API fallback:', err);
-    }
-
-    // 2. Fallback universal para navegadores de escritorio:
-    // Abrir WhatsApp directamente con el pedido y el enlace directo al comprobante
     const rawUrl = generateWhatsAppUrl();
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
     if (isMobile) {
+      // En dispositivos móviles se redirige directamente a la app de WhatsApp de una vez
       window.location.href = rawUrl;
     } else {
+      // En computadoras se abre la ventana directa de WhatsApp Web
       window.open(rawUrl, '_blank', 'noopener,noreferrer');
     }
 
-    setIsSendingWhatsApp(false);
+    setTimeout(() => {
+      setIsSendingWhatsApp(false);
+    }, 1500);
   };
 
-  // REGRESAR A LA TIENDA
   const handleReturnToStore = () => {
     if (checkoutStep === 'receipt') {
       clearCart();
@@ -2283,16 +2231,15 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                   </a>
                 </div>
               )}
-
               {/* Indicación clara de envío directo a WhatsApp */}
               <div className="p-3.5 rounded-xl bg-stone-900 border border-white/10 text-stone-300 text-xs text-left space-y-2">
                 <div className="flex items-center gap-2 text-emerald-400 font-semibold text-[11px]">
                   <FileCheck size={15} className="shrink-0" />
-                  <span>Envío directo a WhatsApp con foto y pedido</span>
+                  <span>Redirección directa a WhatsApp oficial</span>
                 </div>
                 <div className="text-[11px] text-stone-400 leading-relaxed font-light space-y-1">
                   <p>
-                    • Al presionar el botón verde se envía <strong>la foto del comprobante junto con el detalle completo de tu pedido</strong> directamente al chat oficial de Pretty Store.
+                    • Al presionar el botón se te redirige de inmediato a WhatsApp con la <strong>foto del comprobante arriba y el detalle de tu pedido abajo</strong>, listo para enviar directamente al asesor de Pretty Store.
                   </p>
                 </div>
               </div>
