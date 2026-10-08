@@ -59,13 +59,14 @@ export const TermsPage: React.FC<TermsPageProps> = ({
             El presente contrato regula los términos y condiciones de acceso, navegación y adquisición de productos ofrecidos en el sitio web con dominio principal{' '}
             <strong className="text-white font-medium">https://prettystore.store/</strong> (en adelante, la "Plataforma" o la "Tienda"), operado bajo el nombre comercial <strong className="text-white font-medium">{storeName}</strong>.
           </p>
-          <div className="p-3.5 rounded-lg bg-black/40 border border-white/10 text-[11px] space-y-1.5 font-mono">
-            <p><span className="text-stone-400">Nombre Comercial:</span> <span className="text-white">{storeName}</span></p>
-            <p><span className="text-stone-400">Razón Social:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Razón Social o Nombre Legal del Titular]</span></p>
-            <p><span className="text-stone-400">RUC y DV:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Número de RUC y Dígito Verificador]</span></p>
-            <p><span className="text-stone-400">Domicilio Legal:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Dirección de Notificaciones Legales en Panamá]</span></p>
-            <p><span className="text-stone-400">Contacto Electrónico:</span> <span className="text-white">{config.email || 'contacto@prettystore.store'}</span></p>
-            <p><span className="text-stone-400">Línea Telefónica / WhatsApp:</span> <span className="text-white">{config.telefono || '+507 6215-0251'}</span></p>
+          <div className="p-3.5 rounded-lg bg-black/40 border border-[#c5a059]/30 text-[11px] space-y-1.5 font-mono">
+            <p><span className="text-stone-400">Identidad Comercial:</span> <span className="text-white font-medium">Pretty-Store</span></p>
+            <p><span className="text-stone-400">Razón Social o Nombre Legal:</span> <span className="text-white font-medium">Pretty Store (Wanda Taneth Ramos Martínez)</span></p>
+            <p><span className="text-stone-400">RUC y DV:</span> <span className="text-white font-medium">8-875-349 DV 33</span></p>
+            <p><span className="text-stone-400">Responsable / Representante Legal:</span> <span className="text-white font-medium">Jesús Alejandro Cardona Escobar (Tel: 62150251)</span></p>
+            <p><span className="text-stone-400">Domicilio Legal:</span> <span className="text-white font-medium">La Chorrera, Calle Baldomero González, Plaza Galería City Place, Local 01, Almacén Pretty Store</span></p>
+            <p><span className="text-stone-400">Contacto Electrónico:</span> <span className="text-[#c5a059] font-medium">prettystoresoporte@gmail.com</span></p>
+            <p><span className="text-stone-400">Línea Telefónica / WhatsApp:</span> <span className="text-white font-medium">+507 6215-0251</span></p>
           </div>
         </section>
 
@@ -243,8 +244,8 @@ export const TermsPage: React.FC<TermsPageProps> = ({
               <p className="text-stone-400 text-[11px]">
                 Despachos realizados a través de empresas de mensajería aliadas (Uno Express, Ferguson, Servientrega u operadores autorizados).
               </p>
-              <div className="mt-2 p-2.5 rounded bg-black/40 border border-amber-500/20 text-amber-300 text-[11px] font-mono">
-                [COMPLETAR POR EL PROPIETARIO - Plazos exactos de entrega según provincia o zona metropolitana (ej. 24 a 48 horas en Ciudad de Panamá, 48 a 72 horas en el Interior) y tarifas de flete vigentes].
+              <div className="mt-2 p-2.5 rounded bg-black/40 border border-[#c5a059]/30 text-stone-300 text-[11px] font-sans">
+                Despachos a Panamá Capital y Panamá Oeste (24 a 48 horas hábiles). Envíos a provincias centrales e interior (48 a 72 horas hábiles) a través de Servientrega, Ferguson y Uno Express, según las tarifas seleccionadas durante el proceso de compra.
               </div>
             </div>
           </div>

@@ -59,13 +59,13 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({
             El responsable del tratamiento de las bases de datos generadas a través del sitio web{' '}
             <strong className="text-white font-medium">https://prettystore.store/</strong> es la persona natural o jurídica que opera bajo el nombre comercial <strong className="text-white font-medium">{storeName}</strong>:
           </p>
-          <div className="p-3.5 rounded-lg bg-black/40 border border-white/10 text-[11px] space-y-1.5 font-mono">
-            <p><span className="text-stone-400">Identidad Comercial:</span> <span className="text-white">{storeName}</span></p>
-            <p><span className="text-stone-400">Razón Social o Nombre Legal:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Razón Social o Nombre Legal del Titular]</span></p>
-            <p><span className="text-stone-400">RUC y DV:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Número de RUC y Dígito Verificador]</span></p>
-            <p><span className="text-stone-400">Responsable / Oficial de Privacidad:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Nombre del Oficial o Contacto de Protección de Datos]</span></p>
-            <p><span className="text-stone-400">Correo para Asuntos de Privacidad:</span> <span className="text-white">{config.email || 'contacto@prettystore.store'}</span></p>
-            <p><span className="text-stone-400">Dirección para Notificaciones Físicas:</span> <span className="text-amber-400">[COMPLETAR POR EL PROPIETARIO - Dirección Física en Panamá]</span></p>
+          <div className="p-3.5 rounded-lg bg-black/40 border border-[#c5a059]/30 text-[11px] space-y-1.5 font-mono">
+            <p><span className="text-stone-400">Identidad Comercial:</span> <span className="text-white font-medium">Pretty-Store</span></p>
+            <p><span className="text-stone-400">Razón Social o Nombre Legal:</span> <span className="text-white font-medium">Pretty Store (Wanda Taneth Ramos Martínez)</span></p>
+            <p><span className="text-stone-400">RUC y DV:</span> <span className="text-white font-medium">8-875-349 DV 33</span></p>
+            <p><span className="text-stone-400">Responsable / Oficial de Privacidad:</span> <span className="text-white font-medium">Jesús Alejandro Cardona Escobar (Tel: 62150251)</span></p>
+            <p><span className="text-stone-400">Correo para Asuntos de Privacidad:</span> <span className="text-[#c5a059] font-medium">prettystoresoporte@gmail.com</span></p>
+            <p><span className="text-stone-400">Dirección para Notificaciones Físicas:</span> <span className="text-white font-medium">La Chorrera, Calle Baldomero González, Plaza Galería City Place, Local 01, Almacén Pretty Store</span></p>
           </div>
         </section>
 

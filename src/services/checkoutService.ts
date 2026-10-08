@@ -2,6 +2,7 @@ import { getSupabaseClient } from '../lib/supabase';
 import { CartItem, MetodoPago, TipoEntrega, CourierOption } from '../types/database';
 import { calculateLegendaryCapsPromo } from '../utils/promoUtils';
 import { compressImageFile } from '../utils/imageOptimizer';
+import { saveVoucherImageToDb } from '../utils/voucherDb';
 
 export interface CreateOrderParams {
   items: CartItem[];
@@ -261,17 +262,41 @@ export async function createRealOrder(params: CreateOrderParams): Promise<Create
     orderInsertPayload.cliente_id = clienteId;
   }
 
-  const { data: createdOrder, error: orderErr } = await supabase
+  let createdOrder: any = null;
+  let { data: insData, error: orderErr } = await supabase
     .from('pedidos')
     .insert([orderInsertPayload])
     .select()
     .single();
 
-  if (orderErr) {
+  if (orderErr && orderInsertPayload.comprobante_pago) {
+    // Reintentar sin columna comprobante_pago por si no existe aún en la tabla de Supabase
+    const fallbackPayload = { ...orderInsertPayload };
+    delete fallbackPayload.comprobante_pago;
+    const retryRes = await supabase
+      .from('pedidos')
+      .insert([fallbackPayload])
+      .select()
+      .single();
+    if (!retryRes.error && retryRes.data) {
+      insData = retryRes.data;
+      orderErr = null;
+    }
+  }
+
+  if (orderErr || !insData) {
     throw new Error('No se pudo registrar el pedido en el servidor. Por favor verifique sus datos.');
   }
 
+  createdOrder = insData;
   const orderId = createdOrder.id;
+
+  // Si se proporcionó comprobante, respaldarlo de inmediato en IndexedDB
+  if (cleanComprobante) {
+    const orderNumberStr = `PED-${String(orderId || '').replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+    saveVoucherImageToDb(String(orderId), cleanComprobante);
+    saveVoucherImageToDb(orderNumberStr, cleanComprobante);
+  }
 
   // 7. CREAR DETALLES EN public.detalle_pedidos CON PRECIOS OFICIALES E IMÁGENES
   const detailsPayload = verifiedOrderLines.map((line) => {
@@ -405,10 +430,14 @@ export async function updateOrderPaymentVoucher(
   voucherUrl: string
 ): Promise<boolean> {
   if (!orderId || !voucherUrl) return false;
-  const supabase = getSupabaseClient();
   const cleanId = String(orderId).trim();
   const numId = Number(cleanId);
   const isNumeric = !isNaN(numId) && cleanId !== '';
+
+  // 0. Respaldar de inmediato en IndexedDB
+  saveVoucherImageToDb(cleanId, voucherUrl);
+
+  const supabase = getSupabaseClient();
 
   try {
     // 1. Intentar RPC seguro si existe en la base de datos

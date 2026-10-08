@@ -1,5 +1,11 @@
 import { getSupabaseClient } from '../lib/supabase';
 import { CreatedOrderResult } from '../services/checkoutService';
+import {
+  saveVoucherImageToDb,
+  getVoucherImageFromDb,
+  deleteVoucherFromDb,
+  memoryVoucherCache,
+} from './voucherDb';
 
 export interface StoredOrderReceipt {
   orderId: string;
@@ -37,7 +43,8 @@ export interface StoredOrderReceipt {
 const STORAGE_KEY = 'pretty_store_orders_receipts_v2';
 
 /**
- * Obtiene todos los recibos y comprobantes guardados en el almacenamiento local
+ * Obtiene todos los recibos y comprobantes guardados en el almacenamiento local,
+ * rehidratando las fotos desde la memoria / IndexedDB
  */
 export function getAllOrderReceipts(): StoredOrderReceipt[] {
   if (typeof window === 'undefined') return [];
@@ -45,7 +52,28 @@ export function getAllOrderReceipts(): StoredOrderReceipt[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+
+    // Rehidratar comprobantes si están almacenados en memoria o IndexedDB
+    return parsed.map((receipt) => {
+      let vUrl = receipt.comprobanteUrl;
+      const cleanId = String(receipt.orderId || '').trim();
+      const cleanNum = String(receipt.orderNumber || '').trim();
+
+      if (!vUrl || vUrl.startsWith('indexeddb:')) {
+        const memMatch =
+          memoryVoucherCache.get(cleanId) ||
+          memoryVoucherCache.get(cleanNum) ||
+          memoryVoucherCache.get(cleanNum.replace(/#/g, ''));
+        if (memMatch?.url) {
+          vUrl = memMatch.url;
+        }
+      }
+      return {
+        ...receipt,
+        comprobanteUrl: vUrl || null,
+      };
+    });
   } catch (e) {
     console.warn('Error leyendo recibos almacenados:', e);
     return [];
@@ -53,14 +81,25 @@ export function getAllOrderReceipts(): StoredOrderReceipt[] {
 }
 
 /**
- * Guarda o actualiza un recibo oficial con su captura en el almacén persistente
+ * Guarda o actualiza un recibo oficial con su captura en el almacén persistente.
+ * Guarda la foto en IndexedDB (sin límites de tamaño) y la referencia en localStorage sin saturar la cuota.
  */
 export function saveOrderReceipt(receipt: StoredOrderReceipt): void {
   if (typeof window === 'undefined') return;
+
+  const cleanId = String(receipt.orderId || receipt.orderNumber || '').trim();
+  const cleanNum = String(receipt.orderNumber || '').trim();
+
+  // 1. Si hay captura en formato dataURL o URL grande, archivarla de inmediato en IndexedDB
+  if (receipt.comprobanteUrl) {
+    saveVoucherImageToDb(cleanId, receipt.comprobanteUrl, receipt.comprobanteFileName || undefined);
+    if (cleanNum && cleanNum !== cleanId) {
+      saveVoucherImageToDb(cleanNum, receipt.comprobanteUrl, receipt.comprobanteFileName || undefined);
+    }
+  }
+
   try {
     const current = getAllOrderReceipts();
-    const cleanId = String(receipt.orderId || receipt.orderNumber || '').trim();
-    const cleanNum = String(receipt.orderNumber || '').trim();
 
     const existingIndex = current.findIndex(
       (r) =>
@@ -69,28 +108,47 @@ export function saveOrderReceipt(receipt: StoredOrderReceipt): void {
         (cleanId && r.orderNumber === cleanId)
     );
 
+    // Preparar objeto para localStorage: si la imagen es un dataURL gigante,
+    // guardamos un puntero 'indexeddb:' en localStorage para evitar QuotaExceededError
+    const isHeavyDataUrl = Boolean(
+      receipt.comprobanteUrl &&
+      receipt.comprobanteUrl.startsWith('data:') &&
+      receipt.comprobanteUrl.length > 5000
+    );
+
+    const receiptForLocalStorage: StoredOrderReceipt = {
+      ...receipt,
+      comprobanteUrl: isHeavyDataUrl
+        ? `indexeddb:${cleanId}`
+        : receipt.comprobanteUrl || null,
+    };
+
     if (existingIndex >= 0) {
-      // Actualizar preservando datos de comprobante si el nuevo no tiene
       const merged: StoredOrderReceipt = {
         ...current[existingIndex],
-        ...receipt,
-        comprobanteUrl: receipt.comprobanteUrl || current[existingIndex].comprobanteUrl,
-        comprobanteFileName: receipt.comprobanteFileName || current[existingIndex].comprobanteFileName,
+        ...receiptForLocalStorage,
+        comprobanteFileName:
+          receipt.comprobanteFileName || current[existingIndex].comprobanteFileName,
       };
       current[existingIndex] = merged;
     } else {
-      current.unshift(receipt);
+      current.unshift(receiptForLocalStorage);
     }
 
-    // Mantener hasta 250 pedidos recientes en caché
-    let trimmed = current.slice(0, 250);
+    // Mantener hasta 250 pedidos
+    const trimmed = current.slice(0, 250);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
     } catch (quotaErr) {
-      // Si el localStorage está lleno por imágenes base64, recortar a 50 más recientes
+      // Si aún así hay presión de almacenamiento, compactar y guardar
       console.warn('Almacenamiento de recibos lleno, compactando...', quotaErr);
-      trimmed = current.slice(0, 50);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+      const stripped = trimmed.map((item) => ({
+        ...item,
+        comprobanteUrl: item.comprobanteUrl?.startsWith('data:')
+          ? `indexeddb:${item.orderId}`
+          : item.comprobanteUrl,
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stripped.slice(0, 100)));
     }
   } catch (e) {
     console.warn('Error guardando recibo localmente:', e);
@@ -98,21 +156,29 @@ export function saveOrderReceipt(receipt: StoredOrderReceipt): void {
 }
 
 /**
- * Actualiza la captura/comprobante de un pedido existente
+ * Actualiza la captura/comprobante de un pedido existente tanto en IndexedDB, localStorage y Supabase
  */
 export async function updateOrderVoucher(
   orderIdOrNumber: string,
   voucherUrlOrBase64: string,
   fileName?: string
 ): Promise<void> {
-  const current = getAllOrderReceipts();
   const cleanKey = String(orderIdOrNumber || '').trim();
+  const cleanWithoutHash = cleanKey.replace(/#/g, '');
 
+  // 1. Guardar de inmediato en IndexedDB
+  await saveVoucherImageToDb(cleanKey, voucherUrlOrBase64, fileName);
+  if (cleanWithoutHash !== cleanKey) {
+    await saveVoucherImageToDb(cleanWithoutHash, voucherUrlOrBase64, fileName);
+  }
+
+  // 2. Actualizar recibo en localStorage
+  const current = getAllOrderReceipts();
   const target = current.find(
     (r) =>
       r.orderId === cleanKey ||
       r.orderNumber === cleanKey ||
-      String(r.orderNumber).replace(/#/g, '') === cleanKey.replace(/#/g, '') ||
+      String(r.orderNumber).replace(/#/g, '') === cleanWithoutHash ||
       (cleanKey.length > 5 && (r.orderId.includes(cleanKey) || cleanKey.includes(r.orderId)))
   );
 
@@ -122,10 +188,9 @@ export async function updateOrderVoucher(
     saveOrderReceipt(target);
   }
 
-  // Sincronizar en Supabase
+  // 3. Sincronizar en Supabase
   try {
     const supabase = getSupabaseClient();
-    // Probar actualizar directamente por ID original (UUID o texto o número)
     const { error: err1 } = await supabase
       .from('pedidos')
       .update({
@@ -152,7 +217,7 @@ export async function updateOrderVoucher(
 }
 
 /**
- * Busca el recibo de un pedido por ID o Número de Pedido
+ * Busca el recibo de un pedido por ID o Número de Pedido, garantizando que incluya la foto
  */
 export function getOrderReceipt(orderIdOrNumber: string): StoredOrderReceipt | null {
   if (!orderIdOrNumber) return null;
@@ -164,23 +229,42 @@ export function getOrderReceipt(orderIdOrNumber: string): StoredOrderReceipt | n
     if (r.orderId === clean) return true;
     if (r.orderNumber === clean) return true;
     if (r.orderNumber.replace(/#/g, '').toUpperCase() === cleanWithoutHash) return true;
-    // Chequear si el ID de supabase contiene el prefijo
     const pedCode = `#PED-${String(r.orderId).replace(/-/g, '').slice(0, 6).toUpperCase()}`;
     if (pedCode === clean || pedCode === cleanWithoutHash) return true;
     if (cleanWithoutHash.includes(String(r.orderId).slice(0, 6).toUpperCase())) return true;
     return false;
   });
-  return found || null;
+
+  if (!found) return null;
+
+  // Si la foto está referenciada por IndexedDB o vacía, buscar en la caché de memoria
+  if (!found.comprobanteUrl || found.comprobanteUrl.startsWith('indexeddb:')) {
+    const mem =
+      memoryVoucherCache.get(clean) ||
+      memoryVoucherCache.get(cleanWithoutHash) ||
+      memoryVoucherCache.get(found.orderId) ||
+      memoryVoucherCache.get(found.orderNumber);
+    if (mem?.url) {
+      return {
+        ...found,
+        comprobanteUrl: mem.url,
+      };
+    }
+  }
+
+  return found;
 }
 
 /**
- * Elimina un recibo del almacén local cuando el administrador borra el pedido
+ * Elimina un recibo del almacén local e IndexedDB cuando el administrador borra el pedido
  */
 export function deleteOrderReceipt(orderIdOrNumber: string): void {
   if (typeof window === 'undefined' || !orderIdOrNumber) return;
+  const clean = String(orderIdOrNumber).trim();
+  deleteVoucherFromDb(clean);
+
   try {
     const current = getAllOrderReceipts();
-    const clean = String(orderIdOrNumber).trim();
     const cleanWithoutHash = clean.replace(/#/g, '').toUpperCase();
     const filtered = current.filter((r) => {
       if (r.orderId === clean) return false;
@@ -216,3 +300,4 @@ export function getClientReceipts(telefono?: string, nombre?: string, email?: st
     return false;
   });
 }
+

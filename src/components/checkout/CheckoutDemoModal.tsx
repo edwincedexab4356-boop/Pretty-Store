@@ -38,6 +38,7 @@ import {
 } from '../../services/checkoutService';
 import { getSupabaseClient } from '../../lib/supabase';
 import { saveOrderReceipt, updateOrderVoucher, StoredOrderReceipt } from '../../utils/orderReceiptStorage';
+import { saveVoucherImageToDb } from '../../utils/voucherDb';
 import { compressImageFile } from '../../utils/imageOptimizer';
 import { OfficialInvoiceModal } from '../admin/OfficialInvoiceModal';
 
@@ -509,10 +510,15 @@ export const CheckoutDemoModal: React.FC = () => {
       setVoucherImage(dataUrl);
       setIsVoucherAttached(true);
 
-      // Si el pedido ya existe, actualizar de inmediato en almacén persistente y Supabase
+      // Si el pedido ya existe, actualizar de inmediato en almacén persistente, IndexedDB y Supabase
       if (confirmedOrder) {
+        const orderKey = confirmedOrder.orderId || confirmedOrder.orderNumber;
+        saveVoucherImageToDb(orderKey, dataUrl, file.name);
+        if (confirmedOrder.orderNumber) {
+          saveVoucherImageToDb(confirmedOrder.orderNumber, dataUrl, file.name);
+        }
         updateOrderVoucher(
-          confirmedOrder.orderId || confirmedOrder.orderNumber,
+          orderKey,
           dataUrl,
           file.name
         );
@@ -525,8 +531,13 @@ export const CheckoutDemoModal: React.FC = () => {
         setVoucherImage(fallbackUrl);
         setIsVoucherAttached(true);
         if (confirmedOrder) {
+          const orderKey = confirmedOrder.orderId || confirmedOrder.orderNumber;
+          saveVoucherImageToDb(orderKey, fallbackUrl, file.name);
+          if (confirmedOrder.orderNumber) {
+            saveVoucherImageToDb(confirmedOrder.orderNumber, fallbackUrl, file.name);
+          }
           updateOrderVoucher(
-            confirmedOrder.orderId || confirmedOrder.orderNumber,
+            orderKey,
             fallbackUrl,
             file.name
           );
@@ -854,6 +865,8 @@ export const CheckoutDemoModal: React.FC = () => {
       };
 
       saveOrderReceipt(receiptToSave);
+      saveVoucherImageToDb(String(receiptToSave.orderId), publicVoucherUrl, voucherFileName || 'comprobante_pago.jpg');
+      saveVoucherImageToDb(String(receiptToSave.orderNumber), publicVoucherUrl, voucherFileName || 'comprobante_pago.jpg');
       updateOrderVoucher(String(receiptToSave.orderId), publicVoucherUrl, voucherFileName || 'comprobante_pago.jpg');
       updateOrderVoucher(String(receiptToSave.orderNumber), publicVoucherUrl, voucherFileName || 'comprobante_pago.jpg');
 
@@ -867,7 +880,9 @@ export const CheckoutDemoModal: React.FC = () => {
     }
   };
 
-  // Generador del texto limpio del recibo para WhatsApp (sin enlaces ni links a fotos)
+  // Generador del mensaje oficial de WhatsApp:
+  // 1° Comprobante de pago arriba
+  // 2° Detalle del pedido completo debajo
   const generateWhatsAppMessageText = () => {
     const orderNum = confirmedOrder?.orderNumber || '#PEDIDO';
     const paymentLabel =
@@ -879,7 +894,7 @@ export const CheckoutDemoModal: React.FC = () => {
 
     let entregaLabel = '';
     if (tipoEntrega === 'retiro') {
-      entregaLabel = 'Retiro en el Local';
+      entregaLabel = 'Retiro en el Local / Tienda física';
     } else {
       entregaLabel = `Envío express (${courier}) en ${provincia}`;
       if (courier === 'Servientrega' && servientregaModalidad === 'domicilio') {
@@ -890,7 +905,7 @@ export const CheckoutDemoModal: React.FC = () => {
     }
 
     const itemsText = (confirmedOrder?.items || items)
-      .map((it) => `• ${it.product.nombre} (Cant: ${it.quantity} × $${it.product.precio.toFixed(2)})`)
+      .map((it) => `  • ${it.product.nombre} (Cant: ${it.quantity} × $${it.product.precio.toFixed(2)})`)
       .join('\n');
 
     const shippingLine =
@@ -898,26 +913,31 @@ export const CheckoutDemoModal: React.FC = () => {
         ? `*Envío (${confirmedOrder.courier || courier}):* $${confirmedOrder.shipping.toFixed(2)} USD`
         : '*Envío:* Gratis (Retiro en tienda)';
 
-    return `*Recibo Oficial de Compra - Pretty Store*
-*#${orderNum}*
+    const totalToPay = (confirmedOrder?.total || finalTotal).toFixed(2);
 
+    return `🧾 *COMPROBANTE DE PAGO ADJUNTO*
+• *Estado:* Pago realizado y confirmado por el cliente
+• *Método de Pago:* ${paymentLabel}
+• *Archivo:* ${voucherFileName || 'comprobante_pago.jpg'}
+• *Monto Cancelado:* $${totalToPay} USD
+
+📋 *DETALLE DEL PEDIDO (${orderNum}):*
 *Cliente:* ${nombre.trim()}
 *Teléfono:* ${telefono.trim()}
-*Método de Pago:* ${paymentLabel}
-*Entrega:* ${entregaLabel}
+*Modalidad:* ${entregaLabel}
 
 *Productos Solicitados:*
 ${itemsText}
 
 *Subtotal:* $${(confirmedOrder?.subtotal || subtotal).toFixed(2)} USD
 ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(confirmedOrder?.discount || discount).toFixed(2)} USD\n` : ''}${shippingLine}
-*Total a Pagar (con envío):* $${(confirmedOrder?.total || finalTotal).toFixed(2)} USD`;
+*Total Oficial a Pagar (con envío):* $${totalToPay} USD`;
   };
 
-  // URL directa de WhatsApp con el recibo limpio (sin enlaces a fotos)
+  // URL directa de WhatsApp (API universal directa al chat de la tienda)
   const generateWhatsAppUrl = () => {
     const msg = generateWhatsAppMessageText();
-    return `https://wa.me/${WHATSAPP_ORDERS_PHONE}?text=${encodeURIComponent(msg)}`;
+    return `https://api.whatsapp.com/send?phone=${WHATSAPP_ORDERS_PHONE}&text=${encodeURIComponent(msg)}`;
   };
 
   // Copia la foto real del comprobante directamente al portapapeles en formato PNG
@@ -938,67 +958,25 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
     return false;
   };
 
-  // Función para enviar LA FOTO REAL directamente por WhatsApp junto con el recibo (sin links ni enlaces)
+  // Redirección DIRECTA a WhatsApp (sin menús ni hojas de compartir intermedias)
   const handleSendToWhatsApp = async () => {
     setIsSendingWhatsApp(true);
     setHasOpenedWhatsApp(true);
-    const msg = generateWhatsAppMessageText();
 
-    // 1. Obtener o construir el archivo real de la foto
-    let fileToSend: File | null = voucherRawFile || null;
-    if (!fileToSend && voucherImage) {
-      try {
-        if (voucherImage.startsWith('data:')) {
-          const arr = voucherImage.split(',');
-          const mimeMatch = arr[0].match(/:(.*?);/);
-          const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-          const bstr = atob(arr[1]);
-          let n = bstr.length;
-          const u8arr = new Uint8Array(n);
-          while (n--) {
-            u8arr[n] = bstr.charCodeAt(n);
-          }
-          fileToSend = new File([u8arr], voucherFileName || 'comprobante_pago.jpg', { type: mime });
-        } else {
-          const res = await fetch(voucherImage);
-          const blob = await res.blob();
-          fileToSend = new File([blob], voucherFileName || 'comprobante_pago.jpg', {
-            type: blob.type || 'image/jpeg',
-          });
-        }
-      } catch (err) {
-        console.warn('Error al preparar archivo de imagen:', err);
-      }
-    }
+    // 1. Intentar copiar la foto al portapapeles de manera instantánea
+    try {
+      await handleCopyPhotoToClipboard();
+    } catch {}
 
-    // 2. EN TELÉFONOS MÓVILES (Android / iOS):
-    // La API nativa navigator.share permite adjuntar la FOTO REAL directamente dentro de WhatsApp
-    // con el texto del recibo como pie de foto (caption), sin ningún enlace
-    if (fileToSend && navigator.canShare && navigator.canShare({ files: [fileToSend] })) {
-      try {
-        await navigator.share({
-          title: `Recibo de Compra #${confirmedOrder?.orderNumber || ''}`,
-          text: msg,
-          files: [fileToSend],
-        });
-        setIsSendingWhatsApp(false);
-        return;
-      } catch (shareErr: any) {
-        if (shareErr.name === 'AbortError') {
-          setIsSendingWhatsApp(false);
-          return;
-        }
-        console.log('Compartir nativo cancelado o no disponible:', shareErr);
-      }
-    }
-
-    // 3. EN COMPUTADORAS / WHATSAPP WEB:
-    // Copiar la foto real al portapapeles en formato PNG para que con solo presionar Ctrl+V (Pegar) aparezca la foto directa
-    await handleCopyPhotoToClipboard();
-
-    // 4. Abrir WhatsApp directamente con el recibo estructurado (sin ningún link)
+    // 2. Redireccionar DIRECTAMENTE a WhatsApp
     const rawUrl = generateWhatsAppUrl();
-    window.open(rawUrl, '_blank', 'noopener,noreferrer');
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile) {
+      window.location.href = rawUrl;
+    } else {
+      window.open(rawUrl, '_blank', 'noopener,noreferrer');
+    }
+
     setIsSendingWhatsApp(false);
   };
 
@@ -1207,7 +1185,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                             <span className="font-bold">Envío a la Sucursal</span>
                           </div>
                           <span className="text-[11px] font-mono text-emerald-400 font-bold">
-                            1° Tarifa (ej. $3.25 / $3.86)
+                            1° Tarifa (desde $3.25 / $3.86)
                           </span>
                         </button>
                         <button
@@ -1224,7 +1202,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                             <span className="font-bold">Envío a la Casa</span>
                           </div>
                           <span className="text-[11px] font-mono text-amber-300 font-bold">
-                            2° Tarifa (ej. $5.61 / $5.79)
+                            2° Tarifa (desde $5.61 / $5.79)
                           </span>
                         </button>
                       </div>
@@ -2219,8 +2197,8 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                 <MessageSquare size={22} className="fill-black shrink-0" />
                 <span>
                   {isSendingWhatsApp
-                    ? 'Preparando foto para WhatsApp...'
-                    : 'Enviar Foto y Recibo por WhatsApp'}
+                    ? 'Abriendo WhatsApp...'
+                    : 'Abrir WhatsApp con Comprobante y Pedido'}
                 </span>
               </button>
 
@@ -2253,18 +2231,18 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                 )}
               </div>
 
-              {/* Indicación clara de envío: Foto directa en el mensaje sin enlaces */}
+              {/* Indicación clara de envío directo a WhatsApp */}
               <div className="p-3.5 rounded-xl bg-stone-900 border border-white/10 text-stone-300 text-xs text-left space-y-2">
                 <div className="flex items-center gap-2 text-emerald-400 font-semibold text-[11px]">
                   <FileCheck size={15} className="shrink-0" />
-                  <span>Tu foto va directamente en el mensaje (sin enlaces ni links externos)</span>
+                  <span>Redirección directa a WhatsApp con el comprobante arriba y pedido debajo</span>
                 </div>
                 <div className="text-[11px] text-stone-400 leading-relaxed font-light space-y-1">
                   <p>
-                    • <strong className="text-stone-200">En celular:</strong> Al pulsar el botón verde, se abre WhatsApp adjuntando la <strong>foto real</strong> de tu comprobante con el recibo.
+                    • Al presionar el botón verde serás redirigido <strong>de inmediato al chat oficial de WhatsApp</strong> con el comprobante y el desglose de tu pedido listo para enviar.
                   </p>
                   <p>
-                    • <strong className="text-stone-200">En computadora:</strong> La foto se copia automáticamente. En el chat de WhatsApp que se abre, presiona <strong className="text-amber-400 font-mono">Ctrl + V</strong> (Pegar) para enviar la foto de una vez.
+                    • La foto real de tu pago se copia automáticamente en tu portapapeles para que con solo presionar <strong className="text-amber-400 font-mono">Pegar (Ctrl + V)</strong> puedas enviar también la imagen de una vez en el chat.
                   </p>
                 </div>
               </div>

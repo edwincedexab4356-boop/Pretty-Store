@@ -2,6 +2,7 @@ import { getSupabaseClient } from '../lib/supabase';
 import { compressImageFile } from '../utils/imageOptimizer';
 import { sortCategoriesWithOrder, persistCategoryOrder, fetchRemoteCategoryOrder } from '../utils/categoryOrderUtils';
 import { getAllOrderReceipts, StoredOrderReceipt, deleteOrderReceipt } from '../utils/orderReceiptStorage';
+import { getAllVouchersFromDb } from '../utils/voucherDb';
 import {
   Categoria,
   Producto,
@@ -1802,18 +1803,40 @@ export async function getAdminOrders(statusFilter?: EstadoPedido): Promise<Pedid
     });
   }
 
-  // Enriquecer con recibos y comprobantes persistentes
+  // Enriquecer con recibos y comprobantes persistentes (localStorage + IndexedDB)
   const localReceipts = getAllOrderReceipts();
+  const idbVouchers = await getAllVouchersFromDb().catch(() => new Map<string, { url: string; fileName?: string }>());
   const receiptMap = new Map<string, StoredOrderReceipt>();
   localReceipts.forEach((r) => {
-    if (r.orderId) receiptMap.set(String(r.orderId).trim(), r);
-    if (r.orderNumber) receiptMap.set(String(r.orderNumber).trim(), r);
+    if (r.orderId) {
+      const cleanId = String(r.orderId).trim();
+      receiptMap.set(cleanId, r);
+      receiptMap.set(cleanId.toLowerCase(), r);
+    }
+    if (r.orderNumber) {
+      const cleanNum = String(r.orderNumber).trim();
+      receiptMap.set(cleanNum, r);
+      receiptMap.set(cleanNum.replace(/#/g, ''), r);
+      receiptMap.set(cleanNum.toLowerCase(), r);
+      receiptMap.set(cleanNum.replace(/#/g, '').toLowerCase(), r);
+    }
   });
 
   const mappedOrders: Pedido[] = (orders || []).map((o) => {
-    const rawId = String(o.id || '');
+    const rawId = String(o.id || '').trim();
     const orderCode = `#PED-${rawId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
-    const rec = receiptMap.get(rawId) || receiptMap.get(orderCode);
+    const cleanCodeNoHash = orderCode.replace(/#/g, '');
+    const rec =
+      receiptMap.get(rawId) ||
+      receiptMap.get(rawId.toLowerCase()) ||
+      receiptMap.get(orderCode) ||
+      receiptMap.get(cleanCodeNoHash);
+    const idbMatch =
+      idbVouchers.get(rawId) ||
+      idbVouchers.get(orderCode) ||
+      idbVouchers.get(cleanCodeNoHash) ||
+      idbVouchers.get(rec?.orderNumber || '') ||
+      idbVouchers.get((rec?.orderNumber || '').replace(/#/g, ''));
 
     let voucherUrl =
       (o.comprobante_pago?.startsWith('data:') ||
@@ -1822,6 +1845,7 @@ export async function getAdminOrders(statusFilter?: EstadoPedido): Promise<Pedid
         ? o.comprobante_pago
         : null) ||
       rec?.comprobanteUrl ||
+      idbMatch?.url ||
       o.comprobante_pago ||
       null;
 
@@ -1894,7 +1918,11 @@ export async function getAdminOrders(statusFilter?: EstadoPedido): Promise<Pedid
         notas: r.notas || null,
         tipo_entrega: (r.tipoEntrega as TipoEntrega) || 'delivery',
         courier: (r.courier as CourierOption) || undefined,
-        comprobante_pago: r.comprobanteUrl || null,
+        comprobante_pago:
+          r.comprobanteUrl ||
+          idbVouchers.get(cleanId)?.url ||
+          idbVouchers.get(r.orderNumber)?.url ||
+          null,
         created_at: r.createdAt || new Date().toISOString(),
         cliente: {
           id: 'client-' + r.orderId,

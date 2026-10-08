@@ -33,6 +33,7 @@ import { PermissionErrorBanner } from '../PermissionErrorBanner';
 import { ManualSaleModal } from '../ManualSaleModal';
 import { OfficialInvoiceModal } from '../OfficialInvoiceModal';
 import { getOrderReceipt, updateOrderVoucher } from '../../../utils/orderReceiptStorage';
+import { memoryVoucherCache } from '../../../utils/voucherDb';
 import { compressImageFile } from '../../../utils/imageOptimizer';
 
 interface OrdersViewProps {
@@ -384,6 +385,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
                     order.comprobante_pago?.startsWith('http') ||
                     order.comprobante_pago?.startsWith('/') ||
                     storedReceipt?.comprobanteUrl ||
+                    memoryVoucherCache.get(rawOrderId)?.url ||
+                    memoryVoucherCache.get(orderCode)?.url ||
+                    memoryVoucherCache.get(orderCode.replace(/#/g, ''))?.url ||
                     order.notas?.match(/(https?:\/\/[^\s|]+(?:supabase\.co|storage)[^\s|]+|https?:\/\/[^\s|]+\.(?:jpg|jpeg|png|webp|gif)[^\s|]*|data:image\/[a-zA-Z]+;base64,[^\s|]+)/i)
                   );
 
@@ -677,7 +681,11 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
                 selectedOrder.comprobante_pago?.startsWith('http') ||
                 selectedOrder.comprobante_pago?.startsWith('/')
                   ? selectedOrder.comprobante_pago
-                  : null) || storedReceipt?.comprobanteUrl || null;
+                  : null) ||
+                storedReceipt?.comprobanteUrl ||
+                memoryVoucherCache.get(rawOrderId)?.url ||
+                memoryVoucherCache.get(orderCode)?.url ||
+                null;
 
               return (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-6">
@@ -892,6 +900,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
                   ? selectedOrder.comprobante_pago
                   : null) ||
                 storedReceipt?.comprobanteUrl ||
+                memoryVoucherCache.get(rawOrderId)?.url ||
+                memoryVoucherCache.get(orderCode)?.url ||
                 (selectedOrder.notas?.match(/(https?:\/\/[^\s|]+(?:supabase\.co|storage)[^\s|]+|https?:\/\/[^\s|]+\.(?:jpg|jpeg|png|webp|gif)[^\s|]*|data:image\/[a-zA-Z]+;base64,[^\s|]+)/i)?.[1]) ||
                 null;
 

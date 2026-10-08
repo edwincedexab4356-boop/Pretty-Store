@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Printer,
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Pedido } from '../../types/database';
 import { StoredOrderReceipt, getOrderReceipt } from '../../utils/orderReceiptStorage';
+import { getVoucherImageFromDb, memoryVoucherCache } from '../../utils/voucherDb';
 
 interface OfficialInvoiceModalProps {
   order: Pedido | StoredOrderReceipt;
@@ -37,6 +38,7 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'factura' | 'comprobante' | 'pedido'>(initialTab);
   const [isZoomingVoucher, setIsZoomingVoucher] = useState(false);
+  const [dbVoucherUrl, setDbVoucherUrl] = useState<string | null>(null);
 
   // Normalize order properties between Pedido and StoredOrderReceipt
   const isStored = 'orderNumber' in order;
@@ -44,7 +46,26 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({
     ? (order as StoredOrderReceipt).orderNumber
     : `#PED-${String(order.id || '').replace(/-/g, '').slice(0, 6).toUpperCase()}`;
 
-  const storedReceipt = getOrderReceipt(orderNumber) || ('id' in order ? getOrderReceipt(String((order as any).id)) : null);
+  const rawOrderId = isStored ? (order as StoredOrderReceipt).orderId : String((order as any).id || '');
+  const storedReceipt = getOrderReceipt(orderNumber) || (rawOrderId ? getOrderReceipt(rawOrderId) : null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const lookupKey = rawOrderId || orderNumber;
+    if (lookupKey) {
+      getVoucherImageFromDb(lookupKey).then((url) => {
+        if (isMounted && url) setDbVoucherUrl(url);
+      }).catch(() => {});
+      if (orderNumber && orderNumber !== lookupKey) {
+        getVoucherImageFromDb(orderNumber).then((url) => {
+          if (isMounted && url) setDbVoucherUrl(url);
+        }).catch(() => {});
+      }
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [rawOrderId, orderNumber]);
 
   const clientName = isStored
     ? (order as StoredOrderReceipt).nombre
@@ -103,8 +124,11 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({
 
   let voucherUrl =
     voucherImage ||
+    dbVoucherUrl ||
     (isStored ? (order as StoredOrderReceipt).comprobanteUrl : null) ||
     storedReceipt?.comprobanteUrl ||
+    memoryVoucherCache.get(orderNumber)?.url ||
+    (rawOrderId ? memoryVoucherCache.get(rawOrderId)?.url : null) ||
     ((order as Pedido).comprobante_pago?.startsWith('data:') || (order as Pedido).comprobante_pago?.startsWith('http') || (order as Pedido).comprobante_pago?.startsWith('/') ? (order as Pedido).comprobante_pago : null) ||
     null;
 
