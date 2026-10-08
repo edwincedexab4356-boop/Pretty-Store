@@ -25,7 +25,7 @@ import {
   Upload,
   ZoomIn,
 } from 'lucide-react';
-import { getAdminClients, deleteAdminClient, getAdminOrders } from '../../../services/adminService';
+import { getAdminClients, deleteAdminClient, deleteAllAdminClients, getAdminOrders } from '../../../services/adminService';
 import { Cliente, Pedido } from '../../../types/database';
 import { isPermissionError, SUPABASE_UNLOCK_DELETE_SQL } from '../../../utils/supabaseSqlFix';
 import { PermissionErrorBanner } from '../PermissionErrorBanner';
@@ -49,6 +49,8 @@ export const ClientsView: React.FC<ClientsViewProps> = ({ onOpenSqlFix }) => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Cliente | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isConfirmDeleteAllOpen, setIsConfirmDeleteAllOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [feedback, setFeedback] = useState<{
     type: 'success' | 'error';
     text: string;
@@ -235,6 +237,38 @@ export const ClientsView: React.FC<ClientsViewProps> = ({ onOpenSqlFix }) => {
     }
   };
 
+  const handleDeleteAllClients = async () => {
+    setIsDeletingAll(true);
+    setFeedback(null);
+    try {
+      const res = await deleteAllAdminClients();
+      setClients([]);
+      setSelectedClient(null);
+      setClientOrders([]);
+      setIsConfirmDeleteAllOpen(false);
+      if (res?.localOnly) {
+        setFeedback({
+          type: 'error',
+          text: 'Se limpiaron los clientes localmente. Para borrarlos físicamente en Supabase sin error 42501, ejecuta el comando SQL abajo.',
+          showSqlTip: true,
+        });
+      } else {
+        setFeedback({
+          type: 'success',
+          text: '✓ Todos los clientes han sido eliminados permanentemente del sistema.',
+        });
+      }
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        text: err?.message || 'Error al eliminar todos los clientes.',
+        showSqlTip: true,
+      });
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
   const filteredClients = clients.filter((c) => {
     const q = searchTerm.toLowerCase();
     const nombre = String(c.nombre || '').toLowerCase();
@@ -356,6 +390,17 @@ export const ClientsView: React.FC<ClientsViewProps> = ({ onOpenSqlFix }) => {
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin text-[#c5a059]' : 'text-stone-400'} />
             <span>Actualizar Clientes</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsConfirmDeleteAllOpen(true)}
+            disabled={isLoading || clients.length === 0}
+            className="px-3.5 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 text-xs font-semibold border border-rose-500/30 flex items-center gap-2 cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+            title="Eliminar todos los clientes registrados"
+          >
+            <Trash2 size={14} />
+            <span>Eliminar Todos los Clientes</span>
           </button>
         </div>
       </div>
@@ -838,6 +883,48 @@ export const ClientsView: React.FC<ClientsViewProps> = ({ onOpenSqlFix }) => {
               >
                 {isDeleting ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 <span>{isDeleting ? 'Eliminando...' : 'Sí, Eliminar'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirmación Eliminar TODOS los Clientes */}
+      {isConfirmDeleteAllOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="bg-[#0e0e12] border border-rose-500/30 rounded-2xl w-full max-w-md p-6 sm:p-7 shadow-2xl relative">
+            <div className="flex items-center gap-3 text-rose-400 mb-4">
+              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30">
+                <Trash2 size={24} className="text-rose-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-white">¿Eliminar TODOS los Clientes?</h3>
+                <p className="text-xs text-rose-400/90 font-medium">Acción irreversible de limpieza total</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-300 leading-relaxed mb-6 font-light">
+              Estás a punto de eliminar <strong className="text-white">TODOS los clientes registrados ({clients.length})</strong> de Pretty Store.
+              Esta acción borrará de manera definitiva las fichas de todos los compradores.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/[0.08]">
+              <button
+                type="button"
+                onClick={() => setIsConfirmDeleteAllOpen(false)}
+                disabled={isDeletingAll}
+                className="px-4 py-2.5 rounded-xl text-xs font-medium text-stone-300 hover:text-white hover:bg-white/[0.05] transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAllClients}
+                disabled={isDeletingAll}
+                className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-2 transition-colors cursor-pointer shadow-lg shadow-rose-900/40"
+              >
+                {isDeletingAll ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                <span>{isDeletingAll ? 'Eliminando Todos...' : 'Sí, Eliminar Todos los Clientes'}</span>
               </button>
             </div>
           </div>

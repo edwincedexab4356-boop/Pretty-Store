@@ -281,6 +281,19 @@ export function deleteOrderReceipt(orderIdOrNumber: string): void {
 }
 
 /**
+ * Elimina todos los recibos y comprobantes del almacenamiento local y memoria
+ */
+export function clearAllOrderReceipts(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    memoryVoucherCache.clear();
+  } catch (e) {
+    console.warn('Error eliminando todos los recibos locales:', e);
+  }
+}
+
+/**
  * Obtiene todos los pedidos y comprobantes de un cliente específico por teléfono, nombre o email
  */
 export function getClientReceipts(telefono?: string, nombre?: string, email?: string): StoredOrderReceipt[] {

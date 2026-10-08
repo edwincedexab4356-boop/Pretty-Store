@@ -26,7 +26,7 @@ import {
   Upload,
   ZoomIn,
 } from 'lucide-react';
-import { getAdminOrders, updateOrderStatus, deleteAdminSale } from '../../../services/adminService';
+import { getAdminOrders, updateOrderStatus, deleteAdminSale, deleteAllAdminOrders } from '../../../services/adminService';
 import { Pedido, EstadoPedido } from '../../../types/database';
 import { isPermissionError } from '../../../utils/supabaseSqlFix';
 import { PermissionErrorBanner } from '../PermissionErrorBanner';
@@ -55,6 +55,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
   const [isManualSaleOpen, setIsManualSaleOpen] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<Pedido | null>(null);
   const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+  const [isConfirmDeleteAllOpen, setIsConfirmDeleteAllOpen] = useState(false);
+  const [isDeletingAllOrders, setIsDeletingAllOrders] = useState(false);
 
   // Factura y Comprobantes de Pago
   const [invoiceOrder, setInvoiceOrder] = useState<Pedido | null>(null);
@@ -175,6 +177,28 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
       });
     } finally {
       setIsDeletingOrder(false);
+    }
+  };
+
+  const handleDeleteAllOrders = async () => {
+    setIsDeletingAllOrders(true);
+    setActionMessage(null);
+    try {
+      await deleteAllAdminOrders();
+      setOrders([]);
+      setSelectedOrder(null);
+      setIsConfirmDeleteAllOpen(false);
+      setActionMessage({
+        type: 'success',
+        text: '✓ Todos los pedidos y sus comprobantes han sido eliminados exitosamente.',
+      });
+    } catch (err: any) {
+      setActionMessage({
+        type: 'error',
+        text: err?.message || 'Error al eliminar todos los pedidos.',
+      });
+    } finally {
+      setIsDeletingAllOrders(false);
     }
   };
 
@@ -311,6 +335,17 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin text-[#c5a059]' : 'text-stone-400'} />
             <span>Actualizar Pedidos</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsConfirmDeleteAllOpen(true)}
+            disabled={isLoading || orders.length === 0}
+            className="px-3.5 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 text-xs font-semibold border border-rose-500/30 flex items-center gap-2 cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+            title="Eliminar todos los pedidos registrados"
+          >
+            <Trash2 size={14} />
+            <span>Eliminar Todos los Pedidos</span>
           </button>
         </div>
       </div>
@@ -631,6 +666,54 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ initialSelectedOrder, on
                   </>
                 ) : (
                   <span>Sí, eliminar pedido</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE ALL ORDERS CONFIRMATION MODAL */}
+      {isConfirmDeleteAllOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="bg-[#0e0e12] border border-rose-500/30 rounded-2xl w-full max-w-md p-6 sm:p-8 shadow-2xl relative">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-4">
+              <Trash2 size={24} />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2 font-serif-luxury">
+              ¿Eliminar TODOS los Pedidos?
+            </h3>
+            <p className="text-xs text-stone-300 leading-relaxed mb-6 font-light">
+              Estás a punto de eliminar <strong className="text-white">TODOS los pedidos ({orders.length})</strong> y sus comprobantes de pago asociados de Pretty Store.
+              <br /><br />
+              Esta acción limpiará permanentemente las tablas de pedidos, detalles de pedido y recibos contables.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/[0.08]">
+              <button
+                type="button"
+                onClick={() => setIsConfirmDeleteAllOpen(false)}
+                disabled={isDeletingAllOrders}
+                className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 font-medium text-xs cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAllOrders}
+                disabled={isDeletingAllOrders}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-900/40 cursor-pointer flex items-center gap-2 transition-colors"
+              >
+                {isDeletingAllOrders ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    <span>Eliminando Todos...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} />
+                    <span>Sí, Eliminar Todos los Pedidos</span>
+                  </>
                 )}
               </button>
             </div>

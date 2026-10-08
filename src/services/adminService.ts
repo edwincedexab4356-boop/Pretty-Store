@@ -1,7 +1,7 @@
 import { getSupabaseClient } from '../lib/supabase';
 import { compressImageFile } from '../utils/imageOptimizer';
 import { sortCategoriesWithOrder, persistCategoryOrder, fetchRemoteCategoryOrder } from '../utils/categoryOrderUtils';
-import { getAllOrderReceipts, StoredOrderReceipt, deleteOrderReceipt } from '../utils/orderReceiptStorage';
+import { getAllOrderReceipts, StoredOrderReceipt, deleteOrderReceipt, clearAllOrderReceipts } from '../utils/orderReceiptStorage';
 import { getAllVouchersFromDb } from '../utils/voucherDb';
 import {
   Categoria,
@@ -1486,6 +1486,74 @@ export async function deleteAdminSale(orderId: string | number): Promise<{ succe
   return { success: true };
 }
 
+/**
+ * Elimina TODOS los pedidos del sistema (detalle_pedidos, ventas, pedidos y recibos locales)
+ */
+export async function deleteAllAdminOrders(): Promise<{ success: boolean }> {
+  const supabase = getSupabaseClient();
+
+  // 1. Intentar RPC seguro si existe
+  try {
+    await supabase.rpc('delete_all_pedidos_safe');
+  } catch {}
+
+  // 2. Eliminar todos los registros de detalle_pedidos
+  try {
+    await supabase.from('detalle_pedidos').delete().not('id', 'is', null);
+  } catch (e) {
+    console.warn('Aviso detalle_pedidos delete all:', e);
+  }
+
+  // 3. Eliminar ventas asociadas
+  try {
+    await supabase.from('ventas').delete().not('id', 'is', null);
+  } catch (e) {
+    console.warn('Aviso ventas delete all:', e);
+  }
+
+  // 4. Eliminar todos los pedidos en Supabase
+  try {
+    const res = await supabase.from('pedidos').delete().not('id', 'is', null);
+    if (res.error) {
+      console.warn('Error eliminando pedidos en Supabase:', res.error);
+    }
+  } catch (e) {
+    console.warn('Excepción al eliminar pedidos en Supabase:', e);
+  }
+
+  // 5. Vaciar los recibos guardados localmente y en memoria
+  clearAllOrderReceipts();
+
+  return { success: true };
+}
+
+/**
+ * Elimina TODAS las ventas del sistema
+ */
+export async function deleteAllAdminSales(): Promise<{ success: boolean }> {
+  const supabase = getSupabaseClient();
+
+  // 1. Eliminar de la tabla ventas si existe
+  try {
+    await supabase.from('ventas').delete().not('id', 'is', null);
+  } catch (e) {
+    console.warn('Aviso ventas delete all:', e);
+  }
+
+  // 2. Dado que getAdminSales() calcula ventas desde pedidos, eliminamos también detalle_pedidos y pedidos
+  try {
+    await supabase.from('detalle_pedidos').delete().not('id', 'is', null);
+    await supabase.from('pedidos').delete().not('id', 'is', null);
+  } catch (e) {
+    console.warn('Error eliminando pedidos de ventas en Supabase:', e);
+  }
+
+  // 3. Limpiar almacenamiento local de recibos/ventas
+  clearAllOrderReceipts();
+
+  return { success: true };
+}
+
 // ==========================================
 // CATEGORIES CRUD
 // ==========================================
@@ -2108,6 +2176,43 @@ export async function deleteAdminClient(clientId: string | number): Promise<{ su
   removeExcludedClientId(cleanId);
   if (isNumeric) removeExcludedClientId(String(numId));
   return { success: true, localOnly: false };
+}
+
+/**
+ * Elimina TODOS los clientes de la base de datos y desvincula pedidos y ventas
+ */
+export async function deleteAllAdminClients(): Promise<{ success: boolean; localOnly?: boolean }> {
+  const supabase = getSupabaseClient();
+
+  // 1. Desvincular de pedidos y ventas para evitar violaciones de clave foránea
+  try {
+    await supabase.from('pedidos').update({ cliente_id: null } as any).not('cliente_id', 'is', null);
+  } catch (e) {
+    console.warn('Aviso desvinculando pedidos de clientes:', e);
+  }
+  try {
+    await supabase.from('ventas').update({ cliente_id: null } as any).not('cliente_id', 'is', null);
+  } catch (e) {
+    console.warn('Aviso desvinculando ventas de clientes:', e);
+  }
+
+  // 2. Probar RPC si existe
+  try {
+    await supabase.rpc('delete_all_clientes_safe');
+  } catch {}
+
+  // 3. Eliminar todos los clientes de Supabase
+  let deleteRes = await supabase.from('clientes').delete().not('id', 'is', null);
+  if (deleteRes.error) {
+    console.warn('Aviso Supabase al eliminar todos los clientes:', deleteRes.error);
+  }
+
+  // 4. Limpiar exclusiones locales
+  try {
+    localStorage.removeItem(EXCLUDED_CLIENTS_KEY);
+  } catch {}
+
+  return { success: true, localOnly: Boolean(deleteRes.error) };
 }
 
 // ==========================================

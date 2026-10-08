@@ -13,7 +13,7 @@ import {
   X,
   Trash2,
 } from 'lucide-react';
-import { getAdminSales, deleteAdminSale } from '../../../services/adminService';
+import { getAdminSales, deleteAdminSale, deleteAllAdminSales } from '../../../services/adminService';
 import { isPermissionError } from '../../../utils/supabaseSqlFix';
 import { PermissionErrorBanner } from '../PermissionErrorBanner';
 import { ManualSaleModal } from '../ManualSaleModal';
@@ -31,6 +31,8 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [saleToDelete, setSaleToDelete] = useState<any | null>(null);
   const [isDeletingSale, setIsDeletingSale] = useState(false);
+  const [isConfirmDeleteAllOpen, setIsConfirmDeleteAllOpen] = useState(false);
+  const [isDeletingAllSales, setIsDeletingAllSales] = useState(false);
 
   const handleDeleteSale = async () => {
     if (!saleToDelete) return;
@@ -44,6 +46,20 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
       setLoadError(err?.message || 'Error al eliminar la venta.');
     } finally {
       setIsDeletingSale(false);
+    }
+  };
+
+  const handleDeleteAllSales = async () => {
+    setIsDeletingAllSales(true);
+    try {
+      await deleteAllAdminSales();
+      setSuccessMsg('✓ Todas las ventas han sido eliminadas exitosamente del sistema.');
+      setSales([]);
+      setIsConfirmDeleteAllOpen(false);
+    } catch (err: any) {
+      setLoadError(err?.message || 'Error al eliminar todas las ventas.');
+    } finally {
+      setIsDeletingAllSales(false);
     }
   };
 
@@ -157,6 +173,17 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin text-[#c5a059]' : 'text-stone-400'} />
             <span>Actualizar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsConfirmDeleteAllOpen(true)}
+            disabled={isLoading || sales.length === 0}
+            className="px-3.5 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 text-xs font-semibold border border-rose-500/30 flex items-center gap-2 cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+            title="Eliminar todas las ventas registradas"
+          >
+            <Trash2 size={14} />
+            <span>Eliminar Todas las Ventas</span>
           </button>
         </div>
       </div>
@@ -347,6 +374,54 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
                   </>
                 ) : (
                   <span>Sí, eliminar venta</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete All Sales Confirmation Modal */}
+      {isConfirmDeleteAllOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="bg-[#0e0e12] border border-rose-500/30 rounded-2xl w-full max-w-md p-6 sm:p-8 shadow-2xl relative">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-4">
+              <Trash2 size={24} />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2 font-serif-luxury">
+              ¿Eliminar TODAS las Ventas?
+            </h3>
+            <p className="text-xs text-stone-300 leading-relaxed mb-6 font-light">
+              Estás a punto de eliminar <strong className="text-white">TODAS las ventas registradas ({sales.length})</strong> del sistema.
+              <br /><br />
+              Esta acción restablecerá el historial de facturación a cero y vaciará las métricas de ingresos acumulados.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/[0.08]">
+              <button
+                type="button"
+                onClick={() => setIsConfirmDeleteAllOpen(false)}
+                disabled={isDeletingAllSales}
+                className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 font-medium text-xs cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAllSales}
+                disabled={isDeletingAllSales}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-900/40 cursor-pointer flex items-center gap-2 transition-colors"
+              >
+                {isDeletingAllSales ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    <span>Eliminando Todas...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} />
+                    <span>Sí, Eliminar Todas las Ventas</span>
+                  </>
                 )}
               </button>
             </div>

@@ -362,7 +362,6 @@ export const CheckoutDemoModal: React.FC = () => {
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>('form');
   const [hasOpenedWhatsApp, setHasOpenedWhatsApp] = useState(false);
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
-  const [copiedPhotoToast, setCopiedPhotoToast] = useState(false);
 
   // 1. Modalidad de Entrega
   const [tipoEntrega, setTipoEntrega] = useState<TipoEntrega>('delivery');
@@ -924,12 +923,17 @@ export const CheckoutDemoModal: React.FC = () => {
         : '*Envío:* Gratis (Retiro en tienda)';
 
     const totalToPay = (confirmedOrder?.total || finalTotal).toFixed(2);
+    const effectiveVoucherUrl = confirmedOrder?.comprobantePago || voucherImage || '';
+    const voucherUrlLine =
+      effectiveVoucherUrl && effectiveVoucherUrl.startsWith('http')
+        ? `• *Foto del Comprobante:* ${effectiveVoucherUrl}\n`
+        : '';
 
     return `🧾 *COMPROBANTE DE PAGO ADJUNTO*
-• *Estado:* Pago realizado y confirmado por el cliente
+• *Estado:* Pago realizado y verificado por el cliente
 • *Método de Pago:* ${paymentLabel}
 • *Archivo:* ${voucherFileName || 'comprobante_pago.jpg'}
-• *Monto Cancelado:* $${totalToPay} USD
+${voucherUrlLine}• *Monto Cancelado:* $${totalToPay} USD
 
 📋 *DETALLE DEL PEDIDO (${orderNum}):*
 *Cliente:* ${nombre.trim()}
@@ -950,35 +954,51 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
     return `https://api.whatsapp.com/send?phone=${WHATSAPP_ORDERS_PHONE}&text=${encodeURIComponent(msg)}`;
   };
 
-  // Copia la foto real del comprobante directamente al portapapeles en formato PNG
-  const handleCopyPhotoToClipboard = async (): Promise<boolean> => {
-    if (!voucherImage && !voucherRawFile) return false;
-    try {
-      const pngBlob = await convertToPngBlob(voucherRawFile || voucherImage!);
-      if (pngBlob && navigator.clipboard && (window as any).ClipboardItem) {
-        const item = new (window as any).ClipboardItem({ 'image/png': pngBlob });
-        await navigator.clipboard.write([item]);
-        setCopiedPhotoToast(true);
-        setTimeout(() => setCopiedPhotoToast(false), 5000);
-        return true;
-      }
-    } catch (err) {
-      console.warn('Error al copiar foto al portapapeles:', err);
-    }
-    return false;
-  };
-
-  // Redirección DIRECTA a WhatsApp (sin menús ni hojas de compartir intermedias)
+  // Enviar pedido y foto directamente a WhatsApp
   const handleSendToWhatsApp = async () => {
     setIsSendingWhatsApp(true);
     setHasOpenedWhatsApp(true);
 
-    // 1. Intentar copiar la foto al portapapeles de manera instantánea
-    try {
-      await handleCopyPhotoToClipboard();
-    } catch {}
+    const msg = generateWhatsAppMessageText();
+    const orderNum = confirmedOrder?.orderNumber || '#PEDIDO';
 
-    // 2. Redireccionar DIRECTAMENTE a WhatsApp
+    // 1. Enviar con la foto adjunta mediante Web Share API (en móviles Android / iPhone)
+    try {
+      let fileToSend: File | null = voucherRawFile;
+      if (!fileToSend && voucherImage) {
+        const pngBlob = await convertToPngBlob(voucherImage);
+        if (pngBlob) {
+          const extension = voucherFileName?.split('.').pop() || 'png';
+          fileToSend = new File([pngBlob], voucherFileName || `comprobante_${orderNum}.${extension}`, {
+            type: pngBlob.type || 'image/png',
+          });
+        }
+      }
+
+      if (fileToSend && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+        const shareData = {
+          files: [fileToSend],
+          title: `Pedido ${orderNum} - Pretty Store`,
+          text: msg,
+        };
+
+        if (navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          setIsSendingWhatsApp(false);
+          return;
+        }
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        // El usuario canceló voluntariamente
+        setIsSendingWhatsApp(false);
+        return;
+      }
+      console.warn('Share API fallback:', err);
+    }
+
+    // 2. Fallback universal para navegadores de escritorio:
+    // Abrir WhatsApp directamente con el pedido y el enlace directo al comprobante
     const rawUrl = generateWhatsAppUrl();
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     if (isMobile) {
@@ -2245,52 +2265,34 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                 <MessageSquare size={22} className="fill-black shrink-0" />
                 <span>
                   {isSendingWhatsApp
-                    ? 'Abriendo WhatsApp...'
-                    : 'Abrir WhatsApp con Comprobante y Pedido'}
+                    ? 'Preparando envío a WhatsApp...'
+                    : 'Enviar Foto y Pedido a WhatsApp'}
                 </span>
               </button>
 
-              {/* Botones secundarios de acción rápida para la foto */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={handleCopyPhotoToClipboard}
-                  className={`py-2.5 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                    copiedPhotoToast
-                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                      : 'bg-white/5 border-white/10 text-stone-300 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  <Copy size={14} className={copiedPhotoToast ? 'text-emerald-400' : 'text-stone-400'} />
-                  <span>
-                    {copiedPhotoToast ? '✓ ¡Foto copiada al portapapeles!' : 'Copiar Foto para Pegar (Ctrl+V)'}
-                  </span>
-                </button>
-
-                {voucherImage && (
+              {/* Botón secundario para descargar comprobante */}
+              {voucherImage && (
+                <div className="flex justify-center">
                   <a
                     href={voucherImage}
                     download={voucherFileName || `comprobante_${confirmedOrder.orderNumber}.jpg`}
-                    className="py-2.5 px-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-stone-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer text-center"
+                    className="py-2.5 px-4 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-stone-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer text-center"
                   >
                     <Download size={14} className="text-stone-400 shrink-0" />
-                    <span>Descargar Foto Directa</span>
+                    <span>Descargar Foto del Comprobante</span>
                   </a>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Indicación clara de envío directo a WhatsApp */}
               <div className="p-3.5 rounded-xl bg-stone-900 border border-white/10 text-stone-300 text-xs text-left space-y-2">
                 <div className="flex items-center gap-2 text-emerald-400 font-semibold text-[11px]">
                   <FileCheck size={15} className="shrink-0" />
-                  <span>Redirección directa a WhatsApp con el comprobante arriba y pedido debajo</span>
+                  <span>Envío directo a WhatsApp con foto y pedido</span>
                 </div>
                 <div className="text-[11px] text-stone-400 leading-relaxed font-light space-y-1">
                   <p>
-                    • Al presionar el botón verde serás redirigido <strong>de inmediato al chat oficial de WhatsApp</strong> con el comprobante y el desglose de tu pedido listo para enviar.
-                  </p>
-                  <p>
-                    • La foto real de tu pago se copia automáticamente en tu portapapeles para que con solo presionar <strong className="text-amber-400 font-mono">Pegar (Ctrl + V)</strong> puedas enviar también la imagen de una vez en el chat.
+                    • Al presionar el botón verde se envía <strong>la foto del comprobante junto con el detalle completo de tu pedido</strong> directamente al chat oficial de Pretty Store.
                   </p>
                 </div>
               </div>
@@ -2365,16 +2367,6 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Toast Notificación cuando la foto se copia al portapapeles */}
-      {copiedPhotoToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#25D366] text-black font-bold px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 animate-in slide-in-from-bottom duration-200 border border-black/20">
-          <Check size={18} className="shrink-0 stroke-[3]" />
-          <span className="text-xs">
-            ¡Foto copiada! En WhatsApp presiona <strong>Ctrl + V</strong> para pegarla de una vez en el mensaje.
-          </span>
         </div>
       )}
 
