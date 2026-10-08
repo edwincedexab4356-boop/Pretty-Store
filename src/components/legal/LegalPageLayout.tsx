@@ -67,7 +67,7 @@ export const LegalPageLayout: React.FC<LegalPageLayoutProps> = ({
                 {config.nombre_tienda || 'Pretty Store'}
               </span>
               <span className="text-[8px] uppercase tracking-[0.3em] text-stone-400 mt-0.5 font-light">
-                Atelier & Boutique
+                Almacén y accesorio urbano
               </span>
             </div>
           </button>

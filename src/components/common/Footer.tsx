@@ -75,7 +75,7 @@ export const Footer: React.FC<FooterProps> = ({
                   {config.nombre_tienda || 'Pretty Store'}
                 </span>
                 <span className="text-[8px] uppercase tracking-[0.3em] text-[#a1a1aa] mt-1 font-light">
-                  Haute Horlogerie & Atelier
+                  Almacén y accesorio urbano
                 </span>
               </div>
             </button>

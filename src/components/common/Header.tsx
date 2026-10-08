@@ -161,7 +161,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {config.nombre_tienda || 'Pretty Store'}
                 </span>
                 <span className="text-[8px] uppercase tracking-[0.3em] text-[#a1a1aa] mt-1 font-light hidden sm:block">
-                  Atelier & Boutique
+                  Almacén y accesorio urbano
                 </span>
               </div>
             </button>

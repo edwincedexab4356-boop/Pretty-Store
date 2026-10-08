@@ -201,8 +201,6 @@ function StoreApp({ onOpenAdmin, onOpenTerms, onOpenPrivacy }: StoreAppProps) {
           selectedCategoryId={selectedCategoryId}
           onSelectCategory={(id) => {
             setSelectedCategoryId(id);
-            const el = document.getElementById('catalogo');
-            if (el) el.scrollIntoView({ behavior: 'smooth' });
           }}
           productCountMap={productCountMap}
           totalProductsCount={totalActiveProducts}

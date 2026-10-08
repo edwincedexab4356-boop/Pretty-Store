@@ -574,6 +574,16 @@ export const CheckoutDemoModal: React.FC = () => {
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
+  // Auto-desplazamiento a la siguiente opción/paso al tramitar el pedido
+  const scrollToNextOption = (targetId: string) => {
+    setTimeout(() => {
+      const el = document.getElementById(targetId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 70);
+  };
+
   // PASO 1 -> PASO 2: "Confirmar Pedido"
   // Proceso Ultra Rápido sin esperas: genera número y pasa a la pantalla de inmediato
   // IMPORTANTE: NO elimina el carrito aquí para que el cliente pueda regresar a la tienda si lo desea.
@@ -1045,7 +1055,10 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => setTipoEntrega('retiro')}
+                    onClick={() => {
+                      setTipoEntrega('retiro');
+                      scrollToNextOption('checkout-cliente-section');
+                    }}
                     className={`p-3.5 border text-left cursor-pointer transition-all flex items-center gap-3 rounded-xl min-h-[56px] active:scale-[0.98] ${
                       tipoEntrega === 'retiro'
                         ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-2 ring-[#fbbf24]'
@@ -1060,7 +1073,10 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
 
                   <button
                     type="button"
-                    onClick={() => setTipoEntrega('delivery')}
+                    onClick={() => {
+                      setTipoEntrega('delivery');
+                      scrollToNextOption('checkout-courier-section');
+                    }}
                     className={`p-3.5 border text-left cursor-pointer transition-all flex items-center gap-3 rounded-xl min-h-[56px] active:scale-[0.98] ${
                       tipoEntrega === 'delivery'
                         ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-2 ring-[#fbbf24]'
@@ -1078,7 +1094,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
 
               {/* Si es Envío express: Selección de Courier, Provincia y Sucursal con Tarifas */}
               {tipoEntrega === 'delivery' && (
-                <div className="p-4 rounded-xl bg-stone-900/60 border border-white/10 space-y-4">
+                <div id="checkout-courier-section" className="p-4 rounded-xl bg-stone-900/60 border border-white/10 space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                     <label className="text-xs uppercase tracking-wider text-stone-200 font-bold block">
                       Selecciona tu Envío *
@@ -1096,6 +1112,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                         setCourier('Servientrega');
                         const def = SERVIENTREGA_SUCURSALES[provincia]?.[0]?.branch || 'La Chorrera (Av. de las Américas)';
                         setSucursalRetiro(def);
+                        scrollToNextOption('checkout-servientrega-mode');
                       }}
                       className={`p-3 rounded-xl border text-left cursor-pointer transition-all active:scale-[0.98] ${
                         courier === 'Servientrega'
@@ -1119,6 +1136,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                         setCourier('Ferguson');
                         const def = FERGUSON_SUCURSALES[provincia]?.[0]?.branch || 'La Chorrera (Parque Feuillet)';
                         setSucursalRetiro(def);
+                        scrollToNextOption('checkout-provincia-section');
                       }}
                       className={`p-3 rounded-xl border text-left cursor-pointer transition-all active:scale-[0.98] ${
                         courier === 'Ferguson'
@@ -1142,6 +1160,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                         setCourier('Uno Express');
                         const def = UNO_EXPRESS_SUCURSALES[provincia]?.[0]?.branch || 'La Chorrera (Plaza Italia)';
                         setSucursalRetiro(def);
+                        scrollToNextOption('checkout-provincia-section');
                       }}
                       className={`p-3 rounded-xl border text-left cursor-pointer transition-all active:scale-[0.98] ${
                         courier === 'Uno Express'
@@ -1161,7 +1180,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
 
                   {/* Modalidad Servientrega: Explicación de los 2 Números (1er número a la sucursal, 2do número a la casa) */}
                   {courier === 'Servientrega' && (
-                    <div className="space-y-2 pt-2 border-t border-white/10">
+                    <div id="checkout-servientrega-mode" className="space-y-2 pt-2 border-t border-white/10">
                       <div className="flex items-center justify-between">
                         <label className="text-xs text-stone-200 font-semibold">
                           Modalidad Servientrega:
@@ -1173,7 +1192,10 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                       <div className="grid grid-cols-2 gap-2.5">
                         <button
                           type="button"
-                          onClick={() => setServientregaModalidad('sucursal')}
+                          onClick={() => {
+                            setServientregaModalidad('sucursal');
+                            scrollToNextOption('checkout-provincia-section');
+                          }}
                           className={`p-3 rounded-xl border text-xs font-semibold cursor-pointer transition-all flex flex-col items-center justify-center gap-1 active:scale-[0.98] ${
                             servientregaModalidad === 'sucursal'
                               ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
@@ -1190,7 +1212,10 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                         </button>
                         <button
                           type="button"
-                          onClick={() => setServientregaModalidad('domicilio')}
+                          onClick={() => {
+                            setServientregaModalidad('domicilio');
+                            scrollToNextOption('checkout-provincia-section');
+                          }}
                           className={`p-3 rounded-xl border text-xs font-semibold cursor-pointer transition-all flex flex-col items-center justify-center gap-1 active:scale-[0.98] ${
                             servientregaModalidad === 'domicilio'
                               ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
@@ -1210,7 +1235,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                   )}
 
                   {/* Selector de Provincias */}
-                  <div className="space-y-2">
+                  <div id="checkout-provincia-section" className="space-y-2">
                     <label className="text-[11px] text-stone-300 font-medium block">
                       Provincia de destino:
                     </label>
@@ -1233,6 +1258,11 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                                 const list = UNO_EXPRESS_SUCURSALES[p.id];
                                 if (list && list[0]) setSucursalRetiro(list[0].branch);
                               }
+                              if (courier === 'Servientrega' && servientregaModalidad === 'domicilio') {
+                                scrollToNextOption('checkout-domicilio-address');
+                              } else {
+                                scrollToNextOption('checkout-sucursales-list');
+                              }
                             }}
                             className={`p-2.5 rounded-xl border text-left text-xs font-medium transition-all active:scale-[0.98] ${
                               isSelected
@@ -1249,7 +1279,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
 
                   {/* Sucursales con tarifas correspondientes */}
                   {courier === 'Servientrega' && servientregaModalidad === 'domicilio' ? (
-                    <div className="space-y-1.5">
+                    <div id="checkout-domicilio-address" className="space-y-1.5">
                       <div className="flex items-center justify-between">
                         <label className="text-[11px] text-stone-300 font-medium block">
                           Dirección exacta de entrega a domicilio: *
@@ -1270,7 +1300,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                       </p>
                     </div>
                   ) : courier === 'Servientrega' ? (
-                    <div className="space-y-2">
+                    <div id="checkout-sucursales-list" className="space-y-2">
                       <div className="flex items-center justify-between">
                         <label className="text-[11px] text-stone-300 font-medium">
                           Sucursal de Servientrega en {provincia}:
@@ -1286,7 +1316,10 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                             <button
                               key={b.branch}
                               type="button"
-                              onClick={() => setSucursalRetiro(b.branch)}
+                              onClick={() => {
+                                setSucursalRetiro(b.branch);
+                                scrollToNextOption('checkout-cliente-section');
+                              }}
                               className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
                                 isSel
                                   ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
@@ -1308,7 +1341,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                       </div>
                     </div>
                   ) : courier === 'Ferguson' ? (
-                    <div className="space-y-2">
+                    <div id="checkout-sucursales-list" className="space-y-2">
                       <div className="flex items-center justify-between">
                         <label className="text-[11px] text-stone-300 font-medium">
                           Sucursal de Ferguson en {provincia}:
@@ -1324,7 +1357,10 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                             <button
                               key={b.branch}
                               type="button"
-                              onClick={() => setSucursalRetiro(b.branch)}
+                              onClick={() => {
+                                setSucursalRetiro(b.branch);
+                                scrollToNextOption('checkout-cliente-section');
+                              }}
                               className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
                                 isSel
                                   ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
@@ -1341,7 +1377,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div id="checkout-sucursales-list" className="space-y-2">
                       <div className="flex items-center justify-between">
                         <label className="text-[11px] text-stone-300 font-medium">
                           Sucursal de UnoExpress en {provincia}:
@@ -1357,7 +1393,10 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                             <button
                               key={b.branch}
                               type="button"
-                              onClick={() => setSucursalRetiro(b.branch)}
+                              onClick={() => {
+                                setSucursalRetiro(b.branch);
+                                scrollToNextOption('checkout-cliente-section');
+                              }}
                               className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
                                 isSel
                                   ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
@@ -1375,18 +1414,18 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                     </div>
                   )}
 
-                  {/* AVISO CLARO: EL PRECIO DEL ENVÍO DEPENDE DEL PRODUCTO Y SE SUMA AL TOTAL */}
+                  {/* AVISO CLARO: MONTO ESTIMADO DE ENVÍO */}
                   <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2">
-                    <AlertCircle size={15} className="text-amber-400 shrink-0 mt-0.5" />
+                    <span className="text-amber-400 shrink-0 text-sm">⚠️</span>
                     <p className="text-[11px] leading-relaxed">
-                      <strong>Aviso de Envío:</strong> La tarifa de <strong>+${numericalShipping.toFixed(2)} USD</strong> se suma directamente a tu total a pagar. Ten en cuenta que el precio del envío depende del producto según la empresa de transporte seleccionada (Servientrega, Ferguson o UnoExpress).
+                      <strong>Aviso de Envío:</strong> Los ${numericalShipping > 0 ? numericalShipping.toFixed(2) : '3.86'} USD corresponden a un monto estimado de envío y se suman al total al pagar. El costo final lo determina la empresa transportadora. Si existe alguna diferencia, te notificaremos por WhatsApp el monto pendiente antes de realizar el envío.
                     </p>
                   </div>
                 </div>
               )}
 
               {/* 2. Datos del Cliente */}
-              <div className="space-y-3">
+              <div id="checkout-cliente-section" className="space-y-3">
                 <label className="text-xs uppercase tracking-[0.16em] text-white font-bold block">
                   2. Datos de Contacto del Cliente *
                 </label>
@@ -1422,14 +1461,17 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
               </div>
 
               {/* 3. Selección del Método de Pago deseado (SOLO TARJETA DE DÉBITO O CRÉDITO - SIN PAGUELOFACIL) */}
-              <div className="space-y-3">
+              <div id="checkout-pago-section" className="space-y-3">
                 <label className="text-xs uppercase tracking-[0.16em] text-white font-bold block">
                   3. Selecciona tu Método de Pago *
                 </label>
                 <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setMetodoPago('yappy')}
+                    onClick={() => {
+                      setMetodoPago('yappy');
+                      scrollToNextOption('checkout-resumen-section');
+                    }}
                     className={`p-3 rounded-xl border text-center cursor-pointer transition-all active:scale-[0.98] ${
                       metodoPago === 'yappy'
                         ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-1 ring-[#fbbf24]'
@@ -1443,7 +1485,10 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
 
                   <button
                     type="button"
-                    onClick={() => setMetodoPago('transferencia')}
+                    onClick={() => {
+                      setMetodoPago('transferencia');
+                      scrollToNextOption('checkout-resumen-section');
+                    }}
                     className={`p-3 rounded-xl border text-center cursor-pointer transition-all active:scale-[0.98] ${
                       metodoPago === 'transferencia'
                         ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-1 ring-[#fbbf24]'
@@ -1457,7 +1502,10 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
 
                   <button
                     type="button"
-                    onClick={() => setMetodoPago('tarjeta')}
+                    onClick={() => {
+                      setMetodoPago('tarjeta');
+                      scrollToNextOption('checkout-resumen-section');
+                    }}
                     className={`p-3 rounded-xl border text-center cursor-pointer transition-all active:scale-[0.98] ${
                       metodoPago === 'tarjeta'
                         ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-1 ring-[#fbbf24]'
@@ -1472,7 +1520,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
               </div>
 
               {/* Resumen de compra: subtotal, descuento, ENVÍO SUMADO y total */}
-              <div className="p-4 rounded-xl bg-black/60 border border-white/10 space-y-2 text-xs">
+              <div id="checkout-resumen-section" className="p-4 rounded-xl bg-black/60 border border-white/10 space-y-2 text-xs">
                 <div className="flex justify-between text-stone-400">
                   <span>Subtotal productos:</span>
                   <span className="font-mono text-white">${subtotal.toFixed(2)} USD</span>
@@ -1487,7 +1535,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                   <span>
                     {tipoEntrega === 'retiro'
                       ? 'Retiro en el local:'
-                      : `Costo de envío (${courier}${courier === 'Servientrega' ? (servientregaModalidad === 'domicilio' ? ' a Casa' : ' a Sucursal') : ''}):`}
+                      : `Costo estimado de envío (${courier}${courier === 'Servientrega' ? (servientregaModalidad === 'domicilio' ? ' a Casa' : ' a Sucursal') : ''}):`}
                   </span>
                   <span className="font-mono text-[#fbbf24] font-bold">
                     {tipoEntrega === 'retiro'
@@ -1543,7 +1591,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                       PRETTY STORE
                     </h2>
                     <p className="text-[10px] uppercase tracking-[0.25em] text-[#fbbf24] font-semibold">
-                      Boutique & Atelier Oficial · Panamá
+                      Almacén y accesorio urbano · Panamá
                     </p>
                   </div>
                 </div>
@@ -1662,7 +1710,7 @@ ${(confirmedOrder?.discount || discount) > 0 ? `*Descuento Promocional:* -$${(co
                   <span>
                     {confirmedOrder.tipoEntrega === 'retiro'
                       ? 'Retiro en tienda física:'
-                      : `Costo de envío (${confirmedOrder.courier || courier}):`}
+                      : `Costo estimado de envío (${confirmedOrder.courier || courier}):`}
                   </span>
                   <span className="font-mono text-[#fbbf24] font-bold">
                     {confirmedOrder.tipoEntrega === 'retiro' || (confirmedOrder.shipping === 0)

@@ -115,14 +115,17 @@ export const TermsPage: React.FC<TermsPageProps> = ({
         <section className="space-y-3">
           <h2 className="text-base sm:text-lg font-serif-luxury font-semibold text-white tracking-[0.04em] flex items-center gap-2 border-b border-white/[0.08] pb-2">
             <span className="text-[#c5a059] font-mono text-sm">05.</span>
-            <span>Productos, Descripción y Disponibilidad</span>
+            <span>Productos, Descripción y Disponibilidad en Stock</span>
           </h2>
           <p className="text-xs sm:text-sm">
             {storeName} se especializa en la comercialización de perfumería selecta, cronógrafos de precisión, marroquinería y piezas de moda exclusiva. Cada producto se exhibe acompañado de sus características principales, fotografías e información de catálogo. Las imágenes buscan reflejar con la mayor exactitud posible los colores y acabados de las piezas; no obstante, pueden presentarse ligeras variaciones derivadas de la calibración de cada pantalla o dispositivo.
           </p>
-          <p className="text-xs sm:text-sm">
-            Todos los pedidos están sujetos a disponibilidad en inventario. En caso de que se produzca una indisponibilidad sobrevenida o rotura de stock tras la confirmación de una orden, {storeName} contactará al cliente a la brevedad posible para ofrecer una alternativa equivalente o gestionar el reembolso inmediato del monto abonado.
-          </p>
+          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-1">
+            <span className="font-semibold text-amber-300 block">Política de Agotamiento de Stock:</span>
+            <p className="text-[11px] leading-relaxed text-amber-200/90 font-light">
+              Todos los pedidos están sujetos a disponibilidad en inventario. En caso de que un producto solicitado se agote o quede fuera de stock tras realizarse el pedido, <strong>Pretty Store contactará directamente al cliente vía WhatsApp</strong> para ofrecerle oportunamente la <strong>devolución íntegra de su dinero</strong> o el <strong>cambio del producto por otro artículo de igual precio</strong>, según su preferencia.
+            </p>
+          </div>
         </section>
 
         {/* Section 6 */}

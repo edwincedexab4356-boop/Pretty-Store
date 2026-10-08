@@ -23,7 +23,7 @@ export const HeroContent: React.FC<HeroContentProps> = ({
 
       {/* 3. Short phrase */}
       <p className="text-xs sm:text-sm md:text-base text-stone-200/90 max-w-lg mx-auto font-light leading-relaxed mb-10">
-        Piezas de distinción concebidas con los más altos estándares de artesanía y elegancia contemporánea.
+        Piezas de distinción concebidas con los más altos estándares de calidad y elegancia moderna.
       </p>
 
       {/* 4. One main button */}

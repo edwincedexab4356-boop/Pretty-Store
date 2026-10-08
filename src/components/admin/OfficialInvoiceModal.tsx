@@ -18,6 +18,7 @@ import {
   FileText,
   Image as ImageIcon,
   ShoppingCart,
+  AlertCircle,
 } from 'lucide-react';
 import { Pedido } from '../../types/database';
 import { StoredOrderReceipt, getOrderReceipt } from '../../utils/orderReceiptStorage';
@@ -270,7 +271,7 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({
                       PRETTY STORE
                     </h2>
                     <p className="text-[10px] uppercase tracking-[0.25em] text-[#fbbf24] font-semibold print:text-stone-700">
-                      Boutique & Atelier Oficial · Panamá
+                      Almacén y accesorio urbano · Panamá
                     </p>
                   </div>
                 </div>
@@ -403,7 +404,7 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({
                   </div>
                 )}
                 <div className="flex justify-between text-stone-400 print:text-stone-700">
-                  <span>Costo de envío:</span>
+                  <span>Costo estimado de envío:</span>
                   <span className="text-[#fbbf24] font-bold print:text-black">
                     {shipping > 0 ? `+$${shipping.toFixed(2)} USD` : 'Gratis ($0.00)'}
                   </span>
@@ -483,6 +484,17 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({
                   Sin captura adjuntada digitalmente en el checkout (pago presencial o enviado directo a WhatsApp).
                 </div>
               )}
+            </div>
+
+            {/* AVISO LEGAL Y CONDICIÓN DE STOCK EN FACTURA OFICIAL */}
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs print:bg-stone-100 print:border-black/20 print:text-black space-y-1.5">
+              <div className="flex items-center gap-2 font-bold text-amber-300 print:text-black text-[11px] uppercase tracking-wider">
+                <AlertCircle size={15} className="shrink-0 text-amber-400 print:text-black" />
+                <span>Aviso de Disponibilidad e Inventario:</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-amber-200/90 print:text-stone-800 font-light">
+                En caso de que algún producto solicitado se agote o quede fuera de stock al momento de procesar y empacar su orden, <strong>Pretty Store le contactará directamente por WhatsApp</strong> para coordinar oportunamente la devolución íntegra de su dinero o el cambio del producto por otro artículo de igual precio, según su preferencia.
+              </p>
             </div>
           </div>
         )}

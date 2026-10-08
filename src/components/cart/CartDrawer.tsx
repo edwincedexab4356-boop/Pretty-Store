@@ -239,7 +239,7 @@ export const CartDrawer: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-[10px] text-[#fbbf24] font-medium text-right pt-0.5">
-                  * El costo de envío se calcula y agrega al total en el siguiente paso
+                  * El costo estimado de envío se calcula y agrega al total en el siguiente paso
                 </p>
               </div>
 

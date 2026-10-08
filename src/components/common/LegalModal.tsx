@@ -103,7 +103,16 @@ export const LegalModal: React.FC<LegalModalProps> = ({
 
               <div>
                 <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  4. Derechos de los Titulares
+                  4. Disponibilidad de Stock y Notificación por WhatsApp
+                </h3>
+                <p className="text-amber-300/90 bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20">
+                  En caso de que algún producto seleccionado se agote en el inventario al momento de procesar la orden, el equipo de Pretty Store se comunicará directamente con usted a través de WhatsApp para coordinar la devolución completa de su dinero o el cambio del producto por otro artículo de igual precio, según su preferencia.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
+                  5. Derechos de los Titulares
                 </h3>
                 <p>
                   Usted tiene derecho a consultar, actualizar, rectificar o solicitar la supresión de sus datos personales de nuestro directorio en cualquier momento contactándonos directamente a través de nuestros canales oficiales de atención al cliente.
@@ -125,10 +134,10 @@ export const LegalModal: React.FC<LegalModalProps> = ({
 
               <div>
                 <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  2. Precios y Disponibilidad
+                  2. Precios y Disponibilidad de Stock
                 </h3>
                 <p>
-                  Todos los precios están expresados en dólares de los Estados Unidos de América (USD) y corresponden a valores autorizados por la tienda. Las compras están sujetas a la verificación de existencias en inventario al momento de procesar el pedido.
+                  Todos los precios están expresados en dólares de los Estados Unidos de América (USD) y corresponden a valores autorizados por la tienda. Las compras están sujetas a la verificación de existencias en inventario al momento de procesar el pedido. Si un producto se acaba en el stock, se le contactará directamente por WhatsApp y se le devolverá el dinero o se le cambiará por otro producto de igual precio.
                 </p>
               </div>
 
