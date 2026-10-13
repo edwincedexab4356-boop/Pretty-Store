@@ -51,10 +51,10 @@ export const EditorialSection: React.FC<EditorialSectionProps> = ({ onSelectCate
             <div className="pt-2">
               <button
                 onClick={() => handleAction()}
-                className="inline-flex items-center gap-2.5 text-xs uppercase tracking-[0.2em] font-medium text-white hover:text-[#c5a059] transition-colors group cursor-pointer"
+                className="inline-flex items-center gap-3 px-5 py-2.5 rounded-full bg-white/[0.04] hover:bg-white/[0.09] border border-white/10 hover:border-[#c5a059]/40 text-xs uppercase tracking-[0.2em] font-medium text-white hover:text-[#c5a059] transition-all duration-300 hover:-translate-y-0.5 active:scale-95 group cursor-pointer"
               >
                 <span>Descubrir colección</span>
-                <ArrowRight size={14} className="stroke-[2] transition-transform duration-300 group-hover:translate-x-1" />
+                <ArrowRight size={14} className="stroke-[2] transition-transform duration-300 group-hover:translate-x-1.5" />
               </button>
             </div>
           </div>
@@ -75,10 +75,10 @@ export const EditorialSection: React.FC<EditorialSectionProps> = ({ onSelectCate
             <div className="pt-2">
               <button
                 onClick={() => handleAction()}
-                className="inline-flex items-center gap-2.5 text-xs uppercase tracking-[0.2em] font-medium text-white hover:text-[#c5a059] transition-colors group cursor-pointer"
+                className="inline-flex items-center gap-3 px-5 py-2.5 rounded-full bg-white/[0.04] hover:bg-white/[0.09] border border-white/10 hover:border-[#c5a059]/40 text-xs uppercase tracking-[0.2em] font-medium text-white hover:text-[#c5a059] transition-all duration-300 hover:-translate-y-0.5 active:scale-95 group cursor-pointer"
               >
                 <span>Explorar catálogo</span>
-                <ArrowRight size={14} className="stroke-[2] transition-transform duration-300 group-hover:translate-x-1" />
+                <ArrowRight size={14} className="stroke-[2] transition-transform duration-300 group-hover:translate-x-1.5" />
               </button>
             </div>
           </div>

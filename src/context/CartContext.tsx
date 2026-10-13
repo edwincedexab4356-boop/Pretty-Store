@@ -1,12 +1,22 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { CartItem, Producto } from '../types/database';
+import { CartItem, Producto, ProductoOpcion } from '../types/database';
 import { calculatePromotions, PromoCalculationResult } from '../utils/promoUtils';
 
 interface CartContextType {
   items: CartItem[];
-  addItem: (product: Producto, quantity?: number, selectedSize?: string) => boolean;
-  removeItem: (productId: string, selectedSize?: string) => void;
-  updateQuantity: (productId: string, quantity: number, selectedSize?: string) => void;
+  addItem: (
+    product: Producto,
+    quantity?: number,
+    selectedSize?: string,
+    selectedOption?: ProductoOpcion
+  ) => boolean;
+  removeItem: (productId: string, selectedSize?: string, optionId?: string) => void;
+  updateQuantity: (
+    productId: string,
+    quantity: number,
+    selectedSize?: string,
+    optionId?: string
+  ) => void;
   clearCart: () => void;
   totalItems: number;
   subtotal: number;
@@ -53,15 +63,25 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, 3500);
   };
 
-  const addItem = (product: Producto, quantity = 1, selectedSize?: string): boolean => {
+  const addItem = (
+    product: Producto,
+    quantity = 1,
+    selectedSize?: string,
+    selectedOption?: ProductoOpcion
+  ): boolean => {
     if (product.stock <= 0) return false;
 
     const cleanSize = selectedSize?.trim() || undefined;
+    const optionKey = selectedOption?.id || selectedOption?.nombre || undefined;
+    const unitPrice = typeof selectedOption?.precio === 'number' ? selectedOption.precio : product.precio;
     let added = false;
 
     setItems((prev) => {
       const existingIdx = prev.findIndex(
-        (it) => it.product.id === product.id && (it.selectedSize || undefined) === cleanSize
+        (it) =>
+          it.product.id === product.id &&
+          (it.selectedSize || undefined) === cleanSize &&
+          (it.selectedOption?.id || it.selectedOption?.nombre || undefined) === optionKey
       );
 
       if (existingIdx > -1) {
@@ -73,8 +93,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         next[existingIdx] = {
           ...next[existingIdx],
           quantity: newQty,
-          subtotal: Number((newQty * product.precio).toFixed(2)),
+          subtotal: Number((newQty * unitPrice).toFixed(2)),
           selectedSize: cleanSize,
+          selectedOption: selectedOption || next[existingIdx].selectedOption,
         };
         added = true;
         return next;
@@ -87,43 +108,68 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           {
             product,
             quantity: validQty,
-            subtotal: Number((validQty * product.precio).toFixed(2)),
+            subtotal: Number((validQty * unitPrice).toFixed(2)),
             selectedSize: cleanSize,
+            selectedOption,
           },
         ];
       }
     });
 
     if (quantity > 0) {
-      const label = cleanSize ? `${product.nombre} (${cleanSize})` : product.nombre;
+      let label = product.nombre;
+      if (selectedOption?.nombre) {
+        label = `${product.nombre} (${selectedOption.nombre})`;
+      } else if (cleanSize) {
+        label = `${product.nombre} (${cleanSize})`;
+      }
       showNotification(label, product.imagen_url);
     }
 
     return added;
   };
 
-  const removeItem = (productId: string, selectedSize?: string) => {
+  const removeItem = (productId: string, selectedSize?: string, optionId?: string) => {
     const cleanSize = selectedSize?.trim() || undefined;
+    const cleanOpt = optionId?.trim() || undefined;
     setItems((prev) =>
-      prev.filter((it) => !(it.product.id === productId && (it.selectedSize || undefined) === cleanSize))
+      prev.filter(
+        (it) =>
+          !(
+            it.product.id === productId &&
+            (it.selectedSize || undefined) === cleanSize &&
+            (it.selectedOption?.id || it.selectedOption?.nombre || undefined) === cleanOpt
+          )
+      )
     );
   };
 
-  const updateQuantity = (productId: string, quantity: number, selectedSize?: string) => {
+  const updateQuantity = (
+    productId: string,
+    quantity: number,
+    selectedSize?: string,
+    optionId?: string
+  ) => {
     const cleanSize = selectedSize?.trim() || undefined;
+    const cleanOpt = optionId?.trim() || undefined;
     if (quantity <= 0) {
-      removeItem(productId, cleanSize);
+      removeItem(productId, cleanSize, cleanOpt);
       return;
     }
 
     setItems((prev) =>
       prev.map((it) => {
-        if (it.product.id === productId && (it.selectedSize || undefined) === cleanSize) {
+        if (
+          it.product.id === productId &&
+          (it.selectedSize || undefined) === cleanSize &&
+          (it.selectedOption?.id || it.selectedOption?.nombre || undefined) === cleanOpt
+        ) {
           const validQty = Math.min(quantity, it.product.stock);
+          const unitPrice = typeof it.selectedOption?.precio === 'number' ? it.selectedOption.precio : it.product.precio;
           return {
             ...it,
             quantity: validQty,
-            subtotal: Number((validQty * it.product.precio).toFixed(2)),
+            subtotal: Number((validQty * unitPrice).toFixed(2)),
           };
         }
         return it;
@@ -136,7 +182,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const totalItems = items.reduce((acc, it) => acc + it.quantity, 0);
-  const subtotal = Number(items.reduce((acc, it) => acc + it.product.precio * it.quantity, 0).toFixed(2));
+  const subtotal = Number(
+    items
+      .reduce((acc, it) => {
+        const unitPrice = typeof it.selectedOption?.precio === 'number' ? it.selectedOption.precio : it.product.precio;
+        return acc + unitPrice * it.quantity;
+      }, 0)
+      .toFixed(2)
+  );
   const promo = calculatePromotions(items);
   const discount = promo.totalDiscount;
   const shipping = 0;

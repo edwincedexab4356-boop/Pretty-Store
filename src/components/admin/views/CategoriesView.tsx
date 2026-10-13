@@ -387,7 +387,7 @@ export const CategoriesView: React.FC = () => {
       {/* CREATE / EDIT CATEGORY MODAL WITH SIZE CONFIGURATION */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-fadeIn">
-          <div className="bg-[#100f14] border border-white/10 rounded-3xl w-full max-w-xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+          <div className="bg-[#100f14] border border-white/10 rounded-3xl w-full max-w-xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-scaleUp">
             {/* Header */}
             <div className="p-5 border-b border-white/10 flex items-center justify-between bg-black/40 shrink-0">
               <div>
@@ -400,7 +400,7 @@ export const CategoriesView: React.FC = () => {
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-2 rounded-xl text-stone-400 hover:text-white hover:bg-white/5 cursor-pointer"
+                className="p-2 rounded-xl text-stone-400 hover:text-white hover:bg-white/5 cursor-pointer transition-all duration-300 hover:rotate-90 active:scale-90"
               >
                 <X size={18} />
               </button>

@@ -8,6 +8,13 @@ export interface Categoria {
   total_productos?: number;
 }
 
+export interface ProductoOpcion {
+  id: string;
+  nombre: string;
+  precio?: number;
+  stock?: number;
+}
+
 export interface Producto {
   id: string;
   categoria_id: string | null;
@@ -22,6 +29,7 @@ export interface Producto {
   created_at?: string;
   updated_at?: string;
   categoria?: Categoria;
+  opciones?: ProductoOpcion[];
 }
 
 export interface CartItem {
@@ -29,6 +37,7 @@ export interface CartItem {
   quantity: number;
   subtotal: number;
   selectedSize?: string;
+  selectedOption?: ProductoOpcion;
 }
 
 export interface Inventario {
@@ -72,6 +81,7 @@ export interface PedidoItem {
   subtotal: number;
   producto?: Producto;
   selectedSize?: string;
+  selectedOption?: ProductoOpcion;
 }
 
 export interface Pedido {

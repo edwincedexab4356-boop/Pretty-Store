@@ -32,8 +32,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
         className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
       />
 
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-md bg-[#0e0d12] border-l border-white/10 shadow-2xl flex flex-col">
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10">
+        <div className="w-screen max-w-full sm:max-w-md bg-[#0e0d12] border-l border-white/10 shadow-2xl flex flex-col">
           {/* Header */}
           <div className="p-5 border-b border-white/10 flex items-center justify-between bg-black/40">
             <div className="flex items-center gap-2.5">
@@ -46,7 +46,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
             </div>
             <button
               onClick={() => setIsCartOpen(false)}
-              className="p-1.5 rounded-xl text-stone-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+              className="p-1.5 rounded-xl text-stone-400 hover:text-white hover:bg-white/5 transition-all duration-300 hover:rotate-90 active:scale-90 cursor-pointer"
             >
               <X size={18} />
             </button>
@@ -56,7 +56,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
           {items.length > 0 && promo.hasPromo && (
             <div className="px-5 py-2.5 bg-gradient-to-r from-amber-500/15 via-[#c5a059]/10 to-transparent border-b border-amber-500/20 text-xs flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles size={14} className="text-[#fbbf24] shrink-0" />
+                <Sparkles size={14} className="text-[#fbbf24] shrink-0 animate-pulse" />
                 <span className="text-white text-[11px] font-semibold">
                   {promo.promoTitle}: <strong className="text-[#fbbf24] font-mono">-${promo.discount.toFixed(2)} USD</strong>
                 </span>
@@ -78,7 +78,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
           )}
 
           {/* Cart Items List */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-4 divide-y divide-white/[0.06]">
+          <div className="flex-1 overflow-y-auto p-5 space-y-4 divide-y divide-white/[0.06] touch-pan-y">
             {items.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center py-16 space-y-3">
                 <div className="w-16 h-16 rounded-2xl border border-white/10 flex items-center justify-center text-stone-600 bg-black/40">
@@ -90,7 +90,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
                 </p>
                 <button
                   onClick={() => setIsCartOpen(false)}
-                  className="mt-2 px-6 py-2.5 bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer"
+                  className="mt-2 px-6 py-2.5 bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold text-xs uppercase tracking-wider rounded-xl transition-all duration-200 cursor-pointer active:scale-95 hover:scale-105"
                 >
                   Explorar Tienda
                 </button>
@@ -98,7 +98,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
             ) : (
               items.map((item) => {
                 const itemPromo = getProductPromo(item.product, item.product?.categoria?.nombre);
-                const itemKey = `${item.product.id}-${item.selectedSize || 'default'}`;
+                const optionKey = item.selectedOption?.id || item.selectedOption?.nombre || 'default';
+                const itemKey = `${item.product.id}-${item.selectedSize || 'default'}-${optionKey}`;
+                const unitPrice = typeof item.selectedOption?.precio === 'number' ? item.selectedOption.precio : item.product.precio;
 
                 return (
                   <div key={itemKey} className="pt-4 first:pt-0 flex gap-3.5">
@@ -107,7 +109,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
                       <img
                         src={getPrimaryProductImage(item.product, '/images/logo/logotipo.jpeg')}
                         alt={item.product.nombre}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
                         onError={(e) => {
                           (e.currentTarget as HTMLImageElement).src = '/images/logo/logotipo.jpeg';
                         }}
@@ -122,19 +124,24 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
                             {item.product.nombre}
                           </h4>
                           <button
-                            onClick={() => removeItem(item.product.id, item.selectedSize)}
-                            className="text-stone-500 hover:text-rose-400 transition-colors cursor-pointer p-1"
+                            onClick={() => removeItem(item.product.id, item.selectedSize, item.selectedOption?.id || item.selectedOption?.nombre)}
+                            className="text-stone-500 hover:text-rose-400 transition-all duration-200 cursor-pointer p-1 hover:scale-110 active:scale-90"
                             title="Eliminar artículo"
                           >
                             <Trash2 size={13} />
                           </button>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-1">
                           <span className="text-xs font-mono font-bold text-[#c5a059]">
-                            ${item.product.precio.toFixed(2)}
+                            ${unitPrice.toFixed(2)}
                           </span>
-                          {item.selectedSize && (
+                          {item.selectedOption && (
                             <span className="text-[10px] text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded font-mono font-medium">
+                              {item.selectedOption.nombre}
+                            </span>
+                          )}
+                          {item.selectedSize && (
+                            <span className="text-[10px] text-stone-300 bg-white/10 border border-white/15 px-2 py-0.5 rounded font-mono font-medium">
                               Talla: {item.selectedSize}
                             </span>
                           )}
@@ -150,8 +157,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
                       <div className="flex items-center justify-between pt-2">
                         <div className="flex items-center border border-white/15 bg-black/50 rounded-lg overflow-hidden">
                           <button
-                            onClick={() => updateQuantity(item.product.id, item.quantity - 1, item.selectedSize)}
-                            className="w-7 h-7 flex items-center justify-center text-stone-300 hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-30"
+                            onClick={() =>
+                              updateQuantity(
+                                item.product.id,
+                                item.quantity - 1,
+                                item.selectedSize,
+                                item.selectedOption?.id || item.selectedOption?.nombre
+                              )
+                            }
+                            className="w-7 h-7 flex items-center justify-center text-stone-300 hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-30 active:scale-90"
                             disabled={item.quantity <= 1}
                           >
                             <Minus size={11} />
@@ -160,8 +174,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
                             {item.quantity}
                           </span>
                           <button
-                            onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.selectedSize)}
-                            className="w-7 h-7 flex items-center justify-center text-stone-300 hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-30"
+                            onClick={() =>
+                              updateQuantity(
+                                item.product.id,
+                                item.quantity + 1,
+                                item.selectedSize,
+                                item.selectedOption?.id || item.selectedOption?.nombre
+                              )
+                            }
+                            className="w-7 h-7 flex items-center justify-center text-stone-300 hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-30 active:scale-90"
                             disabled={item.quantity >= item.product.stock}
                           >
                             <Plus size={11} />
@@ -169,7 +190,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
                         </div>
 
                         <span className="text-sm font-mono font-bold text-white">
-                          ${(item.product.precio * item.quantity).toFixed(2)}
+                          ${(unitPrice * item.quantity).toFixed(2)}
                         </span>
                       </div>
                     </div>
@@ -204,7 +225,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
                   setIsCartOpen(false);
                   onProceedToCheckout();
                 }}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#b5914a] hover:from-[#d5b069] hover:to-[#c5a059] text-black font-bold text-xs uppercase tracking-[0.2em] shadow-xl shadow-[#c5a059]/25 flex items-center justify-center gap-2 cursor-pointer transition-all duration-300 hover:scale-102"
+                className="w-full py-4 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#b5914a] hover:from-[#d5b069] hover:to-[#c5a059] text-black font-bold text-xs uppercase tracking-[0.2em] shadow-xl shadow-[#c5a059]/25 flex items-center justify-center gap-2 cursor-pointer transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] hover:shadow-2xl hover:shadow-[#c5a059]/40"
               >
                 <span>Tramitar Pedido</span>
                 <ArrowRight size={15} />

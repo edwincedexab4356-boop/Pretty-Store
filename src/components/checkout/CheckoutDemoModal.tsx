@@ -361,7 +361,11 @@ export const CheckoutDemoModal: React.FC<CheckoutModalProps> = ({ onClose }) => 
         : 'Tarjeta de Débito o Crédito';
 
     const itemsSummary = items
-      .map((it) => `  • ${it.product.nombre} (Cant: ${it.quantity}x a $${it.product.precio.toFixed(2)})`)
+      .map((it) => {
+        const optText = it.selectedOption?.nombre ? ` [Opción: ${it.selectedOption.nombre}]` : (it.selectedSize ? ` [Talla: ${it.selectedSize}]` : '');
+        const unitPrice = typeof it.selectedOption?.precio === 'number' ? it.selectedOption.precio : it.product.precio;
+        return `  • ${it.product.nombre}${optText} (Cant: ${it.quantity}x a $${unitPrice.toFixed(2)})`;
+      })
       .join('\n');
 
     let voucherSection = '';
@@ -436,12 +440,12 @@ _Enviado desde Pretty Store Oficial_`;
   }, [orderDraft, items, voucherDataUrl]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-150">
-      <div className="bg-[#09090b] border border-white/10 rounded-2xl w-full max-w-full sm:max-w-2xl lg:max-w-3xl max-h-[94dvh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative overscroll-contain">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/85 backdrop-blur-md animate-fadeIn">
+      <div className="bg-[#09090b] border border-white/10 rounded-2xl w-full max-w-full sm:max-w-2xl lg:max-w-3xl max-h-[94dvh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative overscroll-contain animate-scaleUp">
         {/* ==================== MODAL HEADER ==================== */}
         <div className="p-3.5 sm:p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-black/60">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24] shadow-sm shadow-[#fbbf24]/50" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24] shadow-sm shadow-[#fbbf24]/50 animate-pulse" />
             <h2 className="text-xs sm:text-sm font-extrabold text-[#fbbf24] uppercase tracking-wider font-mono">
               {currentStep === 'form' && 'PRETTY STORE · DATOS DEL PEDIDO'}
               {currentStep === 'review' && 'PRETTY STORE · REVISIÓN DEL PEDIDO'}
@@ -451,7 +455,7 @@ _Enviado desde Pretty Store Oficial_`;
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-stone-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            className="p-1.5 rounded-xl text-stone-400 hover:text-white hover:bg-white/10 transition-all duration-300 hover:rotate-90 active:scale-90 cursor-pointer"
             aria-label="Cerrar ventana"
           >
             <X size={18} />
@@ -902,7 +906,7 @@ _Enviado desde Pretty Store Oficial_`;
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full py-4 px-6 rounded-xl bg-[#fbbf24] hover:bg-[#f59e0b] text-black font-extrabold uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xl shadow-[#fbbf24]/20 active:scale-[0.99]"
+                className="w-full py-4 px-6 rounded-xl bg-[#fbbf24] hover:bg-[#f59e0b] text-black font-extrabold uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer shadow-xl shadow-[#fbbf24]/20 hover:shadow-2xl hover:shadow-[#fbbf24]/30 hover:scale-[1.01] active:scale-[0.98]"
               >
                 <span>CONTINUAR</span>
                 <ArrowRight size={17} />
@@ -1003,37 +1007,41 @@ _Enviado desde Pretty Store Oficial_`;
                 </div>
 
                 <div className="space-y-2.5">
-                  {items.map((it, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 rounded-xl bg-black/60 border border-white/10 flex items-center justify-between gap-3"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <img
-                          src={getPrimaryProductImage(it.product, '/images/logo/logotipo.jpeg')}
-                          alt={it.product.nombre}
-                          className="w-12 h-12 rounded-xl object-cover bg-stone-900 border border-white/15 shrink-0"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).src = '/images/logo/logotipo.jpeg';
-                          }}
-                        />
-                        <div className="min-w-0">
-                          <h4 className="font-semibold text-white text-xs sm:text-sm truncate">
-                            {it.product.nombre}
-                          </h4>
-                          <p className="text-[11px] text-stone-400 mt-0.5">
-                            Cant: <strong className="text-stone-200 font-mono">{it.quantity}x</strong> a $
-                            {it.product.precio.toFixed(2)} USD c/u
-                            {it.selectedSize && ` • Talla: ${it.selectedSize}`}
-                          </p>
+                  {items.map((it, idx) => {
+                    const unitPrice = typeof it.selectedOption?.precio === 'number' ? it.selectedOption.precio : it.product.precio;
+                    return (
+                      <div
+                        key={idx}
+                        className="p-3 rounded-xl bg-black/60 border border-white/10 flex items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img
+                            src={getPrimaryProductImage(it.product, '/images/logo/logotipo.jpeg')}
+                            alt={it.product.nombre}
+                            className="w-12 h-12 rounded-xl object-cover bg-stone-900 border border-white/15 shrink-0"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = '/images/logo/logotipo.jpeg';
+                            }}
+                          />
+                          <div className="min-w-0">
+                            <h4 className="font-semibold text-white text-xs sm:text-sm truncate">
+                              {it.product.nombre}
+                            </h4>
+                            <p className="text-[11px] text-stone-400 mt-0.5">
+                              Cant: <strong className="text-stone-200 font-mono">{it.quantity}x</strong> a $
+                              {unitPrice.toFixed(2)} USD c/u
+                              {it.selectedOption && ` • Opción: ${it.selectedOption.nombre}`}
+                              {it.selectedSize && ` • Talla: ${it.selectedSize}`}
+                            </p>
+                          </div>
                         </div>
-                      </div>
 
-                      <span className="font-mono font-bold text-sm text-[#fbbf24] shrink-0">
-                        ${(it.subtotal || it.quantity * it.product.precio).toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
+                        <span className="font-mono font-bold text-sm text-[#fbbf24] shrink-0">
+                          ${(it.subtotal || it.quantity * unitPrice).toFixed(2)}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1081,7 +1089,7 @@ _Enviado desde Pretty Store Oficial_`;
                 <button
                   type="button"
                   onClick={() => setCurrentStep('form')}
-                  className="px-4 sm:px-5 py-3.5 rounded-xl border border-white/20 text-stone-300 hover:text-white hover:bg-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[48px]"
+                  className="px-4 sm:px-5 py-3.5 rounded-xl border border-white/20 text-stone-300 hover:text-white hover:bg-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer min-h-[48px] active:scale-95"
                 >
                   <ArrowLeft size={16} />
                   <span>Modificar datos</span>
@@ -1090,7 +1098,7 @@ _Enviado desde Pretty Store Oficial_`;
                 <button
                   type="button"
                   onClick={handleProceedToPayment}
-                  className="flex-1 py-4 px-6 rounded-xl bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] hover:from-[#f59e0b] hover:to-[#fbbf24] text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xl shadow-[#fbbf24]/20 active:scale-[0.99] min-h-[48px]"
+                  className="flex-1 py-4 px-6 rounded-xl bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] hover:from-[#f59e0b] hover:to-[#fbbf24] text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer shadow-xl shadow-[#fbbf24]/20 hover:shadow-2xl hover:shadow-[#fbbf24]/30 hover:scale-[1.01] active:scale-[0.98] min-h-[48px]"
                 >
                   <span>IR A PAGAR</span>
                   <ArrowRight size={18} />
@@ -1374,7 +1382,7 @@ _Enviado desde Pretty Store Oficial_`;
                   type="button"
                   disabled={isSubmittingOrder}
                   onClick={handleConfirmOrderAndSave}
-                  className="w-full py-4.5 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-500 hover:from-emerald-600 hover:to-emerald-500 text-white font-black uppercase tracking-wider text-sm sm:text-base flex flex-col sm:flex-row items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xl shadow-emerald-500/30 active:scale-[0.99] disabled:opacity-50 min-h-[58px]"
+                  className="w-full py-4.5 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-500 hover:from-emerald-600 hover:to-emerald-500 text-white font-black uppercase tracking-wider text-sm sm:text-base flex flex-col sm:flex-row items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer shadow-2xl shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 min-h-[58px]"
                 >
                   <div className="flex items-center gap-2">
                     <CheckCircle2 size={22} className="shrink-0" />
@@ -1385,7 +1393,7 @@ _Enviado desde Pretty Store Oficial_`;
                   </span>
                 </button>
               ) : (
-                <div className="w-full p-4.5 rounded-2xl bg-amber-500/15 border-2 border-amber-500/40 text-amber-200 text-xs sm:text-sm font-bold text-center flex flex-col sm:flex-row items-center justify-center gap-2 shadow-lg">
+                <div className="w-full p-4.5 rounded-2xl bg-amber-500/15 border-2 border-amber-500/40 text-amber-200 text-xs sm:text-sm font-bold text-center flex flex-col sm:flex-row items-center justify-center gap-2 shadow-lg animate-pulse">
                   <span className="text-xl">⚠️</span>
                   <span>ATENCIÓN: Primero debes tocar el recuadro del PASO 2 y adjuntar la foto de tu comprobante.</span>
                 </div>
@@ -1395,7 +1403,7 @@ _Enviado desde Pretty Store Oficial_`;
                 <button
                   type="button"
                   onClick={() => setCurrentStep('form')}
-                  className="flex-1 py-3 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[46px]"
+                  className="flex-1 py-3 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer min-h-[46px] active:scale-95"
                 >
                   <ArrowLeft size={15} />
                   <span>Modificar Datos</span>
@@ -1403,7 +1411,7 @@ _Enviado desde Pretty Store Oficial_`;
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 py-3 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-400 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[46px]"
+                  className="flex-1 py-3 px-4 rounded-xl border border-white/10 hover:border-white/20 text-stone-400 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer min-h-[46px] active:scale-95"
                 >
                   <span>Regresar a la Tienda</span>
                 </button>
@@ -1526,27 +1534,33 @@ _Enviado desde Pretty Store Oficial_`;
                   DETALLE DE PRODUCTOS COMPRADOS:
                 </span>
                 <div className="space-y-2">
-                  {items.map((it, idx) => (
-                    <div key={idx} className="flex justify-between items-center text-xs gap-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <img
-                          src={getPrimaryProductImage(it.product, '/images/logo/logotipo.jpeg')}
-                          alt={it.product.nombre}
-                          className="w-8 h-8 rounded object-cover border border-white/10 shrink-0"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).src = '/images/logo/logotipo.jpeg';
-                          }}
-                        />
-                        <span className="text-white truncate">
-                          {it.product.nombre}{' '}
-                          <span className="text-stone-400 font-mono">({it.quantity}x)</span>
+                  {items.map((it, idx) => {
+                    const unitPrice = typeof it.selectedOption?.precio === 'number' ? it.selectedOption.precio : it.product.precio;
+                    return (
+                      <div key={idx} className="flex justify-between items-center text-xs gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <img
+                            src={getPrimaryProductImage(it.product, '/images/logo/logotipo.jpeg')}
+                            alt={it.product.nombre}
+                            className="w-8 h-8 rounded object-cover border border-white/10 shrink-0"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = '/images/logo/logotipo.jpeg';
+                            }}
+                          />
+                          <span className="text-white truncate">
+                            {it.product.nombre}{' '}
+                            {it.selectedOption && (
+                              <span className="text-amber-300 font-mono text-[10px]">[{it.selectedOption.nombre}] </span>
+                            )}
+                            <span className="text-stone-400 font-mono">({it.quantity}x)</span>
+                          </span>
+                        </div>
+                        <span className="font-mono text-white font-bold shrink-0">
+                          ${(it.quantity * unitPrice).toFixed(2)}
                         </span>
                       </div>
-                      <span className="font-mono text-white font-bold shrink-0">
-                        ${(it.quantity * it.product.precio).toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1674,11 +1688,11 @@ _Enviado desde Pretty Store Oficial_`;
               </div>
 
               {/* Final Close Buttons */}
-              <div className="grid grid-cols-2 gap-3 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="py-3.5 px-4 rounded-xl bg-[#10b981] hover:bg-[#059669] text-black font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20"
+                  className="py-3.5 px-4 rounded-xl bg-[#10b981] hover:bg-[#059669] text-black font-bold text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <Check size={16} />
                   <span>FINALIZAR Y CERRAR PEDIDO</span>
@@ -1687,7 +1701,7 @@ _Enviado desde Pretty Store Oficial_`;
                 <button
                   type="button"
                   onClick={onClose}
-                  className="py-3.5 px-4 rounded-xl bg-black/60 border border-white/15 hover:bg-white/10 text-stone-300 hover:text-white font-semibold text-xs transition-colors cursor-pointer"
+                  className="py-3.5 px-4 rounded-xl bg-black/60 border border-white/15 hover:bg-white/10 text-stone-300 hover:text-white font-semibold text-xs transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <span>SEGUIR COMPRANDO EN LA TIENDA</span>
                 </button>

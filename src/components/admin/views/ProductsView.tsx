@@ -17,8 +17,9 @@ import {
   ArrowLeft,
   ArrowRight,
   HardDrive,
+  Sparkles,
 } from 'lucide-react';
-import { Producto, Categoria } from '../../../types/database';
+import { Producto, Categoria, ProductoOpcion } from '../../../types/database';
 import {
   getAdminProducts,
   createAdminProduct,
@@ -55,6 +56,7 @@ export const ProductsView: React.FC = () => {
   const [formImageUrl, setFormImageUrl] = useState('');
   const [formGallery, setFormGallery] = useState<string[]>([]);
   const [formActive, setFormActive] = useState(true);
+  const [formOptions, setFormOptions] = useState<ProductoOpcion[]>([]);
 
   // Image Upload State
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -87,6 +89,7 @@ export const ProductsView: React.FC = () => {
     setFormDescription('');
     setFormImageUrl('');
     setFormGallery([]);
+    setFormOptions([]);
     setFormActive(true);
     setUploadError(null);
     setIsModalOpen(true);
@@ -105,6 +108,9 @@ export const ProductsView: React.FC = () => {
     const otherImgs = allProdImages.slice(1);
     setFormImageUrl(primaryImg);
     setFormGallery(otherImgs);
+    setFormOptions(
+      p.opciones && p.opciones.length > 0 ? JSON.parse(JSON.stringify(p.opciones)) : []
+    );
     setFormActive(p.activo);
     setUploadError(null);
     setIsModalOpen(true);
@@ -160,6 +166,17 @@ export const ProductsView: React.FC = () => {
         ...formGallery.filter((url) => Boolean(url && url.trim())),
       ];
 
+      const cleanedOptions: ProductoOpcion[] = formOptions
+        .filter((o) => o && o.nombre && o.nombre.trim().length > 0)
+        .map((o, idx) => ({
+          id: o.id || `opt_${idx + 1}_${Date.now()}`,
+          nombre: o.nombre.trim(),
+          precio:
+            typeof o.precio === 'number' && !isNaN(o.precio) && o.precio >= 0
+              ? o.precio
+              : parseFloat(formPrice) || 0,
+        }));
+
       const payload: Partial<Producto> = {
         nombre: formName.trim(),
         categoria_id: formCategory || null,
@@ -169,6 +186,7 @@ export const ProductsView: React.FC = () => {
         descripcion: formDescription.trim() || null,
         imagen_url: formImageUrl.trim() || null,
         imagenes: allImages,
+        opciones: cleanedOptions,
         activo: formActive,
       };
 
@@ -314,6 +332,12 @@ export const ProductsView: React.FC = () => {
                             <span className="text-[11px] text-stone-400 font-light truncate max-w-xs block">
                               {p.descripcion || '—'}
                             </span>
+                            {p.opciones && p.opciones.length > 0 && (
+                              <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-md bg-[#c5a059]/15 border border-[#c5a059]/30 text-[#c5a059] text-[10px] font-medium">
+                                <Sparkles size={10} />
+                                <span>{p.opciones.length} opciones: {p.opciones.map((o) => `${o.nombre}${typeof o.precio === 'number' ? ` ($${o.precio.toFixed(2)})` : ''}`).join(', ')}</span>
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -602,6 +626,103 @@ export const ProductsView: React.FC = () => {
                   onChange={(e) => setFormDescription(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/15 text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] resize-none"
                 />
+              </div>
+
+              {/* OPCIONES DEL PRODUCTO (Colores, Variantes, etc.) */}
+              <div className="p-4 rounded-2xl bg-black/40 border border-white/10 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-1.5 font-semibold text-white text-xs">
+                      <Sparkles size={14} className="text-[#c5a059]" />
+                      <span>Opciones y Variantes (Opcional - Colores, Modelos, etc.)</span>
+                    </div>
+                    <p className="text-[10px] text-stone-400 mt-0.5 leading-relaxed">
+                      Agrega opciones como Rojo, Azul, Verde con precios distintos si lo deseas. Si no agregas ninguna opción, el producto se venderá con su precio base normal de ${formPrice || '0.00'}.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormOptions((prev) => [
+                        ...prev,
+                        {
+                          id: `opt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                          nombre: '',
+                          precio: parseFloat(formPrice) || 0,
+                        },
+                      ]);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-[#c5a059]/15 hover:bg-[#c5a059]/25 text-[#c5a059] border border-[#c5a059]/30 text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 active:scale-95"
+                  >
+                    <Plus size={13} />
+                    <span>Agregar Opción</span>
+                  </button>
+                </div>
+
+                {formOptions.length > 0 ? (
+                  <div className="space-y-2 pt-1">
+                    {formOptions.map((opt, idx) => (
+                      <div
+                        key={opt.id || idx}
+                        className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 rounded-xl bg-black/60 border border-white/10"
+                      >
+                        <div className="flex-1">
+                          <label className="block text-[9px] text-stone-400 font-mono mb-1">
+                            Nombre de la Opción (ej. Rojo, Azul, Verde, Talla M)
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Ej. Rojo"
+                            value={opt.nombre}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFormOptions((prev) =>
+                                prev.map((item, i) => (i === idx ? { ...item, nombre: val } : item))
+                              );
+                            }}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-black/80 border border-white/15 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-[#c5a059]"
+                          />
+                        </div>
+
+                        <div className="w-full sm:w-36">
+                          <label className="block text-[9px] text-stone-400 font-mono mb-1">
+                            Precio de esta opción ($ USD)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder={formPrice}
+                            value={opt.precio !== undefined ? opt.precio : ''}
+                            onChange={(e) => {
+                              const val =
+                                e.target.value === '' ? undefined : parseFloat(e.target.value);
+                              setFormOptions((prev) =>
+                                prev.map((item, i) => (i === idx ? { ...item, precio: val } : item))
+                              );
+                            }}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-black/80 border border-white/15 text-white text-xs font-mono focus:outline-none focus:border-[#c5a059]"
+                          />
+                        </div>
+
+                        <div className="sm:pt-4 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setFormOptions((prev) => prev.filter((_, i) => i !== idx))}
+                            className="p-2 text-stone-500 hover:text-rose-400 transition-colors cursor-pointer rounded-lg hover:bg-rose-500/10"
+                            title="Eliminar opción"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 text-center text-[11px] text-stone-500 font-light">
+                    Sin opciones configuradas (este producto se vende solo por su precio base normal). Si deseas opciones como colores o tallas, presiona <strong className="text-[#c5a059] font-medium">+ Agregar Opción</strong>.
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between p-3.5 rounded-xl bg-black/40 border border-white/10">

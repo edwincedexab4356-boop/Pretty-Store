@@ -52,8 +52,9 @@ export const Hero: React.FC<HeroProps> = ({ videoUrl = '/videos/hero.mp4', onExp
 
       {/* Content */}
       <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center justify-center min-h-[85vh] sm:min-h-[90vh]">
-        <div className="text-[10px] sm:text-xs uppercase tracking-[0.35em] font-medium text-[#c5a059] mb-6">
-          The New Collection
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/40 border border-[#c5a059]/30 text-[10px] sm:text-xs uppercase tracking-[0.35em] font-medium text-[#c5a059] mb-6 backdrop-blur-md animate-floatGentle shadow-lg shadow-black/50">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#c5a059] animate-pulse" />
+          <span>The New Collection</span>
         </div>
         <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-serif-luxury font-light text-white tracking-tight leading-[1.06] mb-6 max-w-3xl drop-shadow-md">
           Define your style.
@@ -64,10 +65,10 @@ export const Hero: React.FC<HeroProps> = ({ videoUrl = '/videos/hero.mp4', onExp
         <div>
           <button
             onClick={onExploreClick}
-            className="inline-flex items-center gap-3 px-8 sm:px-10 py-3.5 sm:py-4 bg-white hover:bg-stone-100 text-stone-950 font-sans-clean font-semibold uppercase tracking-[0.22em] text-[11px] sm:text-xs transition-all duration-300 hover:tracking-[0.26em] cursor-pointer group shadow-2xl shadow-black/60"
+            className="inline-flex items-center gap-3 px-8 sm:px-10 py-3.5 sm:py-4 bg-white hover:bg-stone-100 active:bg-stone-200 text-stone-950 font-sans-clean font-semibold uppercase tracking-[0.22em] text-[11px] sm:text-xs transition-all duration-300 hover:tracking-[0.26em] hover:-translate-y-1 hover:shadow-2xl hover:shadow-white/20 active:scale-95 cursor-pointer group shadow-2xl shadow-black/60 rounded-full"
           >
             <span>Descubre la colección</span>
-            <ArrowRight size={14} className="stroke-[2] transition-transform duration-300 group-hover:translate-x-1" />
+            <ArrowRight size={14} className="stroke-[2] transition-transform duration-300 group-hover:translate-x-1.5" />
           </button>
         </div>
       </div>

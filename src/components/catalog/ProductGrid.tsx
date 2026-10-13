@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Search, SlidersHorizontal, Package, RefreshCw } from 'lucide-react';
+import { Search, SlidersHorizontal, Package, RefreshCw, Sparkles, Clock, MessageCircle } from 'lucide-react';
 import { Producto, Categoria } from '../../types/database';
+import { useStoreConfig } from '../../context/StoreConfigContext';
 import { ProductCard } from './ProductCard';
 
 interface ProductGridProps {
@@ -72,9 +73,9 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
     return (
       <section id="catalogo" className="py-20 sm:py-28 bg-[#09090b] text-stone-100">
         <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-6 sm:gap-8">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3.5 sm:gap-6 lg:gap-8">
             {Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="animate-pulse bg-[#121215] aspect-[4/5] rounded-sm border border-white/5" />
+              <div key={i} className="animate-pulse bg-[#121215] aspect-[4/5] rounded-2xl border border-white/5" />
             ))}
           </div>
         </div>
@@ -108,12 +109,12 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                 placeholder="Buscar pieza..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-7 py-2 bg-stone-900/60 border border-white/10 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-white/30 transition-colors"
+                className="w-full pl-9 pr-7 py-2.5 bg-stone-900/60 border border-white/10 text-xs text-white placeholder-stone-500 rounded-xl focus:outline-none focus:border-[#c5a059]/50 focus:ring-1 focus:ring-[#c5a059]/30 transition-all"
               />
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-stone-400 hover:text-white"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-stone-400 hover:text-white p-1"
                   aria-label="Limpiar búsqueda"
                 >
                   ✕
@@ -127,7 +128,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="pl-9 pr-8 py-2 bg-stone-900/60 border border-white/10 text-xs text-stone-300 focus:outline-none focus:border-white/30 appearance-none cursor-pointer"
+                className="w-full sm:w-auto pl-9 pr-8 py-2.5 bg-stone-900/60 border border-white/10 text-xs text-stone-300 rounded-xl focus:outline-none focus:border-[#c5a059]/50 focus:ring-1 focus:ring-[#c5a059]/30 appearance-none cursor-pointer transition-all"
               >
                 <option value="featured">Destacados</option>
                 <option value="price-asc">Precio: Menor a Mayor</option>
@@ -140,7 +141,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
 
         {/* Products Grid */}
         {filteredProducts.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-6 sm:gap-8">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3.5 sm:gap-6 lg:gap-8">
             {filteredProducts.map((p, idx) => (
               <ProductCard
                 key={p.id}
@@ -165,7 +166,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                 setSearchTerm('');
                 onSelectCategory('all');
               }}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#c5a059] hover:bg-[#b5914a] text-black text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-md shadow-[#c5a059]/20"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#c5a059] hover:bg-[#b5914a] text-black text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer shadow-md shadow-[#c5a059]/20 hover:scale-105 active:scale-95"
             >
               <RefreshCw size={13} />
               <span>Ver Catálogo Completo</span>

@@ -73,6 +73,97 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleUp {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.03); }
+}
+
+@keyframes floatGentle {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes shimmerGold {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes popBadge {
+  0% { transform: scale(0.8); }
+  50% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
 .animate-fadeIn {
   animation: fadeIn 0.25s ease-out forwards;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-scaleUp {
+  animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-pulseGlow {
+  animation: pulseGlow 2.5s ease-in-out infinite;
+}
+
+.animate-floatGentle {
+  animation: floatGentle 3.5s ease-in-out infinite;
+}
+
+.animate-shimmerGold {
+  background-size: 200% 100%;
+  animation: shimmerGold 3s linear infinite;
+}
+
+.animate-popBadge {
+  animation: popBadge 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Touch & tap feedback for buttons without breaking design */
+.btn-press {
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.btn-press:active {
+  transform: scale(0.96);
+}
+
+.btn-hover-lift {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease, background-color 0.25s ease;
+}
+@media (hover: hover) {
+  .btn-hover-lift:hover {
+    transform: translateY(-2px);
+  }
+}
+.btn-hover-lift:active {
+  transform: scale(0.97) translateY(0);
+}
+
+.card-luxury-hover {
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease, box-shadow 0.35s ease;
+}
+@media (hover: hover) {
+  .card-luxury-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 32px -8px rgba(197, 160, 89, 0.12), 0 8px 16px -4px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Smooth hardware accelerated transitions */
+* {
+  -webkit-tap-highlight-color: transparent;
 }

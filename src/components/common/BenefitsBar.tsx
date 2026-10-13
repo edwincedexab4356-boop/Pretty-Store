@@ -40,16 +40,16 @@ export const BenefitsBar: React.FC = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 lg:gap-12">
           {benefits.map((item, idx) => (
             <div
               key={idx}
-              className="p-6 border-t border-white/10 hover:border-[#c5a059]/40 transition-colors duration-300 space-y-4"
+              className="p-6 border-t border-white/10 hover:border-[#c5a059]/50 transition-all duration-300 space-y-4 hover:-translate-y-1 bg-white/[0.01] hover:bg-white/[0.03] rounded-2xl group cursor-default shadow-lg shadow-black/20"
             >
-              <div className="w-10 h-10 border border-white/15 flex items-center justify-center bg-stone-900/40 text-[#c5a059]">
+              <div className="w-12 h-12 rounded-xl border border-white/15 group-hover:border-[#c5a059]/40 flex items-center justify-center bg-stone-900/60 text-[#c5a059] group-hover:scale-110 group-hover:text-[#fbbf24] transition-all duration-300 shadow-md">
                 {item.icon}
               </div>
-              <h3 className="text-base font-serif-luxury font-normal text-white">{item.title}</h3>
+              <h3 className="text-base font-serif-luxury font-normal text-white group-hover:text-stone-100 transition-colors">{item.title}</h3>
               <p className="text-xs text-stone-400 font-light leading-relaxed">{item.description}</p>
             </div>
           ))}

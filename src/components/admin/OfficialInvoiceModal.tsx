@@ -28,40 +28,40 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({ orde
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-fadeIn print:p-0 print:bg-white print:fixed">
-      <div className="bg-[#100f14] border border-white/10 rounded-3xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden print:border-none print:shadow-none print:bg-white print:text-black print:max-h-full print:rounded-none">
+      <div className="bg-[#100f14] border border-white/10 rounded-3xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden print:border-none print:shadow-none print:bg-white print:text-black print:max-h-full print:rounded-none animate-scaleUp">
         {/* Modal Top Actions (hidden in print) */}
         <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between bg-black/40 print:hidden shrink-0">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveTab('factura')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                activeTab === 'factura' ? 'bg-[#c5a059] text-black' : 'text-stone-300 hover:text-white'
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer active:scale-95 ${
+                activeTab === 'factura' ? 'bg-[#c5a059] text-black shadow-md shadow-[#c5a059]/20' : 'text-stone-300 hover:text-white hover:bg-white/5'
               }`}
             >
               Factura Oficial
             </button>
             <button
               onClick={() => setActiveTab('comprobante')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'comprobante' ? 'bg-[#c5a059] text-black' : 'text-stone-300 hover:text-white'
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer flex items-center gap-1.5 active:scale-95 ${
+                activeTab === 'comprobante' ? 'bg-[#c5a059] text-black shadow-md shadow-[#c5a059]/20' : 'text-stone-300 hover:text-white hover:bg-white/5'
               }`}
             >
               <span>Captura de Pago</span>
-              {voucherUrl && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
+              {voucherUrl && <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />}
             </button>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
-              className="px-3.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 cursor-pointer active:scale-95 hover:scale-105"
             >
               <Printer size={14} />
               <span>Imprimir</span>
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/10 cursor-pointer"
+              className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/10 cursor-pointer transition-all duration-300 hover:rotate-90 active:scale-90"
             >
               <X size={18} />
             </button>
@@ -150,8 +150,13 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({ orde
                             />
                             <div>
                               <strong className="text-white print:text-black block">{it.producto?.nombre || 'Producto'}</strong>
+                              {it.selectedOption && (
+                                <span className="text-[10px] text-amber-300 print:text-stone-800 font-mono block">
+                                  Opción: {it.selectedOption.nombre}
+                                </span>
+                              )}
                               {it.selectedSize && (
-                                <span className="text-[10px] text-amber-300 print:text-stone-800 font-mono">
+                                <span className="text-[10px] text-amber-300 print:text-stone-800 font-mono block">
                                   Talla / Tamaño: {it.selectedSize}
                                 </span>
                               )}

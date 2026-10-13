@@ -149,7 +149,15 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
                       <span className="truncate text-stone-500 font-sans text-[9px]">
                         {c.descripcion ? c.descripcion.slice(0, 24) + '...' : 'Colección'}
                       </span>
-                      <span className="px-1.5 py-0.5 rounded bg-white/5 text-stone-300 font-mono">{count}</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                          count === 0
+                            ? 'bg-[#c5a059]/20 text-[#c5a059] border border-[#c5a059]/30 font-medium'
+                            : 'bg-white/5 text-stone-300 font-mono'
+                        }`}
+                      >
+                        {count === 0 ? 'Próximamente' : count}
+                      </span>
                     </div>
                   </button>
                 );
@@ -162,7 +170,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
               <button
                 type="button"
                 onClick={() => scrollByDirection('left')}
-                className="absolute left-0 top-1/2 -translate-y-1/2 -ml-2 sm:-ml-4 z-20 w-8 h-8 rounded-full bg-[#09090b]/95 border border-white/20 text-[#c5a059] hover:text-white hover:border-[#c5a059] shadow-xl flex items-center justify-center cursor-pointer transition-all backdrop-blur-md"
+                className="absolute left-0 top-1/2 -translate-y-1/2 -ml-2 sm:-ml-4 z-20 w-9 h-9 rounded-full bg-[#09090b]/95 border border-white/20 text-[#c5a059] hover:text-white hover:border-[#c5a059] shadow-2xl flex items-center justify-center cursor-pointer transition-all duration-200 hover:scale-110 active:scale-90 backdrop-blur-md"
                 aria-label="Desplazar categorías hacia la izquierda"
               >
                 <ChevronLeft size={18} />
@@ -176,16 +184,16 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
             <div
               ref={scrollContainerRef}
               onScroll={checkScroll}
-              className="flex items-center justify-start gap-2.5 overflow-x-auto pb-4 pt-1 scrollbar-none scroll-smooth"
+              className="flex items-center justify-start gap-2.5 overflow-x-auto pb-4 pt-1 scrollbar-none scroll-smooth touch-pan-x"
             >
               <button
                 type="button"
                 data-active={selectedCategoryId === 'all'}
                 onClick={() => onSelectCategory('all')}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer flex items-center gap-2 shrink-0 ${
+                className={`px-4 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer flex items-center gap-2 shrink-0 active:scale-95 ${
                   selectedCategoryId === 'all'
-                    ? 'bg-[#c5a059] text-black shadow-lg shadow-[#c5a059]/20 font-bold scale-[1.02]'
-                    : 'bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 hover:text-white border border-white/[0.08]'
+                    ? 'bg-[#c5a059] text-black shadow-lg shadow-[#c5a059]/25 font-bold scale-[1.02] -translate-y-0.5'
+                    : 'bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 hover:text-white border border-white/[0.08] hover:-translate-y-0.5'
                 }`}
               >
                 <span>Todas</span>
@@ -207,19 +215,23 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
                     type="button"
                     data-active={isSelected}
                     onClick={() => onSelectCategory(c.id)}
-                    className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer flex items-center gap-2 shrink-0 capitalize ${
+                    className={`px-4 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer flex items-center gap-2 shrink-0 capitalize active:scale-95 ${
                       isSelected
-                        ? 'bg-[#c5a059] text-black shadow-lg shadow-[#c5a059]/20 font-bold scale-[1.02]'
-                        : 'bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 hover:text-white border border-white/[0.08]'
+                        ? 'bg-[#c5a059] text-black shadow-lg shadow-[#c5a059]/25 font-bold scale-[1.02] -translate-y-0.5'
+                        : 'bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 hover:text-white border border-white/[0.08] hover:-translate-y-0.5'
                     }`}
                   >
                     <span>{c.nombre}</span>
                     <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
-                        isSelected ? 'bg-black/20 text-black' : 'bg-black/40 text-stone-400'
+                      className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${
+                        isSelected
+                          ? 'bg-black/20 text-black font-mono'
+                          : count === 0
+                          ? 'bg-[#c5a059]/20 text-[#c5a059] border border-[#c5a059]/30 font-medium'
+                          : 'bg-black/40 text-stone-400 font-mono'
                       }`}
                     >
-                      {count}
+                      {count === 0 ? 'Próximamente' : count}
                     </span>
                   </button>
                 );
@@ -234,7 +246,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
               <button
                 type="button"
                 onClick={() => scrollByDirection('right')}
-                className="absolute right-0 top-1/2 -translate-y-1/2 -mr-2 sm:-mr-4 z-20 w-8 h-8 rounded-full bg-[#09090b]/95 border border-white/20 text-[#c5a059] hover:text-white hover:border-[#c5a059] shadow-xl flex items-center justify-center cursor-pointer transition-all backdrop-blur-md"
+                className="absolute right-0 top-1/2 -translate-y-1/2 -mr-2 sm:-mr-4 z-20 w-9 h-9 rounded-full bg-[#09090b]/95 border border-white/20 text-[#c5a059] hover:text-white hover:border-[#c5a059] shadow-2xl flex items-center justify-center cursor-pointer transition-all duration-200 hover:scale-110 active:scale-90 backdrop-blur-md"
                 aria-label="Desplazar categorías hacia la derecha"
               >
                 <ChevronRight size={18} />

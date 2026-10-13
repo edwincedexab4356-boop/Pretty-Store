@@ -39,9 +39,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const isOutOfStock = product.stock <= 0;
   const isMaxInCart = inCartQty >= product.stock && product.stock > 0;
 
+  const hasOptions = Boolean(product.opciones && product.opciones.length > 0);
+  const optionsPrices = hasOptions
+    ? product.opciones!.map((o) => (typeof o.precio === 'number' ? o.precio : product.precio))
+    : [product.precio];
+  const minPrice = Math.min(...optionsPrices);
+  const maxPrice = Math.max(...optionsPrices);
+  const hasPriceRange = minPrice !== maxPrice;
+
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isOutOfStock || isMaxInCart) return;
+
+    if (hasOptions && onQuickView) {
+      onQuickView(product);
+      return;
+    }
 
     setIsAdding(true);
     addItem(product, 1);
@@ -91,7 +104,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   return (
     <article
       onClick={() => onQuickView && onQuickView(product)}
-      className="group flex flex-col bg-[#0e0e11] border border-white/[0.07] hover:border-white/[0.2] transition-colors duration-300 cursor-pointer overflow-hidden rounded-sm select-none"
+      className="group flex flex-col bg-[#0e0e11] border border-white/[0.08] hover:border-[#c5a059]/40 hover:shadow-2xl hover:shadow-[#c5a059]/10 transition-all duration-300 hover:-translate-y-1.5 cursor-pointer overflow-hidden rounded-2xl select-none"
     >
       {/* Media Canvas */}
       <div
@@ -108,7 +121,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               loop
               muted
               playsInline
-              className="h-full w-full object-cover object-center group-hover:scale-103 transition-transform duration-500 ease-out"
+              className="h-full w-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
             />
           ) : (
             <img
@@ -116,13 +129,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               src={currentMedia}
               alt={product.nombre}
               onError={() => setImageError(true)}
-              className="h-full w-full object-cover object-center group-hover:scale-103 transition-transform duration-500 ease-out"
+              className="h-full w-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
               loading="lazy"
             />
           )
         ) : (
-          <div className="flex flex-col items-center justify-center text-center p-6 bg-[#121215] w-full h-full select-none">
-            <div className="w-14 h-14 rounded-full border border-white/10 p-0.5 flex items-center justify-center mb-3 bg-black/60 overflow-hidden shadow-inner">
+          <div className="flex flex-col items-center justify-center text-center p-4 sm:p-6 bg-[#121215] w-full h-full select-none">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border border-white/10 p-0.5 flex items-center justify-center mb-2.5 bg-black/60 overflow-hidden shadow-inner group-hover:scale-105 transition-transform">
               <img
                 src="/images/logo/logotipo.jpeg"
                 alt="Pretty Store"
@@ -132,8 +145,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 }}
               />
             </div>
-            <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium">Pretty Store</span>
-            <span className="text-[11px] text-stone-400 mt-1 font-light">Pieza Exclusiva</span>
+            <span className="text-[9px] sm:text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium">Pretty Store</span>
+            <span className="text-[10px] sm:text-[11px] text-stone-400 mt-1 font-light">Pieza Exclusiva</span>
           </div>
         )}
 
@@ -148,17 +161,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         {/* Low Stock Urgent Badge */}
         {!isOutOfStock && product.stock <= 5 && (
           <span
-            className={`absolute ${isVideo ? 'top-10' : 'top-2.5'} right-2.5 px-3 py-1 rounded-full bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 text-white font-black text-[11px] tracking-wider flex items-center gap-1.5 shadow-2xl shadow-red-600/70 border-2 border-yellow-300 z-10 animate-bounce`}
+            className={`absolute ${isVideo ? 'top-10' : 'top-2.5'} right-2.5 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 text-white font-black text-[9px] sm:text-[11px] tracking-wider flex items-center gap-1 shadow-2xl shadow-red-600/70 border-2 border-yellow-300 z-10 animate-bounce`}
           >
-            <span className="text-sm">🔥</span>
+            <span className="text-xs">🔥</span>
             <span>¡QUEDAN {product.stock}!</span>
           </span>
         )}
 
         {/* Promo Badge */}
         {promo && (
-          <span className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded bg-black/85 backdrop-blur-md text-[10px] text-amber-300 flex items-center gap-1.5 border border-[#c5a059]/50 z-10 shadow-lg font-medium tracking-wide">
-            <Sparkles size={11} className="text-[#c5a059]" />
+          <span className="absolute top-2.5 left-2.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-black/85 backdrop-blur-md text-[9px] sm:text-[10px] text-amber-300 flex items-center gap-1 border border-[#c5a059]/50 z-10 shadow-lg font-medium tracking-wide">
+            <Sparkles size={11} className="text-[#c5a059] animate-pulse" />
             <span>{promo.shortBadge || '2 por $55'}</span>
           </span>
         )}
@@ -169,14 +182,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <button
               onClick={handlePrevImg}
               aria-label="Foto anterior"
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/70 hover:bg-black/90 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity border border-white/10 cursor-pointer z-10"
+              className="absolute left-1.5 sm:left-2 top-1/2 -translate-y-1/2 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110 active:scale-90 border border-white/15 cursor-pointer z-10 shadow-md"
             >
               <ChevronLeft size={16} />
             </button>
             <button
               onClick={handleNextImg}
               aria-label="Siguiente foto"
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/70 hover:bg-black/90 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity border border-white/10 cursor-pointer z-10"
+              className="absolute right-1.5 sm:right-2 top-1/2 -translate-y-1/2 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110 active:scale-90 border border-white/15 cursor-pointer z-10 shadow-md"
             >
               <ChevronRight size={16} />
             </button>
@@ -196,7 +209,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         {/* Out of Stock Overlay */}
         {isOutOfStock && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
-            <span className="px-3 py-1 bg-black/90 text-stone-300 text-[10px] uppercase tracking-[0.2em] font-medium border border-white/10">
+            <span className="px-3 py-1 bg-black/90 text-stone-300 text-[10px] uppercase tracking-[0.2em] font-medium border border-white/10 rounded-lg">
               Agotado
             </span>
           </div>
@@ -204,8 +217,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
         {/* Quick View Hover Tag */}
         {!hasMultiple && (
-          <div className="absolute bottom-3 inset-x-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 hidden sm:flex justify-center pointer-events-none">
-            <span className="text-[10px] uppercase tracking-[0.2em] font-medium text-stone-300 bg-black/80 backdrop-blur-sm px-3 py-1.5 border border-white/10">
+          <div className="absolute bottom-3 inset-x-3 opacity-0 group-hover:opacity-100 transition-all duration-300 hidden sm:flex justify-center pointer-events-none translate-y-1 group-hover:translate-y-0">
+            <span className="text-[10px] uppercase tracking-[0.2em] font-medium text-stone-200 bg-black/85 backdrop-blur-sm px-3 py-1.5 border border-white/10 rounded-full shadow-lg">
               Vista Rápida
             </span>
           </div>
@@ -213,42 +226,54 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       </div>
 
       {/* Product Details */}
-      <div className="flex flex-col flex-1 p-5 sm:p-6 space-y-3">
-        <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.2em]">
+      <div className="flex flex-col flex-1 p-3.5 sm:p-5 lg:p-6 space-y-2 sm:space-y-3">
+        <div className="flex items-center justify-between text-[9px] sm:text-[10px] uppercase tracking-[0.2em]">
           <span className="text-[#c5a059] font-medium truncate max-w-[65%]">
             {categoryName || 'Colección'}
           </span>
           {!isOutOfStock && product.stock <= 5 ? (
-            <span className="px-2.5 py-1 rounded-full bg-red-600/30 text-amber-300 border border-red-500/80 font-black text-[10px] tracking-wide flex items-center gap-1 animate-pulse shadow-md shadow-red-600/30">
+            <span className="px-2 py-0.5 rounded-full bg-red-600/30 text-amber-300 border border-red-500/80 font-black text-[9px] tracking-wide flex items-center gap-1 animate-pulse shadow-md shadow-red-600/30">
               <span className="text-xs">⚡</span>
-              <span>¡Solo {product.stock} restantes!</span>
+              <span>¡{product.stock} restantes!</span>
             </span>
           ) : isOutOfStock ? null : (
             <span className="text-emerald-400 font-light flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               <span>Disponible</span>
             </span>
           )}
         </div>
 
-        <h3 className="text-base font-serif-luxury font-normal text-white group-hover:text-stone-100 transition-colors line-clamp-1">
+        <h3 className="text-sm sm:text-base font-serif-luxury font-normal text-white group-hover:text-stone-100 transition-colors line-clamp-1">
           {product.nombre}
         </h3>
 
-        <p className="text-xs text-stone-400 line-clamp-2 leading-relaxed font-light flex-1">
+        <p className="text-[11px] sm:text-xs text-stone-400 line-clamp-2 leading-relaxed font-light flex-1">
           {product.descripcion || 'Pieza exclusiva diseñada con materiales nobles y acabados de primera calidad.'}
         </p>
 
+        {/* Options Badge if product has variants */}
+        {hasOptions && (
+          <div className="flex items-center gap-1.5 text-[9px] text-[#fbbf24] bg-[#fbbf24]/10 border border-[#fbbf24]/25 px-2 py-0.5 rounded-lg w-fit font-medium">
+            <span>🎨</span>
+            <span className="truncate max-w-[140px] sm:max-w-[170px]">
+              {product.opciones!.map((o) => o.nombre).join(' · ')}
+            </span>
+          </div>
+        )}
+
         {/* Price & Add to Cart button */}
-        <div className="pt-3 border-t border-white/[0.07] flex items-center justify-between gap-3">
-          <div className="flex flex-col">
-            <span className="text-[9px] uppercase tracking-[0.2em] text-stone-400 font-light">Precio</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-lg font-mono tabular-nums font-medium text-white">
-                ${product.precio.toFixed(2)}
+        <div className="pt-2.5 sm:pt-3 border-t border-white/[0.07] flex items-center justify-between gap-2 sm:gap-3">
+          <div className="flex flex-col min-w-0">
+            <span className="text-[8px] sm:text-[9px] uppercase tracking-[0.2em] text-stone-400 font-light">
+              {hasPriceRange ? 'Desde' : 'Precio'}
+            </span>
+            <div className="flex items-baseline gap-1 sm:gap-1.5">
+              <span className="text-base sm:text-lg font-mono tabular-nums font-medium text-white">
+                ${minPrice.toFixed(2)}
               </span>
               {promo && (
-                <span className="text-[10px] text-amber-300 font-mono font-medium">
+                <span className="text-[9px] sm:text-[10px] text-amber-300 font-mono font-medium truncate">
                   {promo.shortBadge ? `(${promo.shortBadge})` : '(2x $55)'}
                 </span>
               )}
@@ -258,14 +283,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <button
             onClick={handleAddToCart}
             disabled={isOutOfStock || isMaxInCart}
-            className={`inline-flex items-center justify-center gap-2 px-3.5 py-2 text-[11px] uppercase tracking-[0.16em] font-medium transition-all duration-200 cursor-pointer ${
+            className={`inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 text-[10px] sm:text-[11px] uppercase tracking-[0.16em] font-medium transition-all duration-200 cursor-pointer rounded-xl active:scale-95 ${
               isOutOfStock
                 ? 'bg-stone-900 text-stone-500 border border-white/5 cursor-not-allowed'
                 : isMaxInCart
                 ? 'bg-stone-900 text-stone-400 border border-white/10 cursor-not-allowed'
                 : isAdding
-                ? 'bg-[#c5a059] text-stone-950 font-semibold'
-                : 'bg-white hover:bg-stone-200 text-stone-950 active:scale-95'
+                ? 'bg-[#c5a059] text-stone-950 font-semibold shadow-lg shadow-[#c5a059]/30 scale-105'
+                : 'bg-white hover:bg-stone-200 text-stone-950 hover:shadow-md hover:shadow-white/10'
             }`}
             aria-label={`Añadir ${product.nombre} al carrito`}
           >
@@ -278,6 +303,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               <span>Agotado</span>
             ) : isMaxInCart ? (
               <span>En Carrito</span>
+            ) : hasOptions ? (
+              <>
+                <Sparkles size={13} className="text-[#c5a059]" />
+                <span>Opciones</span>
+              </>
             ) : (
               <>
                 <ShoppingCart size={13} className="stroke-[2]" />

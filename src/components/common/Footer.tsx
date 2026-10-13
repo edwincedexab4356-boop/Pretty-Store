@@ -123,11 +123,11 @@ export const Footer: React.FC<FooterProps> = ({
                 href={config.instagram || 'https://instagram.com/pretty_store_pty'}
                 target="_blank"
                 rel="noreferrer"
-                className="flex flex-col items-center gap-1.5 group text-center min-w-[52px]"
+                className="flex flex-col items-center gap-1.5 group text-center min-w-[52px] active:scale-95 transition-transform"
                 aria-label="Instagram"
                 title="Instagram"
               >
-                <div className="w-9 h-9 rounded-full border border-white/10 group-hover:border-[#fbbf24] text-stone-300 group-hover:text-[#fbbf24] flex items-center justify-center transition-all bg-white/[0.03] group-hover:bg-white/[0.08] shadow-sm">
+                <div className="w-10 h-10 rounded-full border border-white/10 group-hover:border-[#fbbf24] text-stone-300 group-hover:text-[#fbbf24] flex items-center justify-center transition-all duration-200 bg-white/[0.03] group-hover:bg-white/[0.08] shadow-sm group-hover:scale-110 group-hover:-translate-y-0.5">
                   <Instagram size={17} />
                 </div>
                 <span className="text-[10px] text-stone-400 group-hover:text-white transition-colors tracking-tight font-medium">
@@ -139,11 +139,11 @@ export const Footer: React.FC<FooterProps> = ({
                 href="https://www.instagram.com/tienda_prettystore2?stkn=MTR1MGo5YTJ1N3VycQ=="
                 target="_blank"
                 rel="noreferrer"
-                className="flex flex-col items-center gap-1.5 group text-center min-w-[66px]"
+                className="flex flex-col items-center gap-1.5 group text-center min-w-[66px] active:scale-95 transition-transform"
                 aria-label="Instagram (2)"
                 title="Instagram (2)"
               >
-                <div className="w-9 h-9 rounded-full border border-white/10 group-hover:border-[#fbbf24] text-stone-300 group-hover:text-[#fbbf24] flex items-center justify-center transition-all bg-white/[0.03] group-hover:bg-white/[0.08] shadow-sm relative">
+                <div className="w-10 h-10 rounded-full border border-white/10 group-hover:border-[#fbbf24] text-stone-300 group-hover:text-[#fbbf24] flex items-center justify-center transition-all duration-200 bg-white/[0.03] group-hover:bg-white/[0.08] shadow-sm relative group-hover:scale-110 group-hover:-translate-y-0.5">
                   <Instagram size={17} />
                   <span className="absolute -bottom-1 -right-1 text-[8px] font-bold bg-[#fbbf24] text-black w-3.5 h-3.5 rounded-full flex items-center justify-center shadow-sm">
                     2
@@ -158,11 +158,11 @@ export const Footer: React.FC<FooterProps> = ({
                 href={config.tiktok || 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS'}
                 target="_blank"
                 rel="noreferrer"
-                className="flex flex-col items-center gap-1.5 group text-center min-w-[50px]"
+                className="flex flex-col items-center gap-1.5 group text-center min-w-[50px] active:scale-95 transition-transform"
                 aria-label="TikTok"
                 title="TikTok @tienda_prettystore"
               >
-                <div className="w-9 h-9 rounded-full border border-white/10 group-hover:border-white text-stone-300 group-hover:text-white flex items-center justify-center transition-all bg-white/[0.03] group-hover:bg-white/[0.08] shadow-sm">
+                <div className="w-10 h-10 rounded-full border border-white/10 group-hover:border-white text-stone-300 group-hover:text-white flex items-center justify-center transition-all duration-200 bg-white/[0.03] group-hover:bg-white/[0.08] shadow-sm group-hover:scale-110 group-hover:-translate-y-0.5">
                   <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                     <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .58.04.86.12V9.42a6.34 6.34 0 0 0-.86-.06 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V9.08a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.51z" />
                   </svg>

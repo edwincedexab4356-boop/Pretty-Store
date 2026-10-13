@@ -9,6 +9,11 @@ import {
 import { getVoucherImageFromDb } from '../utils/voucherDb';
 import { sortCategoriesByCustomOrder, saveCustomCategoryOrder } from '../utils/categoryOrderUtils';
 import { getPrimaryProductImage } from '../utils/productImages';
+import {
+  decodeProductOptions,
+  encodeProductOptions,
+  saveLocalProductOptions,
+} from '../utils/productOptions';
 
 /* ==================== SUBIDA DE IMÁGENES A SUPABASE STORAGE ==================== */
 export async function uploadProductImageToStorage(file: File): Promise<string> {
@@ -137,7 +142,14 @@ export async function getAdminProducts(): Promise<Producto[]> {
       .order('nombre', { ascending: true });
 
     if (error) throw error;
-    return data || [];
+    return (data || []).map((p: any) => {
+      const { cleanDescription, opciones } = decodeProductOptions(p.descripcion, p.id);
+      return {
+        ...p,
+        descripcion: cleanDescription,
+        opciones,
+      };
+    });
   } catch (err) {
     console.warn('Error fetching admin products:', err);
     return [];
@@ -145,12 +157,14 @@ export async function getAdminProducts(): Promise<Producto[]> {
 }
 
 export async function createAdminProduct(product: Partial<Producto>): Promise<Producto | null> {
+  const encodedDesc = encodeProductOptions(product.descripcion, product.opciones);
+
   const { data, error } = await supabase
     .from('productos')
     .insert({
       categoria_id: product.categoria_id || null,
       nombre: product.nombre,
-      descripcion: product.descripcion || null,
+      descripcion: encodedDesc,
       precio: product.precio || 0,
       costo: product.costo || 0,
       stock: product.stock !== undefined ? product.stock : 10,
@@ -162,16 +176,28 @@ export async function createAdminProduct(product: Partial<Producto>): Promise<Pr
     .single();
 
   if (error) throw error;
-  return data;
+
+  if (data?.id && product.opciones) {
+    saveLocalProductOptions(data.id, product.opciones);
+  }
+
+  const { cleanDescription, opciones } = decodeProductOptions(data.descripcion, data.id);
+  return {
+    ...data,
+    descripcion: cleanDescription,
+    opciones: product.opciones || opciones,
+  };
 }
 
 export async function updateAdminProduct(id: string, product: Partial<Producto>): Promise<Producto | null> {
+  const encodedDesc = encodeProductOptions(product.descripcion, product.opciones);
+
   const { data, error } = await supabase
     .from('productos')
     .update({
       categoria_id: product.categoria_id,
       nombre: product.nombre,
-      descripcion: product.descripcion,
+      descripcion: encodedDesc,
       precio: product.precio,
       costo: product.costo,
       stock: product.stock,
@@ -184,7 +210,17 @@ export async function updateAdminProduct(id: string, product: Partial<Producto>)
     .single();
 
   if (error) throw error;
-  return data;
+
+  if (id && product.opciones) {
+    saveLocalProductOptions(id, product.opciones);
+  }
+
+  const { cleanDescription, opciones } = decodeProductOptions(data.descripcion, data.id);
+  return {
+    ...data,
+    descripcion: cleanDescription,
+    opciones: product.opciones || opciones,
+  };
 }
 
 export async function deleteAdminProduct(id: string): Promise<boolean> {
@@ -268,6 +304,7 @@ export async function getAdminOrders(): Promise<Pedido[]> {
             subtotal: it.subtotal || (it.precio_unitario || it.precio || 0) * (it.quantity || 1),
             producto: mergedProd,
             selectedSize: it.selectedSize || it.talla,
+            selectedOption: it.selectedOption || undefined,
           };
         });
 

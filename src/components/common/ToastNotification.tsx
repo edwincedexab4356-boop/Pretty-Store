@@ -23,7 +23,7 @@ export const ToastNotification: React.FC<ToastNotificationProps> = ({ notificati
         </div>
         <button
           onClick={onOpenCart}
-          className="px-3 py-1.5 rounded-lg bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold text-xs flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
+          className="px-3.5 py-1.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold text-xs flex items-center gap-1.5 shrink-0 transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95 shadow-md shadow-[#c5a059]/20"
         >
           <ShoppingCart size={13} />
           <span>Ver</span>

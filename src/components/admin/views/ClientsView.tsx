@@ -100,7 +100,7 @@ export const ClientsView: React.FC = () => {
           <button
             onClick={handleDeleteAllClients}
             disabled={isLoading || isDeletingAll || clients.length === 0}
-            className="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-40"
+            className="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-2 transition-all duration-200 cursor-pointer disabled:opacity-40 active:scale-95 hover:scale-102"
             title="Eliminar todos los clientes"
           >
             <UserX size={14} className={isDeletingAll ? 'animate-spin' : ''} />
@@ -110,7 +110,7 @@ export const ClientsView: React.FC = () => {
           <button
             onClick={loadClients}
             disabled={isLoading}
-            className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-stone-300 border border-white/10 transition-colors cursor-pointer"
+            className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 active:bg-white/15 text-stone-300 border border-white/10 transition-all duration-200 cursor-pointer active:scale-90 hover:scale-105"
             title="Actualizar clientes"
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />

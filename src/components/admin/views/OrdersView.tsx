@@ -152,7 +152,7 @@ export const OrdersView: React.FC = () => {
           <button
             onClick={handleDeleteAllOrders}
             disabled={isLoading || isDeletingAll || orders.length === 0}
-            className="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-40 shrink-0"
+            className="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-2 transition-all duration-200 cursor-pointer disabled:opacity-40 shrink-0 active:scale-95 hover:scale-102"
             title="Eliminar todos los pedidos"
           >
             <Trash2 size={13} className={isDeletingAll ? 'animate-spin' : ''} />
@@ -162,7 +162,7 @@ export const OrdersView: React.FC = () => {
           <button
             onClick={loadOrders}
             disabled={isLoading}
-            className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-stone-300 text-xs flex items-center gap-2 border border-white/10 transition-colors cursor-pointer shrink-0"
+            className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 active:bg-white/15 text-stone-300 text-xs flex items-center gap-2 border border-white/10 transition-all duration-200 cursor-pointer shrink-0 active:scale-95 hover:scale-102"
           >
             <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
             <span>Actualizar</span>

@@ -129,15 +129,19 @@ export async function createRealOrder(payload: CheckoutPayload): Promise<Checkou
     }
 
     // 3. Insertar Pedido
-    const itemsSummary = payload.items.map((it) => ({
-      producto_id: it.product.id,
-      nombre: it.product.nombre,
-      precio: it.product.precio,
-      imagen_url: it.product.imagen_url || null,
-      cantidad: it.quantity,
-      subtotal: it.subtotal,
-      selectedSize: it.selectedSize || null,
-    }));
+    const itemsSummary = payload.items.map((it) => {
+      const unitPrice = it.selectedOption?.precio ?? it.product.precio;
+      return {
+        producto_id: it.product.id,
+        nombre: it.product.nombre,
+        precio: unitPrice,
+        imagen_url: it.product.imagen_url || null,
+        cantidad: it.quantity,
+        subtotal: it.subtotal,
+        selectedSize: it.selectedSize || null,
+        selectedOption: it.selectedOption || null,
+      };
+    });
 
     const orderInsertPayload: any = {
       cliente_id: clienteId,

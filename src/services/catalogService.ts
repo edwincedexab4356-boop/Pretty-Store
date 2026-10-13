@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { Categoria, Producto } from '../types/database';
 import { sortCategoriesByCustomOrder } from '../utils/categoryOrderUtils';
+import { decodeProductOptions } from '../utils/productOptions';
 
 export async function getActiveCategories(): Promise<Categoria[]> {
   try {
@@ -40,7 +41,14 @@ export async function getActiveProducts(categoryId?: string): Promise<Producto[]
       return [];
     }
 
-    return data || [];
+    return (data || []).map((p: any) => {
+      const { cleanDescription, opciones } = decodeProductOptions(p.descripcion, p.id);
+      return {
+        ...p,
+        descripcion: cleanDescription,
+        opciones,
+      };
+    });
   } catch (err) {
     console.warn('Network error fetching products:', err);
     return [];

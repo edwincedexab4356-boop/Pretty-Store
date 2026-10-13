@@ -166,11 +166,11 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-7 lg:gap-9 text-base lg:text-[17px] font-extrabold tracking-wide">
+          {/* Desktop Navigation - responsive gap for iPad / tablet & desktop */}
+          <nav className="hidden md:flex items-center gap-5 lg:gap-8 text-sm lg:text-[16px] font-extrabold tracking-wide">
             <button
               onClick={() => navigateTo('hero')}
-              className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]"
+              className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)] active:scale-95"
             >
               <span>Inicio</span>
               <span className="absolute bottom-0 left-0 w-0 h-[2.5px] bg-[#fbbf24] group-hover:w-full transition-all duration-300 rounded-full" />
@@ -178,7 +178,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => navigateTo('catalogo')}
-              className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]"
+              className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)] active:scale-95"
             >
               <span>Tienda</span>
               <span className="absolute bottom-0 left-0 w-0 h-[2.5px] bg-[#fbbf24] group-hover:w-full transition-all duration-300 rounded-full" />
@@ -194,20 +194,20 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={handleToggleDropdown}
-                className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group flex items-center gap-1.5 focus:outline-none drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]"
+                className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group flex items-center gap-1.5 focus:outline-none drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)] active:scale-95"
                 aria-expanded={categoriesDropdownOpen}
               >
                 <span>Categorías</span>
                 <ChevronDown
                   size={16}
-                  className={`transition-transform duration-200 ${categoriesDropdownOpen ? 'rotate-180 text-white' : ''}`}
+                  className={`transition-transform duration-300 ${categoriesDropdownOpen ? 'rotate-180 text-white' : ''}`}
                 />
                 <span className="absolute bottom-0 left-0 w-0 h-[2.5px] bg-[#fbbf24] group-hover:w-full transition-all duration-300 rounded-full" />
               </button>
 
               {categoriesDropdownOpen && (
                 <div
-                  className="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-64 z-50 animate-in fade-in slide-in-from-top-1 duration-150"
+                  className="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-64 z-50 animate-slideUp"
                   onMouseEnter={handleMouseEnter}
                   onMouseLeave={handleMouseLeave}
                 >
@@ -220,7 +220,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <button
                       type="button"
                       onClick={() => handleCategorySelect('all')}
-                      className="w-full text-left px-4 py-2.5 text-xs text-stone-300 hover:text-white hover:bg-white/5 transition-colors flex items-center justify-between cursor-pointer border-b border-white/[0.04] shrink-0"
+                      className="w-full text-left px-4 py-2.5 text-xs text-stone-300 hover:text-white hover:bg-white/5 transition-all flex items-center justify-between cursor-pointer border-b border-white/[0.04] shrink-0 active:scale-[0.98]"
                     >
                       <span className="font-semibold text-[#c5a059]">Todas las Colecciones</span>
                       <span className="text-[10px] text-stone-400 font-mono">Ver todas</span>
@@ -235,7 +235,7 @@ export const Header: React.FC<HeaderProps> = ({
                             key={c.id}
                             type="button"
                             onClick={() => handleCategorySelect(c.id)}
-                            className="w-full text-left px-4 py-2 text-xs text-stone-300 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2.5 cursor-pointer"
+                            className="w-full text-left px-4 py-2 text-xs text-stone-300 hover:text-white hover:bg-white/5 transition-all flex items-center gap-2.5 cursor-pointer active:scale-[0.98]"
                           >
                             <span className="w-1.5 h-1.5 rounded-full bg-[#fbbf24] shrink-0" />
                             <span className="capitalize text-stone-200">{c.nombre}</span>
@@ -250,7 +250,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => navigateTo('contacto')}
-              className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]"
+              className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)] active:scale-95"
             >
               <span>Contáctanos</span>
               <span className="absolute bottom-0 left-0 w-0 h-[2.5px] bg-[#fbbf24] group-hover:w-full transition-all duration-300 rounded-full" />
@@ -258,7 +258,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => navigateTo('editoriales')}
-              className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]"
+              className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)] active:scale-95"
             >
               <span>Sobre Nosotros</span>
               <span className="absolute bottom-0 left-0 w-0 h-[2.5px] bg-[#fbbf24] group-hover:w-full transition-all duration-300 rounded-full" />
@@ -266,10 +266,10 @@ export const Header: React.FC<HeaderProps> = ({
           </nav>
 
           {/* Right Actions */}
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => navigateTo('catalogo')}
-              className="p-2 text-stone-300 hover:text-white transition-colors cursor-pointer"
+              className="p-2 text-stone-300 hover:text-white transition-all active:scale-90 cursor-pointer hover:bg-white/5 rounded-full"
               title="Buscar en la tienda"
               aria-label="Buscar en la tienda"
             >
@@ -278,20 +278,27 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => setIsCartOpen(true)}
-              className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-full text-stone-200 hover:text-white hover:bg-white/5 border border-white/10 hover:border-white/20 transition-all cursor-pointer"
+              className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-full text-stone-200 hover:text-white hover:bg-white/10 border border-white/10 hover:border-[#c5a059]/50 transition-all duration-200 cursor-pointer active:scale-95 hover:shadow-lg hover:shadow-[#c5a059]/10 group"
               aria-label={`Carrito de compras (${totalItems} artículos)`}
             >
-              <ShoppingCart size={18} className="stroke-[1.5]" />
-              <span className="text-[11px] font-mono tabular-nums font-medium text-stone-200">{totalItems}</span>
+              <ShoppingCart size={18} className="stroke-[1.5] group-hover:text-[#fbbf24] transition-colors" />
+              <span
+                key={totalItems}
+                className={`text-[11px] font-mono tabular-nums font-semibold px-1.5 py-0.2 rounded-full ${
+                  totalItems > 0 ? 'bg-[#c5a059] text-black animate-popBadge' : 'text-stone-300'
+                }`}
+              >
+                {totalItems}
+              </span>
             </button>
 
             {/* Mobile menu toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-stone-300 hover:text-white md:hidden transition-colors cursor-pointer"
+              className="p-2 text-stone-300 hover:text-white md:hidden transition-all active:scale-90 cursor-pointer hover:bg-white/5 rounded-lg"
               aria-label="Abrir menú de navegación"
             >
-              {mobileMenuOpen ? <X size={22} className="stroke-[1.5]" /> : <Menu size={22} className="stroke-[1.5]" />}
+              {mobileMenuOpen ? <X size={22} className="stroke-[1.5] text-amber-400 rotate-90 transition-transform" /> : <Menu size={22} className="stroke-[1.5]" />}
             </button>
           </div>
         </div>
