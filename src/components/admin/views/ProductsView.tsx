@@ -1,104 +1,73 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Package,
   Plus,
   Search,
-  Filter,
   Edit2,
   Trash2,
-  Upload,
-  Check,
-  X,
-  AlertCircle,
-  CheckCircle2,
   RefreshCw,
-  ExternalLink,
-  DollarSign,
-  Boxes,
   Eye,
   EyeOff,
+  X,
+  Upload,
   Image as ImageIcon,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
   Star,
-  FileSpreadsheet,
-  HelpCircle,
-  Video,
-  Play,
-  ChevronLeft,
-  ChevronRight,
+  ArrowLeft,
+  ArrowRight,
   HardDrive,
 } from 'lucide-react';
+import { Producto, Categoria } from '../../../types/database';
 import {
   getAdminProducts,
   createAdminProduct,
   updateAdminProduct,
   deleteAdminProduct,
-  toggleProductActive,
-  updateProductStock,
   getAdminCategories,
-  uploadProductImageToSupabase,
-  PROJECT_MEDIA_OPTIONS,
-  checkSupabaseStorageAndLimits,
-  SupabaseQuotaReport,
+  uploadProductImageToStorage,
 } from '../../../services/adminService';
-import { Producto, Categoria } from '../../../types/database';
-import { getProductImages, isVideoMedia } from '../../../utils/productImages';
-import { isPermissionError } from '../../../utils/supabaseSqlFix';
-import { PermissionErrorBanner } from '../PermissionErrorBanner';
+import {
+  getProductImages,
+  getPrimaryProductImage,
+  hasProductRealImage,
+} from '../../../utils/productImages';
 
-interface ProductsViewProps {
-  onOpenSqlFix?: (actionDesc?: string) => void;
-  onOpenQuotaModal?: () => void;
-}
-
-export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix, onOpenQuotaModal }) => {
+export const ProductsView: React.FC = () => {
   const [products, setProducts] = useState<Producto[]>([]);
   const [categories, setCategories] = useState<Categoria[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [quotaReport, setQuotaReport] = useState<SupabaseQuotaReport | null>(null);
-
-  // Filters
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'out_of_stock'>('all');
+  const [categoryFilter, setCategoryFilter] = useState('');
 
-  // Modal State
+  // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Producto | null>(null);
-  const [isDeleting, setIsDeleting] = useState<Producto | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [showBulkGuide, setShowBulkGuide] = useState(false);
 
-  // Form fields
+  // Form Fields
   const [formName, setFormName] = useState('');
-  const [formDescription, setFormDescription] = useState('');
-  const [formPrice, setFormPrice] = useState<number | string>('');
-  const [formStock, setFormStock] = useState<number | string>(10);
   const [formCategory, setFormCategory] = useState('');
+  const [formPrice, setFormPrice] = useState('25.00');
+  const [formCost, setFormCost] = useState('12.00');
+  const [formStock, setFormStock] = useState('10');
+  const [formDescription, setFormDescription] = useState('');
   const [formImageUrl, setFormImageUrl] = useState('');
-  const [formImages, setFormImages] = useState<string[]>([]);
+  const [formGallery, setFormGallery] = useState<string[]>([]);
   const [formActive, setFormActive] = useState(true);
 
-  // File upload state
-  const [isUploadingFiles, setIsUploadingFiles] = useState(false);
-  const [uploadProgressText, setUploadProgressText] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Inline stock editing
-  const [editingStockId, setEditingStockId] = useState<string | null>(null);
-  const [tempStockValue, setTempStockValue] = useState<number>(0);
+  // Image Upload State
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [prods, cats] = await Promise.all([
-        getAdminProducts(),
-        getAdminCategories(),
-      ]);
-      setProducts(prods);
-      setCategories(cats);
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err?.message || 'Error al cargar productos.' });
+      const [p, c] = await Promise.all([getAdminProducts(), getAdminCategories()]);
+      setProducts(p);
+      setCategories(c);
     } finally {
       setIsLoading(false);
     }
@@ -106,435 +75,152 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix, onOpen
 
   useEffect(() => {
     loadData();
-    checkSupabaseStorageAndLimits()
-      .then((rep) => setQuotaReport(rep))
-      .catch(() => {});
   }, []);
 
   const openCreateModal = () => {
     setEditingProduct(null);
     setFormName('');
-    setFormDescription('');
-    setFormPrice('');
-    setFormStock(10);
     setFormCategory(categories[0]?.id || '');
+    setFormPrice('25.00');
+    setFormCost('12.00');
+    setFormStock('10');
+    setFormDescription('');
     setFormImageUrl('');
-    setFormImages([]);
+    setFormGallery([]);
     setFormActive(true);
+    setUploadError(null);
     setIsModalOpen(true);
-    setActionMessage(null);
   };
 
-  const openEditModal = (prod: Producto) => {
-    setEditingProduct(prod);
-    setFormName(prod.nombre);
-    setFormDescription(prod.descripcion || '');
-    setFormPrice(prod.precio);
-    setFormStock(prod.stock);
-    setFormCategory(prod.categoria_id);
-    const parsedImages = getProductImages(prod);
-    setFormImages(parsedImages);
-    setFormImageUrl(parsedImages[0] || prod.imagen_url || '');
-    setFormActive(prod.activo);
+  const openEditModal = (p: Producto) => {
+    setEditingProduct(p);
+    setFormName(p.nombre);
+    setFormCategory(p.categoria_id || '');
+    setFormPrice(p.precio.toString());
+    setFormCost(p.costo.toString());
+    setFormStock(p.stock.toString());
+    setFormDescription(p.descripcion || '');
+    const allProdImages = getProductImages(p);
+    const primaryImg = allProdImages[0] || '';
+    const otherImgs = allProdImages.slice(1);
+    setFormImageUrl(primaryImg);
+    setFormGallery(otherImgs);
+    setFormActive(p.activo);
+    setUploadError(null);
     setIsModalOpen(true);
-    setActionMessage(null);
   };
 
-  const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    const rawFiles = Array.from(files);
-    const validFiles: File[] = [];
-    const oversizedVideos: File[] = [];
+    setIsUploadingImage(true);
+    setUploadError(null);
 
-    for (const f of rawFiles) {
-      const isVid = f.type.startsWith('video/') || f.name.match(/\.(mp4|webm|mov|m4v|mkv|avi)$/i);
-      if (isVid && f.size > 10 * 1024 * 1024) {
-        oversizedVideos.push(f);
-      } else {
-        validFiles.push(f);
-      }
-    }
-
-    if (oversizedVideos.length > 0) {
-      const names = oversizedVideos
-        .map((f) => `"${f.name}" (${(f.size / (1024 * 1024)).toFixed(1)}MB)`)
-        .join(', ');
-      setActionMessage({
-        type: 'error',
-        text: `No se permite agregar videos mayores de 10MB: ${names}. Para mantener la tienda rápida y evitar lentitud al guardar, solo se aceptan videos de hasta 10MB.`,
-      });
-
-      if (validFiles.length === 0) {
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        return;
-      }
-    }
-
-    setIsUploadingFiles(true);
-    setUploadProgressText(`Preparando ${validFiles.length} archivo(s)...`);
-
-    const newUrls: string[] = [];
     try {
-      for (let i = 0; i < validFiles.length; i++) {
-        const file = validFiles[i];
-        const url = await uploadProductImageToSupabase(file, (status) => {
-          setUploadProgressText(`(${i + 1}/${validFiles.length}): ${status}`);
-        });
-        newUrls.push(url);
-      }
-
-      setFormImages((prev) => [...prev, ...newUrls]);
-      if (!formImageUrl && newUrls.length > 0) {
-        setFormImageUrl(newUrls[0]);
-      }
-
-      setActionMessage({
-        type: 'success',
-        text: `¡${newUrls.length} archivo(s) guardados exitosamente en Supabase Storage!`,
-      });
+      const publicUrl = await uploadProductImageToStorage(file);
+      setFormImageUrl(publicUrl);
     } catch (err: any) {
-      setActionMessage({
-        type: 'error',
-        text: `Error al procesar archivos: ${err?.message || 'Verifica los permisos en Supabase'}`,
-      });
+      setUploadError(err?.message || 'Error al subir la imagen a Supabase');
     } finally {
-      setIsUploadingFiles(false);
-      setUploadProgressText('');
+      setIsUploadingImage(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const handleSetPrimaryImage = (index: number) => {
-    setFormImages((prev) => {
-      const copy = [...prev];
-      const [item] = copy.splice(index, 1);
-      copy.unshift(item);
-      return copy;
-    });
-  };
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-  const handleMoveImageLeft = (index: number) => {
-    if (index <= 0) return;
-    setFormImages((prev) => {
-      const copy = [...prev];
-      const temp = copy[index - 1];
-      copy[index - 1] = copy[index];
-      copy[index] = temp;
-      return copy;
-    });
-  };
+    setIsUploadingImage(true);
+    setUploadError(null);
 
-  const handleMoveImageRight = (index: number) => {
-    setFormImages((prev) => {
-      if (index >= prev.length - 1) return prev;
-      const copy = [...prev];
-      const temp = copy[index + 1];
-      copy[index + 1] = copy[index];
-      copy[index] = temp;
-      return copy;
-    });
-  };
-
-  const handleRemoveImage = (index: number) => {
-    setFormImages((prev) => prev.filter((_, idx) => idx !== index));
-  };
-
-  const handleAddManualImageUrl = () => {
-    if (!formImageUrl.trim()) return;
-    if (!formImages.includes(formImageUrl.trim())) {
-      setFormImages((prev) => [...prev, formImageUrl.trim()]);
+    try {
+      const uploadPromises = Array.from(files).map((f) => uploadProductImageToStorage(f));
+      const urls = await Promise.all(uploadPromises);
+      setFormGallery((prev) => [...prev, ...urls]);
+    } catch (err: any) {
+      setUploadError(err?.message || 'Error al subir fotos adicionales');
+    } finally {
+      setIsUploadingImage(false);
+      if (galleryInputRef.current) galleryInputRef.current.value = '';
     }
-    setFormImageUrl('');
+  };
+
+  const removeGalleryImage = (index: number) => {
+    setFormGallery((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formName.trim() || !formCategory || formPrice === '') {
-      setActionMessage({ type: 'error', text: 'Nombre, categoría y precio son obligatorios.' });
-      return;
-    }
-
-    const finalImages = [...formImages];
-    if (formImageUrl.trim() && !finalImages.includes(formImageUrl.trim())) {
-      finalImages.push(formImageUrl.trim());
-    }
-
     setIsSubmitting(true);
     try {
+      const allImages = [
+        ...(formImageUrl.trim() ? [formImageUrl.trim()] : []),
+        ...formGallery.filter((url) => Boolean(url && url.trim())),
+      ];
+
+      const payload: Partial<Producto> = {
+        nombre: formName.trim(),
+        categoria_id: formCategory || null,
+        precio: parseFloat(formPrice) || 0,
+        costo: parseFloat(formCost) || 0,
+        stock: parseInt(formStock, 10) || 0,
+        descripcion: formDescription.trim() || null,
+        imagen_url: formImageUrl.trim() || null,
+        imagenes: allImages,
+        activo: formActive,
+      };
+
       if (editingProduct) {
-        const updated = await updateAdminProduct(editingProduct.id, {
-          nombre: formName,
-          descripcion: formDescription,
-          precio: Number(formPrice),
-          costo: 0,
-          stock: Number(formStock) || 0,
-          categoria_id: formCategory,
-          imagen_url: finalImages[0] || '',
-          imagenes: finalImages,
-          activo: formActive,
-        });
-
-        // Actualización optimista inmediata en interfaz (sin congelar modal)
-        setProducts((prev) =>
-          prev.map((p) =>
-            p.id === editingProduct.id
-              ? {
-                  ...p,
-                  ...updated,
-                  imagen_url: finalImages[0] || '',
-                  imagenes: finalImages,
-                  categoria: categories.find((c) => String(c.id) === String(formCategory)) || p.categoria,
-                }
-              : p
-          )
-        );
-
-        setActionMessage({ type: 'success', text: '¡Producto actualizado al instante en Supabase!' });
+        await updateAdminProduct(editingProduct.id, payload);
       } else {
-        const created = await createAdminProduct({
-          nombre: formName,
-          descripcion: formDescription,
-          precio: Number(formPrice),
-          costo: 0,
-          stock: Number(formStock) || 0,
-          categoria_id: formCategory,
-          imagen_url: finalImages[0] || '',
-          imagenes: finalImages,
-          activo: formActive,
-        });
-
-        // Inserción optimista inmediata
-        const cat = categories.find((c) => String(c.id) === String(formCategory));
-        setProducts((prev) => [
-          {
-            ...created,
-            categoria: cat,
-            imagen_url: finalImages[0] || '',
-            imagenes: finalImages,
-          },
-          ...prev,
-        ]);
-
-        setActionMessage({ type: 'success', text: '¡Producto creado y guardado en Supabase a máxima velocidad!' });
+        await createAdminProduct(payload);
       }
 
       setIsModalOpen(false);
-      // Sincronización en segundo plano sin bloquear al usuario
-      loadData();
+      await loadData();
     } catch (err: any) {
-      setActionMessage({ type: 'error', text: err?.message || 'Error al guardar producto.' });
+      alert('Error al guardar el producto en Supabase: ' + err?.message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleToggleActive = async (prod: Producto) => {
-    const nextState = !prod.activo;
-    try {
-      await toggleProductActive(prod.id, nextState);
-      setProducts((prev) =>
-        prev.map((p) => (p.id === prod.id ? { ...p, activo: nextState } : p))
-      );
-      setActionMessage({
-        type: 'success',
-        text: nextState
-          ? `"${prod.nombre}" ahora está ACTIVO y visible en la tienda.`
-          : `"${prod.nombre}" ahora está OCULTO de la tienda (no se mostrará a los clientes).`,
-      });
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err?.message || 'Error al cambiar estado.' });
-    }
+  const handleDelete = async (p: Producto) => {
+    if (!window.confirm(`¿Seguro que deseas eliminar "${p.nombre}"?`)) return;
+    await deleteAdminProduct(p.id);
+    setProducts((prev) => prev.filter((item) => item.id !== p.id));
   };
 
-  const handleSaveStock = async (prodId: string) => {
-    try {
-      await updateProductStock(prodId, tempStockValue);
-      setProducts((prev) =>
-        prev.map((p) => (p.id === prodId ? { ...p, stock: tempStockValue } : p))
-      );
-      setEditingStockId(null);
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err?.message || 'Error al guardar stock.' });
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!isDeleting) return;
-    try {
-      const res = await deleteAdminProduct(isDeleting.id, isDeleting);
-      const photoText = res?.photosDeleted
-        ? ` y sus ${res.photosDeleted} foto(s) en Supabase Storage han sido eliminadas automáticamente.`
-        : ' y sus fotos en Supabase Storage han sido eliminadas.';
-      setActionMessage({
-        type: 'success',
-        text: `Producto "${isDeleting.nombre}"${photoText}`,
-      });
-      setProducts((prev) => prev.filter((p) => p.id !== isDeleting.id));
-      setIsDeleting(null);
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err?.message || 'Error al eliminar producto.' });
-    }
-  };
-
-  // Filtered list
   const filteredProducts = products.filter((p) => {
-    const matchesSearch =
-      p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.descripcion && p.descripcion.toLowerCase().includes(searchTerm.toLowerCase()));
-
-    const matchesCategory = selectedCategory === 'all' || p.categoria_id === selectedCategory;
-
-    let matchesStatus = true;
-    if (statusFilter === 'active') matchesStatus = p.activo;
-    if (statusFilter === 'inactive') matchesStatus = !p.activo;
-    if (statusFilter === 'out_of_stock') matchesStatus = p.stock <= 0;
-
-    return matchesSearch && matchesCategory && matchesStatus;
+    const matchesSearch = p.nombre.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCat = categoryFilter ? p.categoria_id === categoryFilter : true;
+    return matchesSearch && matchesCat;
   });
-
-  const formatMoney = (val: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-    }).format(val);
-  };
 
   return (
     <div className="space-y-6">
-      {/* Toast Notification / Permission Alert */}
-      {actionMessage && isPermissionError(actionMessage.text) ? (
-        <PermissionErrorBanner
-          errorMessage={actionMessage.text}
-          onOpenFixModal={() => onOpenSqlFix?.('Permisos en tabla productos')}
-          onDismiss={() => setActionMessage(null)}
-        />
-      ) : actionMessage ? (
-        <div
-          className={`p-4 rounded-2xl flex items-center justify-between gap-3 text-xs ${
-            actionMessage.type === 'success'
-              ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
-              : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {actionMessage.type === 'success' ? (
-              <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-            ) : (
-              <AlertCircle size={16} className="text-rose-400 shrink-0" />
-            )}
-            <span>{actionMessage.text}</span>
+      {/* Top Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-72">
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
+            <input
+              type="text"
+              placeholder="Buscar productos..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-black/60 border border-white/10 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-[#c5a059]"
+            />
           </div>
-          <button
-            onClick={() => setActionMessage(null)}
-            className="p-1 hover:bg-black/20 rounded cursor-pointer"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      ) : null}
 
-      {/* Header and Controls */}
-      <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block mb-1">
-            Inventario Maestro
-          </span>
-          <h2 className="text-xl sm:text-2xl font-serif-luxury font-semibold text-white tracking-wide">
-            Catálogo de Productos ({filteredProducts.length})
-          </h2>
-          <p className="text-xs text-stone-400 mt-1 font-light">
-            Gestión de catálogo, activos multimedia (fotos y videos) y existencias en tiempo real.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5 self-start md:self-auto flex-wrap">
-          {onOpenQuotaModal && (
-            <button
-              onClick={onOpenQuotaModal}
-              className={`px-3.5 py-2.5 rounded-xl border text-xs font-medium flex items-center justify-center gap-2 cursor-pointer transition-colors ${
-                quotaReport?.isApproachingLimit
-                  ? 'bg-amber-500/15 border-amber-500/30 text-amber-300'
-                  : 'bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 border-white/[0.08]'
-              }`}
-              title="Monitorear almacenamiento de Storage (1 GB) y Tablas de Base de Datos (500 MB)"
-            >
-              <HardDrive size={15} className="text-[#c5a059]" />
-              <span>Almacenamiento & Tablas</span>
-              {quotaReport && (
-                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
-                  quotaReport.status === 'critical'
-                    ? 'bg-rose-500/20 text-rose-300'
-                    : quotaReport.status === 'alert'
-                    ? 'bg-amber-500/20 text-amber-300'
-                    : 'bg-emerald-500/20 text-emerald-300'
-                }`}>
-                  {quotaReport.storageUsedMB} MB ({quotaReport.storagePercent}%)
-                </span>
-              )}
-            </button>
-          )}
-
-          <button
-            onClick={() => setShowBulkGuide(true)}
-            className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 font-medium text-xs border border-white/[0.08] flex items-center justify-center gap-2 cursor-pointer transition-colors"
-            title="Cómo cargar tus 500 productos"
-          >
-            <HelpCircle size={15} />
-            <span>Guía 500 Productos</span>
-          </button>
-
-          <button
-            onClick={openCreateModal}
-            className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors"
-          >
-            <Plus size={16} />
-            <span>Nuevo Producto</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Quota Warning Banner if approaching storage limit */}
-      {quotaReport?.isApproachingLimit && (
-        <div
-          onClick={onOpenQuotaModal}
-          className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-xs text-amber-200 cursor-pointer hover:bg-amber-500/15 transition-colors"
-        >
-          <div className="flex items-center gap-2.5">
-            <AlertCircle size={16} className="text-amber-400 shrink-0" />
-            <span>{quotaReport.message}</span>
-          </div>
-          <span className="font-semibold underline shrink-0 text-amber-300 text-[11px]">
-            Ver detalle y consejos →
-          </span>
-        </div>
-      )}
-
-      {/* Filter and Search Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Search */}
-        <div className="relative">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
-          <input
-            type="text"
-            placeholder="Buscar por nombre, SKU..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-[#c5a059] transition-colors"
-          />
-        </div>
-
-        {/* Category Filter */}
-        <div>
           <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-[#0e0e12] border border-white/10 text-xs text-stone-200 focus:outline-none focus:border-[#c5a059] cursor-pointer transition-colors"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-xs text-stone-300 focus:outline-none focus:border-[#c5a059]"
           >
-            <option value="all">Todas las Categorías</option>
+            <option value="">Todas las categorías</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.nombre}
@@ -543,705 +229,418 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ onOpenSqlFix, onOpen
           </select>
         </div>
 
-        {/* Status Filter */}
-        <div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-[#0e0e12] border border-white/10 text-xs text-stone-200 focus:outline-none focus:border-[#c5a059] cursor-pointer transition-colors"
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <button
+            onClick={openCreateModal}
+            className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-lg shadow-[#c5a059]/20"
           >
-            <option value="all">Todos los Estados</option>
-            <option value="active">🟢 Solo Activos (Visibles en Tienda)</option>
-            <option value="inactive">👁️‍🗨️ Solo Ocultos (No se muestran)</option>
-            <option value="out_of_stock">⚠️ Solo Agotados (Stock 0)</option>
-          </select>
+            <Plus size={15} />
+            <span>Nuevo Producto</span>
+          </button>
+          <button
+            onClick={loadData}
+            disabled={isLoading}
+            className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-stone-300 border border-white/10 transition-colors cursor-pointer"
+            title="Recargar catálogo"
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          </button>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl shadow-xl overflow-hidden">
-        {isLoading ? (
-          <div className="p-12 text-center text-xs text-[#c5a059] flex items-center justify-center gap-2">
-            <RefreshCw size={16} className="animate-spin text-[#c5a059]" />
-            <span>Sincronizando con Supabase...</span>
-          </div>
-        ) : filteredProducts.length === 0 ? (
-          <div className="p-12 text-center text-xs text-stone-400 space-y-3">
-            <Package size={36} className="mx-auto text-stone-600 mb-2" />
-            <p className="font-semibold text-white text-sm">No hay productos que coincidan</p>
-            <p className="text-stone-500 max-w-sm mx-auto font-light">
-              Haz clic en "Nuevo Producto" para registrar tu primer artículo con fotos y precio.
-            </p>
-            <button
-              onClick={openCreateModal}
-              className="mt-2 px-4 py-2 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
-            >
-              <Plus size={14} />
-              <span>Registrar Producto</span>
-            </button>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-white/[0.02] text-stone-400 uppercase text-[10px] font-medium border-b border-white/[0.06]">
+      {/* Products Table */}
+      <div className="bg-[#100f14] border border-white/10 rounded-2xl overflow-hidden shadow-xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-white/10 text-[10px] uppercase tracking-wider text-stone-400 bg-black/40">
+                <th className="py-3 px-4">Producto & Foto</th>
+                <th className="py-3 px-4">Categoría</th>
+                <th className="py-3 px-4 text-right">Precio</th>
+                <th className="py-3 px-4 text-center">Stock</th>
+                <th className="py-3 px-4">Estado</th>
+                <th className="py-3 px-4 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5 text-stone-300">
+              {isLoading ? (
                 <tr>
-                  <th className="py-3.5 px-4">Producto</th>
-                  <th className="py-3.5 px-4">Categoría</th>
-                  <th className="py-3.5 px-4">Precio</th>
-                  <th className="py-3.5 px-4">Stock</th>
-                  <th className="py-3.5 px-4">Estado</th>
-                  <th className="py-3.5 px-4 text-right">Acciones</th>
+                  <td colSpan={6} className="py-12 text-center text-stone-500">
+                    Cargando catálogo...
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.04]">
-                {filteredProducts.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
-                    {/* Image & Name */}
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-3">
-                        {p.imagen_url ? (
-                          <img
-                            src={p.imagen_url}
-                            alt={p.nombre}
-                            className="w-11 h-11 rounded-xl object-cover bg-slate-950 shrink-0 border border-slate-800"
-                          />
-                        ) : (
-                          <div className="w-11 h-11 rounded-xl bg-slate-800 flex items-center justify-center text-slate-500 shrink-0">
-                            <Package size={18} />
+              ) : filteredProducts.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-stone-500">
+                    No se encontraron productos.
+                  </td>
+                </tr>
+              ) : (
+                filteredProducts.map((p) => {
+                  const cat = categories.find((c) => c.id === p.categoria_id);
+                  const hasRealImg = hasProductRealImage(p);
+                  const displayImg = getPrimaryProductImage(p, '/images/logo/logotipo.jpeg');
+                  const prodImages = getProductImages(p);
+
+                  return (
+                    <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-black/60 border border-white/10 shrink-0 flex items-center justify-center">
+                            {hasRealImg ? (
+                              <img
+                                src={displayImg}
+                                alt={p.nombre}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).src = '/images/logo/logotipo.jpeg';
+                                }}
+                              />
+                            ) : (
+                              <img
+                                src="/images/logo/logotipo.jpeg"
+                                alt="Pretty Store"
+                                className="w-full h-full object-cover opacity-90"
+                              />
+                            )}
+                            {prodImages.length > 1 && (
+                              <span className="absolute bottom-0 right-0 bg-black/80 text-[9px] font-mono text-amber-300 px-1 rounded-tl">
+                                +{prodImages.length - 1}
+                              </span>
+                            )}
                           </div>
-                        )}
-                        <div className="min-w-0">
-                          <p className="font-bold text-white truncate max-w-[200px]">
-                            {p.nombre}
-                          </p>
-                          <p className="text-[11px] text-slate-400 truncate max-w-[220px]">
-                            {p.descripcion || 'Sin descripción'}
-                          </p>
+                          <div>
+                            <strong className="text-white block font-medium">{p.nombre}</strong>
+                            <span className="text-[11px] text-stone-400 font-light truncate max-w-xs block">
+                              {p.descripcion || '—'}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Category */}
-                    <td className="py-3 px-4 text-slate-300">
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[11px]">
-                        {p.categoria?.nombre || 'General'}
-                      </span>
-                    </td>
+                      <td className="py-3 px-4 text-stone-400 font-medium">
+                        {cat?.nombre || 'Sin categoría'}
+                      </td>
 
-                    {/* Price */}
-                    <td className="py-3 px-4 font-mono font-bold text-white">
-                      {formatMoney(p.precio)}
-                    </td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-white">
+                        ${p.precio.toFixed(2)}
+                      </td>
 
-                    {/* Stock Quick Edit */}
-                    <td className="py-3 px-4">
-                      {editingStockId === p.id ? (
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            min="0"
-                            value={tempStockValue}
-                            onChange={(e) => setTempStockValue(Number(e.target.value))}
-                            className="w-16 px-2 py-1 bg-slate-950 border border-amber-500 rounded text-xs text-white font-mono"
-                          />
-                          <button
-                            onClick={() => handleSaveStock(p.id)}
-                            className="p-1 bg-amber-500 text-slate-950 rounded hover:bg-amber-400 cursor-pointer"
-                          >
-                            <Check size={13} />
-                          </button>
-                          <button
-                            onClick={() => setEditingStockId(null)}
-                            className="p-1 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 cursor-pointer"
-                          >
-                            <X size={13} />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`font-mono font-bold ${
-                              p.stock <= 0
-                                ? 'text-rose-400'
-                                : p.stock <= 5
-                                ? 'text-amber-400'
-                                : 'text-emerald-400'
-                            }`}
-                          >
-                            {p.stock}
-                          </span>
-                          <button
-                            onClick={() => {
-                              setEditingStockId(p.id);
-                              setTempStockValue(p.stock);
-                            }}
-                            className="text-[10px] text-slate-500 hover:text-amber-400 cursor-pointer"
-                            title="Modificar stock"
-                          >
-                            (Editar)
-                          </button>
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Status: Activo vs Oculto */}
-                    <td className="py-3 px-4">
-                      <button
-                        onClick={() => handleToggleActive(p)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
-                          p.activo
-                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25'
-                            : 'bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25'
-                        }`}
-                        title={p.activo ? 'Clic para Ocultar este producto de la tienda' : 'Clic para Hacer Activo y visible en la tienda'}
-                      >
-                        {p.activo ? (
-                          <>
-                            <Eye size={12} className="text-emerald-400" />
-                            <span>Activo</span>
-                          </>
-                        ) : (
-                          <>
-                            <EyeOff size={12} className="text-amber-400" />
-                            <span>Oculto</span>
-                          </>
-                        )}
-                      </button>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => openEditModal(p)}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                          title="Editar producto"
+                      <td className="py-3 px-4 text-center">
+                        <span
+                          className={`font-mono font-bold px-2.5 py-0.5 rounded-full text-[11px] ${
+                            p.stock <= 0
+                              ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                              : p.stock <= 5
+                              ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                              : 'bg-emerald-500/10 text-emerald-400'
+                          }`}
                         >
-                          <Edit2 size={14} />
-                        </button>
-                        <button
-                          onClick={() => setIsDeleting(p)}
-                          className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
-                          title="Eliminar producto"
+                          {p.stock}
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-4">
+                        <span
+                          className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
+                            p.activo ? 'text-emerald-400' : 'text-stone-500'
+                          }`}
                         >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                          {p.activo ? <Eye size={12} /> : <EyeOff size={12} />}
+                          <span>{p.activo ? 'Activo' : 'Oculto'}</span>
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => openEditModal(p)}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-stone-300 hover:text-white transition-colors cursor-pointer"
+                            title="Editar producto e imagen"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p)}
+                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
+                            title="Eliminar producto"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* CREATE / EDIT MODAL */}
+      {/* Create / Edit Modal with Supabase Image Upload */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-3xl lg:max-w-4xl p-6 sm:p-8 shadow-2xl relative max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
-              <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400 block">
-                  {editingProduct ? 'Modificar Producto' : 'Nuevo Registro'}
-                </span>
-                <h3 className="text-xl sm:text-2xl font-bold text-white font-serif-luxury">
-                  {editingProduct ? 'Editar Producto' : 'Agregar Producto a la Tienda'}
-                </h3>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="bg-[#100f14] border border-white/10 rounded-3xl w-full max-w-xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-white/10 flex items-center justify-between bg-black/40 shrink-0">
+              <h3 className="font-serif-luxury font-bold text-white text-base">
+                {editingProduct ? 'Editar Producto' : 'Crear Producto'}
+              </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                className="p-2 rounded-xl text-stone-400 hover:text-white cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2">
-                  <label className="block text-slate-300 font-semibold mb-1">Nombre del Producto *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ej. Gorra Edición Limitada New Era / Reloj Cronógrafo"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-slate-300 font-semibold mb-1">Descripción & Detalles</label>
-                  <textarea
-                    rows={2}
-                    placeholder="Materiales, detalles de costura, características y observaciones..."
-                    value={formDescription}
-                    onChange={(e) => setFormDescription(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 resize-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Precio de Venta ($) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                    placeholder="35.00"
-                    value={formPrice}
-                    onChange={(e) => setFormPrice(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Stock Disponible *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={formStock}
-                    onChange={(e) => setFormStock(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-slate-300 font-semibold mb-1">Categoría *</label>
-                  <select
-                    required
-                    value={formCategory}
-                    onChange={(e) => setFormCategory(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-amber-500 cursor-pointer"
-                  >
-                    <option value="">Selecciona categoría</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Carrusel de Imágenes y Videos: Subida desde Archivos y Supabase Storage */}
-              <div className="space-y-3 p-4 rounded-2xl bg-slate-950 border border-slate-800">
+            <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+              {/* Product Image Upload Section */}
+              <div className="p-4 rounded-2xl bg-black/40 border border-white/10 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <label className="block text-slate-200 font-semibold text-xs flex items-center gap-1.5">
-                      <span>Galería / Carrusel ({formImages.length} fotos y videos)</span>
-                      <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-normal">
-                        Fotos + Videos permitidos
-                      </span>
-                    </label>
-                    <span className="text-[10px] text-slate-400">
-                      Puedes ordenar las fotos con las flechas ◀ ▶ y marcar tu foto favorita como Portada ⭐.
-                    </span>
-                  </div>
-                  {onOpenQuotaModal && (
-                    <button
-                      type="button"
-                      onClick={onOpenQuotaModal}
-                      className="text-[10px] text-amber-400 font-mono hover:underline cursor-pointer flex items-center gap-1"
-                    >
-                      <HardDrive size={11} />
-                      <span>{quotaReport ? `${quotaReport.storageUsedMB} MB / 1GB` : 'Storage CDN'}</span>
-                    </button>
-                  )}
-                </div>
-
-                {/* Botón de Carga de Archivos */}
-                <div className="flex items-center gap-3">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*,video/*,.mp4,.webm,.mov,.m4v"
-                    onChange={handleFilesSelected}
-                    className="hidden"
-                    id="product-images-input"
-                  />
-                  <label
-                    htmlFor="product-images-input"
-                    className={`flex-1 py-3 px-4 rounded-xl border border-dashed text-center cursor-pointer transition-all flex items-center justify-center gap-2 ${
-                      isUploadingFiles
-                        ? 'border-amber-500 bg-amber-500/10 text-amber-300'
-                        : 'border-slate-700 hover:border-amber-500/60 bg-slate-900/60 text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    {isUploadingFiles ? (
-                      <>
-                        <RefreshCw size={15} className="animate-spin text-amber-400" />
-                        <span className="text-xs font-medium">{uploadProgressText}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Upload size={15} className="text-amber-400" />
-                        <span className="text-xs font-medium">
-                          + Seleccionar Fotos o Videos desde tus Archivos
-                        </span>
-                      </>
-                    )}
+                  <label className="text-stone-300 font-semibold block">
+                    Foto Principal del Producto
                   </label>
+                  <span className="text-[10px] text-[#c5a059] uppercase tracking-wider font-mono">
+                    Supabase Storage
+                  </span>
                 </div>
 
-                {/* Galería de imágenes y videos cargados con reordenamiento y favorita */}
-                {formImages.length > 0 && (
-                  <div className="space-y-2 pt-2">
-                    <div className="flex items-center justify-between text-[10px] text-slate-400">
-                      <span className="uppercase font-bold tracking-wider">
-                        Fotos en orden de visualización:
-                      </span>
-                      <span className="text-[#c5a059]">
-                        La foto #1 con ⭐ es la Portada principal de la tienda
-                      </span>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  {/* Preview Container */}
+                  <div className="relative w-24 h-24 rounded-2xl bg-black/80 border border-white/15 overflow-hidden flex items-center justify-center shrink-0 shadow-md">
+                    {formImageUrl ? (
+                      <img
+                        src={formImageUrl}
+                        alt="Vista previa"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = '/images/logo/logotipo.jpeg';
+                        }}
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-stone-500 text-center p-2">
+                        <ImageIcon size={22} className="mb-1 text-stone-600" />
+                        <span className="text-[9px]">Sin foto</span>
+                      </div>
+                    )}
+
+                    {isUploadingImage && (
+                      <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-[#c5a059] gap-1">
+                        <Loader2 size={20} className="animate-spin" />
+                        <span className="text-[9px] font-mono">Subiendo...</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Upload Controls */}
+                  <div className="flex-1 space-y-2 w-full">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleFileUpload}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploadingImage}
+                        className="px-4 py-2 rounded-xl bg-[#c5a059]/15 hover:bg-[#c5a059]/25 text-[#c5a059] border border-[#c5a059]/30 font-semibold text-xs flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        <Upload size={14} />
+                        <span>Subir desde dispositivo</span>
+                      </button>
+
+                      {formImageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setFormImageUrl('')}
+                          className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors cursor-pointer"
+                          title="Quitar foto"
+                        >
+                          Quitar
+                        </button>
+                      )}
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-h-64 overflow-y-auto pr-1">
-                      {formImages.map((mediaUrl, idx) => {
-                        const isVid = isVideoMedia(mediaUrl);
-                        const isPrimary = idx === 0;
-                        return (
-                          <div
-                            key={idx}
-                            className={`relative rounded-xl overflow-hidden border p-1.5 flex flex-col justify-between group transition-all ${
-                              isPrimary
-                                ? 'border-[#c5a059] bg-[#c5a059]/10 shadow-md ring-1 ring-[#c5a059]/50'
-                                : 'border-slate-800 bg-slate-900 hover:border-slate-700'
-                            }`}
-                          >
-                            <div className="relative aspect-square w-full rounded-lg overflow-hidden bg-black mb-1.5 flex items-center justify-center">
-                              {isVid ? (
-                                <video
-                                  src={mediaUrl}
-                                  className="w-full h-full object-cover"
-                                  muted
-                                  playsInline
-                                />
-                              ) : (
-                                <img
-                                  src={mediaUrl}
-                                  alt={`Media ${idx + 1}`}
-                                  className="w-full h-full object-cover"
-                                />
-                              )}
 
-                              {/* Number Index Badge */}
-                              <div className="absolute top-1 left-1 flex items-center gap-1 z-10">
-                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold shadow ${
-                                  isPrimary ? 'bg-[#c5a059] text-black' : 'bg-black/80 text-white'
-                                }`}>
-                                  #{idx + 1}
-                                </span>
-                                {isPrimary && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#c5a059] text-slate-950 flex items-center gap-0.5 shadow">
-                                    <Star size={10} fill="currentColor" />
-                                    <span>Favorita</span>
-                                  </span>
-                                )}
-                                {isVid && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-black/80 text-amber-400 flex items-center gap-0.5 border border-white/20">
-                                    <Video size={10} />
-                                    <span>Video</span>
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Delete button on top right */}
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveImage(idx)}
-                                className="absolute top-1 right-1 p-1 rounded-full bg-black/75 hover:bg-rose-600 text-white opacity-80 hover:opacity-100 transition-all cursor-pointer z-10"
-                                title="Quitar elemento"
-                              >
-                                <X size={12} />
-                              </button>
-                            </div>
-
-                            {/* Reordering Controls: Move Left, Star Favorite, Move Right */}
-                            <div className="flex items-center justify-between gap-1 pt-1 border-t border-white/5 text-[10px]">
-                              {/* Move Left */}
-                              <button
-                                type="button"
-                                onClick={() => handleMoveImageLeft(idx)}
-                                disabled={idx === 0}
-                                className="p-1 rounded bg-black/40 hover:bg-black text-stone-300 disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed transition-colors"
-                                title="Mover foto a la izquierda"
-                              >
-                                <ChevronLeft size={13} />
-                              </button>
-
-                              {/* Favorite / Portada Button */}
-                              {isPrimary ? (
-                                <span className="text-[10px] font-semibold text-[#c5a059] flex items-center gap-0.5">
-                                  <Star size={11} fill="currentColor" />
-                                  <span>Portada</span>
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleSetPrimaryImage(idx)}
-                                  className="text-[10px] font-medium text-stone-400 hover:text-[#c5a059] flex items-center gap-1 cursor-pointer transition-colors"
-                                  title="Marcar como foto favorita / portada de tienda"
-                                >
-                                  <Star size={11} />
-                                  <span>Favorita</span>
-                                </button>
-                              )}
-
-                              {/* Move Right */}
-                              <button
-                                type="button"
-                                onClick={() => handleMoveImageRight(idx)}
-                                disabled={idx === formImages.length - 1}
-                                className="p-1 rounded bg-black/40 hover:bg-black text-stone-300 disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed transition-colors"
-                                title="Mover foto a la derecha"
-                              >
-                                <ChevronRight size={13} />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
+                    {/* URL Input */}
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="O pega aquí el enlace directo (URL)..."
+                        value={formImageUrl}
+                        onChange={(e) => setFormImageUrl(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white placeholder-stone-600 text-[11px] focus:outline-none focus:border-[#c5a059]"
+                      />
                     </div>
+                  </div>
+                </div>
+
+                {uploadError && (
+                  <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] flex items-center gap-2">
+                    <AlertCircle size={14} className="shrink-0" />
+                    <span>{uploadError}</span>
                   </div>
                 )}
 
-                {/* Opción alternativa: URL directa o seleccionar archivo del proyecto */}
-                <div className="pt-2 border-t border-slate-800/80 space-y-2">
-                  <div className="flex items-center gap-2">
+                {/* Additional Gallery Images */}
+                <div className="pt-2 border-t border-white/5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-stone-400 text-[11px]">Fotos adicionales (Galería)</span>
                     <input
-                      type="text"
-                      placeholder="O pega una URL de imagen o video (.mp4, YouTube, etc.)..."
-                      value={formImageUrl}
-                      onChange={(e) => setFormImageUrl(e.target.value)}
-                      className="flex-1 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-[11px] placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                      type="file"
+                      ref={galleryInputRef}
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleGalleryUpload}
                     />
                     <button
                       type="button"
-                      onClick={handleAddManualImageUrl}
-                      disabled={!formImageUrl.trim()}
-                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-medium cursor-pointer disabled:opacity-40"
+                      onClick={() => galleryInputRef.current?.click()}
+                      disabled={isUploadingImage}
+                      className="text-[11px] text-[#c5a059] hover:underline cursor-pointer flex items-center gap-1 font-semibold"
                     >
-                      Añadir
+                      <Plus size={12} />
+                      <span>Agregar más fotos</span>
                     </button>
                   </div>
 
-                  {PROJECT_MEDIA_OPTIONS.products.length > 0 && (
-                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                      <span>Del proyecto:</span>
-                      <select
-                        value={formImageUrl}
-                        onChange={(e) => {
-                          if (e.target.value && !formImages.includes(e.target.value)) {
-                            setFormImages((prev) => [...prev, e.target.value]);
-                          }
-                          setFormImageUrl('');
-                        }}
-                        className="flex-1 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 text-[11px] focus:outline-none cursor-pointer"
-                      >
-                        <option value="">-- Añadir foto local a la lista --</option>
-                        {PROJECT_MEDIA_OPTIONS.products.map((item) => (
-                          <option key={item.value} value={item.value}>
-                            {item.label}
-                          </option>
-                        ))}
-                      </select>
+                  {formGallery.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {formGallery.map((imgUrl, idx) => (
+                        <div
+                          key={idx}
+                          className="relative w-12 h-12 rounded-xl overflow-hidden bg-black/60 border border-white/10 group shrink-0"
+                        >
+                          <img src={imgUrl} alt="galería" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => removeGalleryImage(idx)}
+                            className="absolute top-0 right-0 p-0.5 bg-black/80 text-rose-400 hover:text-white rounded-bl transition-colors"
+                          >
+                            <X size={10} />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Visibilidad en Tienda: Activo vs Oculto */}
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-white text-xs block">
-                    Visibilidad en la Tienda *
-                  </span>
-                  <span className="text-[10px] text-slate-400">
-                    Controla si los clientes pueden ver y comprar este producto
-                  </span>
+              {/* Product Basic Info */}
+              <div>
+                <label className="block text-stone-300 font-semibold mb-1">Nombre del Producto *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej. Gorra Bélica Sox Blackout"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/15 text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-stone-300 font-semibold mb-1">Categoría</label>
+                <select
+                  value={formCategory}
+                  onChange={(e) => setFormCategory(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/15 text-white focus:outline-none focus:border-[#c5a059]"
+                >
+                  <option value="">Sin categoría</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-stone-300 font-semibold mb-1">Precio ($) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={formPrice}
+                    onChange={(e) => setFormPrice(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/15 text-white focus:outline-none focus:border-[#c5a059] font-mono"
+                  />
                 </div>
-
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setFormActive(true)}
-                    className={`py-3 px-3.5 rounded-xl border flex items-center justify-center gap-2.5 text-xs font-semibold cursor-pointer transition-all ${
-                      formActive
-                        ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300 ring-1 ring-emerald-500/50 shadow-md'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Eye size={17} className={formActive ? 'text-emerald-400' : 'text-slate-500'} />
-                    <div className="text-left">
-                      <span className="block leading-tight font-bold">Activo</span>
-                      <span className="text-[9px] font-normal block opacity-80">Visible en la tienda</span>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFormActive(false)}
-                    className={`py-3 px-3.5 rounded-xl border flex items-center justify-center gap-2.5 text-xs font-semibold cursor-pointer transition-all ${
-                      !formActive
-                        ? 'bg-amber-500/15 border-amber-500 text-amber-300 ring-1 ring-amber-500/50 shadow-md'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <EyeOff size={17} className={!formActive ? 'text-amber-400' : 'text-slate-500'} />
-                    <div className="text-left">
-                      <span className="block leading-tight font-bold">Oculto</span>
-                      <span className="text-[9px] font-normal block opacity-80">No se muestra en tienda</span>
-                    </div>
-                  </button>
+                <div>
+                  <label className="block text-stone-300 font-semibold mb-1">Costo ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formCost}
+                    onChange={(e) => setFormCost(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/15 text-white focus:outline-none focus:border-[#c5a059] font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-stone-300 font-semibold mb-1">Stock *</label>
+                  <input
+                    type="number"
+                    required
+                    value={formStock}
+                    onChange={(e) => setFormStock(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/15 text-white focus:outline-none focus:border-[#c5a059] font-mono"
+                  />
                 </div>
               </div>
 
-              <div className="pt-3 flex items-center justify-end gap-3">
+              <div>
+                <label className="block text-stone-300 font-semibold mb-1">Descripción</label>
+                <textarea
+                  rows={3}
+                  placeholder="Detalles y especificaciones del producto..."
+                  value={formDescription}
+                  onChange={(e) => setFormDescription(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/15 text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-black/40 border border-white/10">
+                <div>
+                  <span className="font-semibold text-white block">Producto Activo en Tienda</span>
+                  <span className="text-[10px] text-stone-400">Visible para los clientes en el catálogo</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formActive}
+                  onChange={(e) => setFormActive(e.target.checked)}
+                  className="w-4 h-4 rounded text-[#c5a059] accent-[#c5a059] cursor-pointer"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-3 border-t border-white/10">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-stone-300 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shadow-lg shadow-amber-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  disabled={isSubmitting || isUploadingImage}
+                  className="px-6 py-2 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {isSubmitting ? (
                     <>
-                      <RefreshCw size={14} className="animate-spin" />
-                      <span>Guardando en Supabase...</span>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Guardando...</span>
                     </>
                   ) : (
-                    <span>{editingProduct ? 'Guardar Cambios' : 'Crear Producto'}</span>
+                    <span>Guardar Producto</span>
                   )}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL GUÍA PARA 500 PRODUCTOS */}
-      {showBulkGuide && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 sm:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                  <FileSpreadsheet size={18} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white font-serif-luxury">
-                    Guía para tus ~500 Productos
-                  </h3>
-                  <span className="text-[10px] text-slate-400">
-                    Tu tienda está lista y vacía, esperando únicamente tus productos reales.
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowBulkGuide(false)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs text-slate-300 leading-relaxed">
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 space-y-1">
-                <p className="font-bold flex items-center gap-1.5">
-                  <CheckCircle2 size={14} />
-                  <span>Catálogo Limpio (0 productos de prueba)</span>
-                </p>
-                <p className="text-[11px] text-emerald-400/90">
-                  Cumpliendo tu indicación, no se agregaron productos ficticios. Todo lo que cargues será tuyo.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="font-bold text-white uppercase text-[11px] tracking-wider text-amber-400">
-                  Opción 1: Carga desde este Panel (Recomendado)
-                </h4>
-                <p className="text-slate-400">
-                  Haz clic en <strong>"+ Agregar Producto"</strong>. Podrás seleccionar múltiples fotos y videos (.mp4, .webm, .mov) desde tus archivos. Las fotos y videos se guardan automáticamente en el Storage de Supabase y crean el carrusel interactivo multimedia con reproductor de video en la tienda.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="font-bold text-white uppercase text-[11px] tracking-wider text-amber-400">
-                  Opción 2: Carga Masiva (CSV / Excel)
-                </h4>
-                <p className="text-slate-400">
-                  Si ya tienes los 500 productos en un archivo Excel o CSV, puedes importarlos de un solo clic desde tu panel de <strong>Supabase &gt; Table Editor &gt; productos &gt; Insert &gt; Import data from CSV</strong>.
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2 font-mono text-[11px]">
-                <span className="text-slate-400 block font-bold text-white font-sans">
-                  Columnas que usa la tabla 'productos':
-                </span>
-                <code className="text-amber-400 block break-all">
-                  nombre, descripcion, precio, costo, stock, categoria_id, imagen_url, activo
-                </code>
-                <p className="text-[10px] text-slate-500 font-sans mt-1">
-                  Nota: En <code className="text-slate-400">imagen_url</code> puedes poner una URL o un arreglo JSON con varias fotos y videos (ej: <code className="text-slate-400">["https://...foto1.jpg", "https://...video.mp4"]</code>) para activar el carrusel con fotos y video integrado.
-                </p>
-              </div>
-
-              <div className="space-y-1 text-slate-400 text-[11px]">
-                <p className="font-semibold text-white">📦 Supabase Storage:</p>
-                <p>
-                  Asegúrate de que en tu proyecto Supabase tengas creado el bucket público llamado <code className="text-amber-300">productos</code> para alojar las fotos de tus 500 artículos con acceso público de lectura.
-                </p>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-800 flex justify-end">
-              <button
-                onClick={() => setShowBulkGuide(false)}
-                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer shadow-lg shadow-amber-500/20"
-              >
-                Entendido
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* DELETE CONFIRMATION MODAL */}
-      {isDeleting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-rose-500/30 rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-4">
-              <Trash2 size={24} />
-            </div>
-            <h3 className="text-xl font-bold text-white mb-2 font-serif-luxury">
-              ¿Eliminar producto?
-            </h3>
-            <p className="text-xs text-slate-300 leading-relaxed mb-6">
-              Estás a punto de eliminar definitivamente <strong>"{isDeleting.nombre}"</strong>. Esta acción eliminará permanentemente el producto, sus fotos en Storage y su registro de inventario de Supabase.
-            </p>
-
-            <div className="flex items-center justify-end gap-3">
-              <button
-                onClick={() => setIsDeleting(null)}
-                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/20 cursor-pointer"
-              >
-                Sí, eliminar
-              </button>
-            </div>
           </div>
         </div>
       )}

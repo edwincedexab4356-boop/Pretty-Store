@@ -1,10 +1,10 @@
 import React from 'react';
-import { Award, Truck, CreditCard, Clock } from 'lucide-react';
+import { ShieldCheck, Truck, CreditCard, Headphones } from 'lucide-react';
 
-export const FeaturesSection: React.FC = () => {
-  const features = [
+export const BenefitsBar: React.FC = () => {
+  const benefits = [
     {
-      icon: <Award size={22} className="text-[#c5a059] stroke-[1.5]" />,
+      icon: <ShieldCheck size={22} className="text-[#c5a059] stroke-[1.5]" />,
       title: 'Autenticidad Absoluta',
       description: 'Cada fragancia, reloj y accesorio es verificado bajo rigurosos estándares de autenticidad.',
     },
@@ -19,7 +19,7 @@ export const FeaturesSection: React.FC = () => {
       description: 'Transacciones seguras vía Yappy, transferencias bancarias directas o tarjetas.',
     },
     {
-      icon: <Clock size={22} className="text-[#c5a059] stroke-[1.5]" />,
+      icon: <Headphones size={22} className="text-[#c5a059] stroke-[1.5]" />,
       title: 'Atención Personalizada',
       description: 'Asistencia individual para selección de piezas exclusivas y consultas de disponibilidad.',
     },
@@ -41,20 +41,16 @@ export const FeaturesSection: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
-          {features.map((feature, idx) => (
+          {benefits.map((item, idx) => (
             <div
               key={idx}
               className="p-6 border-t border-white/10 hover:border-[#c5a059]/40 transition-colors duration-300 space-y-4"
             >
               <div className="w-10 h-10 border border-white/15 flex items-center justify-center bg-stone-900/40 text-[#c5a059]">
-                {feature.icon}
+                {item.icon}
               </div>
-              <h3 className="text-base font-serif-luxury font-normal text-white">
-                {feature.title}
-              </h3>
-              <p className="text-xs text-stone-400 font-light leading-relaxed">
-                {feature.description}
-              </p>
+              <h3 className="text-base font-serif-luxury font-normal text-white">{item.title}</h3>
+              <p className="text-xs text-stone-400 font-light leading-relaxed">{item.description}</p>
             </div>
           ))}
         </div>

@@ -1,78 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import {
-  TrendingUp,
   DollarSign,
-  Calendar,
-  Filter,
+  ShoppingCart,
+  TrendingUp,
   RefreshCw,
-  ShoppingBag,
-  CreditCard,
-  Download,
-  Plus,
-  CheckCircle2,
-  X,
+  Search,
   Trash2,
+  Package,
+  Calendar,
+  CheckCircle2,
+  FileText,
+  CreditCard,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { getAdminSales, deleteAdminSale, deleteAllAdminSales } from '../../../services/adminService';
-import { isPermissionError } from '../../../utils/supabaseSqlFix';
-import { PermissionErrorBanner } from '../PermissionErrorBanner';
-import { ManualSaleModal } from '../ManualSaleModal';
+import { VentaRecord, getAdminSales, deleteAdminSale } from '../../../services/adminService';
+import { Pedido } from '../../../types/database';
+import { OfficialInvoiceModal } from '../OfficialInvoiceModal';
+import { getPrimaryProductImage } from '../../../utils/productImages';
 
-interface SalesViewProps {
-  onOpenSqlFix?: (desc?: string) => void;
-}
-
-export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
-  const [sales, setSales] = useState<any[]>([]);
+export const SalesView: React.FC = () => {
+  const [sales, setSales] = useState<VentaRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'week' | 'month'>('month');
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [isManualSaleOpen, setIsManualSaleOpen] = useState(false);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [saleToDelete, setSaleToDelete] = useState<any | null>(null);
-  const [isDeletingSale, setIsDeletingSale] = useState(false);
-  const [isConfirmDeleteAllOpen, setIsConfirmDeleteAllOpen] = useState(false);
-  const [isDeletingAllSales, setIsDeletingAllSales] = useState(false);
-
-  const handleDeleteSale = async () => {
-    if (!saleToDelete) return;
-    setIsDeletingSale(true);
-    try {
-      await deleteAdminSale(saleToDelete.id);
-      setSuccessMsg('Venta eliminada exitosamente del sistema.');
-      setSales((prev) => prev.filter((s) => s.id !== saleToDelete.id));
-      setSaleToDelete(null);
-    } catch (err: any) {
-      setLoadError(err?.message || 'Error al eliminar la venta.');
-    } finally {
-      setIsDeletingSale(false);
-    }
-  };
-
-  const handleDeleteAllSales = async () => {
-    setIsDeletingAllSales(true);
-    try {
-      await deleteAllAdminSales();
-      setSuccessMsg('✓ Todas las ventas han sido eliminadas exitosamente del sistema.');
-      setSales([]);
-      setIsConfirmDeleteAllOpen(false);
-    } catch (err: any) {
-      setLoadError(err?.message || 'Error al eliminar todas las ventas.');
-    } finally {
-      setIsDeletingAllSales(false);
-    }
-  };
+  const [searchTerm, setSearchTerm] = useState('');
+  const [methodFilter, setMethodFilter] = useState('all');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<Pedido | null>(null);
+  const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
 
   const loadData = async () => {
     setIsLoading(true);
-    setLoadError(null);
     try {
       const data = await getAdminSales();
       setSales(data);
-    } catch (e: any) {
-      const msg = e?.message || 'Error al cargar ventas.';
-      console.warn('Error loading sales:', e);
-      setLoadError(msg);
     } finally {
       setIsLoading(false);
     }
@@ -82,362 +42,323 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenSqlFix }) => {
     loadData();
   }, []);
 
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const handleDeleteSale = async (sale: VentaRecord) => {
+    const saleNum = sale.numero_orden || `#${String(sale.id).slice(0, 8)}`;
+    const confirmMsg = `¿Estás seguro de que deseas eliminar la venta ${saleNum} (${sale.cliente.nombre})?\n\nEsta acción eliminará el registro de venta y sus comprobantes de Supabase.`;
+    if (!window.confirm(confirmMsg)) return;
 
-  // Metrics
-  const totalSalesAll = sales.reduce((acc, s) => acc + (s.total || 0), 0);
-  const totalSalesToday = sales
-    .filter((s) => (s.fecha || '') >= startOfToday)
-    .reduce((acc, s) => acc + (s.total || 0), 0);
-  const totalSalesWeek = sales
-    .filter((s) => (s.fecha || '') >= startOfWeek)
-    .reduce((acc, s) => acc + (s.total || 0), 0);
-  const totalSalesMonth = sales
-    .filter((s) => (s.fecha || '') >= startOfMonth)
-    .reduce((acc, s) => acc + (s.total || 0), 0);
+    setDeletingId(sale.id);
+    try {
+      const ok = await deleteAdminSale(sale.id, sale.pedido_id || undefined);
+      if (ok) {
+        setSales((prev) => prev.filter((s) => s.id !== sale.id));
+      } else {
+        alert('No se pudo eliminar la venta.');
+      }
+    } catch (err: any) {
+      alert('Error al eliminar venta: ' + (err?.message || 'Error'));
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
-  // Filtered rows
+  const totalSales = sales.reduce((acc, s) => acc + (s.total || 0), 0);
+  const totalCount = sales.length;
+  const avgTicket = totalCount > 0 ? totalSales / totalCount : 0;
+
   const filteredSales = sales.filter((s) => {
-    const f = s.fecha || '';
-    if (timeFilter === 'today') return f >= startOfToday;
-    if (timeFilter === 'week') return f >= startOfWeek;
-    if (timeFilter === 'month') return f >= startOfMonth;
-    return true;
+    const matchesSearch =
+      (s.numero_orden || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.cliente.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.cliente.telefono || '').includes(searchTerm) ||
+      s.items.some((it) => (it.producto?.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const matchesMethod = methodFilter === 'all' || s.metodo_pago === methodFilter;
+    return matchesSearch && matchesMethod;
   });
 
-  const formatMoney = (val: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-    }).format(val);
+  const handleOpenInvoice = (sale: VentaRecord) => {
+    // Construir objeto Pedido compatible para OfficialInvoiceModal
+    const mockOrder: Pedido = {
+      id: sale.id,
+      numero_orden: sale.numero_orden?.replace('#', '') || String(sale.id),
+      total: sale.total,
+      subtotal: sale.subtotal || sale.total,
+      descuento: sale.descuento || 0,
+      metodo_pago: (sale.metodo_pago as any) || 'efectivo',
+      tipo_entrega: (sale.tipo_entrega as any) || 'delivery',
+      estado: 'confirmado',
+      created_at: sale.fecha,
+      cliente: {
+        id: sale.cliente.id || sale.id,
+        nombre: sale.cliente.nombre,
+        telefono: sale.cliente.telefono,
+        email: sale.cliente.email || null,
+        direccion: sale.cliente.direccion || null,
+      },
+      items: sale.items,
+    };
+    setSelectedInvoice(mockOrder);
   };
 
   return (
     <div className="space-y-6">
-      {/* Success notification banner */}
-      {successMsg && (
-        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-between text-xs animate-fadeIn">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} />
-            <span>{successMsg}</span>
-          </div>
-          <button
-            onClick={() => setSuccessMsg(null)}
-            className="text-stone-400 hover:text-white p-1 rounded cursor-pointer"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
-
-      {/* Permission Warning Banner if any error */}
-      {loadError && isPermissionError(loadError) && (
-        <PermissionErrorBanner
-          errorMessage={loadError}
-          onOpenFixModal={() => onOpenSqlFix?.('Permisos en tabla pedidos / clientes')}
-          onDismiss={() => setLoadError(null)}
-        />
-      )}
-
-      {/* Header */}
-      <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block mb-1">
-            Métricas Comerciales
-          </span>
-          <h2 className="text-xl sm:text-2xl font-serif-luxury font-semibold text-white tracking-wide">
-            Reporte de Ventas & Facturación
-          </h2>
-          <p className="text-xs text-stone-400 mt-1 font-light">
-            Seguimiento de ingresos, volumen transaccional y registro manual de ventas.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5 self-start md:self-auto flex-wrap">
-          <button
-            onClick={() => setIsManualSaleOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d4af37] hover:opacity-95 text-black font-semibold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#c5a059]/20"
-          >
-            <Plus size={15} />
-            <span>Registrar Venta Manual</span>
-          </button>
-
-          <button
-            onClick={loadData}
-            disabled={isLoading}
-            className="px-3.5 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-200 hover:text-white text-xs font-medium border border-white/[0.08] flex items-center gap-2 cursor-pointer transition-all"
-          >
-            <RefreshCw size={14} className={isLoading ? 'animate-spin text-[#c5a059]' : 'text-stone-400'} />
-            <span>Actualizar</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsConfirmDeleteAllOpen(true)}
-            disabled={isLoading || sales.length === 0}
-            className="px-3.5 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 text-xs font-semibold border border-rose-500/30 flex items-center gap-2 cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-            title="Eliminar todas las ventas registradas"
-          >
-            <Trash2 size={14} />
-            <span>Eliminar Todas las Ventas</span>
-          </button>
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-xl">
-          <span className="text-[10px] text-stone-400 uppercase tracking-wider block mb-1 font-medium">
-            Ventas Hoy
-          </span>
-          <div className="text-2xl font-semibold text-white font-mono">{formatMoney(totalSalesToday)}</div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-xl">
-          <span className="text-[10px] text-[#c5a059] uppercase tracking-wider block mb-1 font-medium">
-            Últimos 7 Días
-          </span>
-          <div className="text-2xl font-semibold text-[#c5a059] font-mono">{formatMoney(totalSalesWeek)}</div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-xl">
-          <span className="text-[10px] text-emerald-400 uppercase tracking-wider block mb-1 font-medium">
-            Este Mes
-          </span>
-          <div className="text-2xl font-semibold text-emerald-400 font-mono">{formatMoney(totalSalesMonth)}</div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-xl">
-          <span className="text-[10px] text-stone-400 uppercase tracking-wider block mb-1 font-medium">
-            Total Histórico
-          </span>
-          <div className="text-2xl font-semibold text-stone-200 font-mono">{formatMoney(totalSalesAll)}</div>
-        </div>
-      </div>
-
-      {/* Time Filter Switcher */}
-      <div className="flex items-center gap-1.5 bg-black/40 p-1.5 rounded-xl border border-white/[0.08] w-fit text-xs">
+      <div className="flex items-center justify-between">
+        <h3 className="font-serif-luxury font-bold text-white text-base">
+          Registro de Ventas & Facturación
+        </h3>
         <button
-          onClick={() => setTimeFilter('today')}
-          className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer font-medium ${
-            timeFilter === 'today'
-              ? 'bg-[#c5a059] text-black font-semibold'
-              : 'text-stone-400 hover:text-white'
-          }`}
+          onClick={loadData}
+          disabled={isLoading}
+          className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-stone-300 border border-white/10 transition-colors cursor-pointer"
+          title="Actualizar ventas"
         >
-          Hoy
-        </button>
-        <button
-          onClick={() => setTimeFilter('week')}
-          className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer font-medium ${
-            timeFilter === 'week'
-              ? 'bg-[#c5a059] text-black font-semibold'
-              : 'text-stone-400 hover:text-white'
-          }`}
-        >
-          Esta Semana
-        </button>
-        <button
-          onClick={() => setTimeFilter('month')}
-          className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer font-medium ${
-            timeFilter === 'month'
-              ? 'bg-[#c5a059] text-black font-semibold'
-              : 'text-stone-400 hover:text-white'
-          }`}
-        >
-          Este Mes
-        </button>
-        <button
-          onClick={() => setTimeFilter('all')}
-          className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer font-medium ${
-            timeFilter === 'all'
-              ? 'bg-[#c5a059] text-black font-semibold'
-              : 'text-stone-400 hover:text-white'
-          }`}
-        >
-          Histórico Completo
+          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
         </button>
       </div>
 
-      {/* Table */}
-      <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl shadow-xl overflow-hidden">
-        {isLoading ? (
-          <div className="p-12 text-center text-xs text-stone-400 flex items-center justify-center gap-2">
-            <RefreshCw size={16} className="animate-spin text-[#c5a059]" />
-            <span>Calculando métricas de ventas...</span>
+      {/* Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="p-6 rounded-2xl bg-[#100f14] border border-white/10 space-y-2">
+          <div className="flex items-center justify-between text-stone-400">
+            <span className="text-xs uppercase tracking-wider font-semibold">Total Ingresos</span>
+            <DollarSign size={18} className="text-[#fbbf24]" />
           </div>
-        ) : filteredSales.length === 0 ? (
-          <div className="p-12 text-center text-xs text-stone-400 space-y-2">
-            <TrendingUp size={36} className="mx-auto text-stone-600 mb-2" />
-            <p className="font-serif-luxury font-semibold text-white text-base">No hay ventas en este período</p>
+          <span className="text-3xl font-mono font-bold text-white block">
+            ${totalSales.toFixed(2)} USD
+          </span>
+          <span className="text-[11px] text-emerald-400 font-medium block">
+            Facturación acumulada en tienda
+          </span>
+        </div>
+
+        <div className="p-6 rounded-2xl bg-[#100f14] border border-white/10 space-y-2">
+          <div className="flex items-center justify-between text-stone-400">
+            <span className="text-xs uppercase tracking-wider font-semibold">Ventas Realizadas</span>
+            <ShoppingCart size={18} className="text-[#c5a059]" />
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-white/[0.02] text-stone-400 uppercase text-[10px] font-medium tracking-wider border-b border-white/[0.08]">
+          <span className="text-3xl font-mono font-bold text-white block">{totalCount}</span>
+          <span className="text-[11px] text-stone-400 font-light block">
+            Transacciones registradas
+          </span>
+        </div>
+
+        <div className="p-6 rounded-2xl bg-[#100f14] border border-white/10 space-y-2">
+          <div className="flex items-center justify-between text-stone-400">
+            <span className="text-xs uppercase tracking-wider font-semibold">Ticket Promedio</span>
+            <TrendingUp size={18} className="text-emerald-400" />
+          </div>
+          <span className="text-3xl font-mono font-bold text-white block">
+            ${avgTicket.toFixed(2)} USD
+          </span>
+          <span className="text-[11px] text-stone-400 font-light block">Por compra realizada</span>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-72">
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
+            <input
+              type="text"
+              placeholder="Buscar por cliente, tel, orden o producto..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-black/60 border border-white/10 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-[#c5a059]"
+            />
+          </div>
+
+          <select
+            value={methodFilter}
+            onChange={(e) => setMethodFilter(e.target.value)}
+            className="px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-xs text-stone-300 focus:outline-none focus:border-[#c5a059]"
+          >
+            <option value="all">Todos los métodos de pago</option>
+            <option value="yappy">Yappy</option>
+            <option value="tarjeta">Tarjeta</option>
+            <option value="transferencia">Transferencia</option>
+            <option value="efectivo">Efectivo</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Sales Table with Product Images & Delete Button */}
+      <div className="bg-[#100f14] border border-white/10 rounded-2xl overflow-hidden shadow-xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-white/10 text-[10px] uppercase tracking-wider text-stone-400 bg-black/40">
+                <th className="py-3 px-4"># Venta / Fecha</th>
+                <th className="py-3 px-4">Cliente</th>
+                <th className="py-3 px-4">Productos e Imágenes</th>
+                <th className="py-3 px-4">Método de Pago</th>
+                <th className="py-3 px-4 text-right">Total Facturado</th>
+                <th className="py-3 px-4 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5 text-stone-300">
+              {isLoading ? (
                 <tr>
-                  <th className="py-3.5 px-4">Fecha</th>
-                  <th className="py-3.5 px-4">Nº Pedido</th>
-                  <th className="py-3.5 px-4">Cliente</th>
-                  <th className="py-3.5 px-4">Método</th>
-                  <th className="py-3.5 px-4">Estado</th>
-                  <th className="py-3.5 px-4 text-right">Monto</th>
-                  <th className="py-3.5 px-4 text-center">Acciones</th>
+                  <td colSpan={6} className="py-12 text-center text-stone-500">
+                    Cargando ventas...
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.04]">
-                {filteredSales.map((s) => (
-                  <tr key={s.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="py-3.5 px-4 text-stone-400 font-light">
-                      {s.fecha
-                        ? new Date(s.fecha).toLocaleDateString('es-ES', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : '—'}
-                    </td>
-                    <td className="py-3.5 px-4 font-mono font-medium text-[#c5a059]">
-                      #PED-{String(s.pedido_id || s.id || '').replace(/-/g, '').slice(0, 6).toUpperCase()}
-                    </td>
-                    <td className="py-3.5 px-4 text-white font-medium">
-                      {s.cliente?.nombre || 'Cliente General'}
-                    </td>
-                    <td className="py-3.5 px-4 uppercase font-mono text-[11px] text-stone-300">
-                      {s.metodo_pago}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 capitalize">
-                        {s.estado}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono font-semibold text-base text-white">
-                      {formatMoney(s.total)}
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <button
-                        onClick={() => setSaleToDelete(s)}
-                        className="p-1.5 text-stone-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
-                        title="Eliminar venta de Supabase"
-                        aria-label="Eliminar venta"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ) : filteredSales.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-stone-500">
+                    No se encontraron registros de ventas.
+                  </td>
+                </tr>
+              ) : (
+                filteredSales.map((sale) => {
+                  const isExpanded = expandedSaleId === sale.id;
+
+                  return (
+                    <React.Fragment key={sale.id}>
+                      <tr className="hover:bg-white/[0.02] transition-colors">
+                        <td className="py-3.5 px-4 font-mono">
+                          <button
+                            onClick={() => setExpandedSaleId(isExpanded ? null : sale.id)}
+                            className="font-bold text-white hover:text-[#c5a059] flex items-center gap-1 cursor-pointer"
+                            title="Expandir productos de la venta"
+                          >
+                            <span>{sale.numero_orden}</span>
+                            {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          </button>
+                          <span className="text-[11px] text-stone-400 block mt-0.5">
+                            {sale.fecha ? new Date(sale.fecha).toLocaleDateString('es-PA') : 'Reciente'}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <strong className="text-white block font-medium">{sale.cliente.nombre}</strong>
+                          <span className="text-stone-400 font-mono text-[11px] block">
+                            {sale.cliente.telefono}
+                          </span>
+                        </td>
+
+                        {/* Product Miniatures with Images */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {sale.items && sale.items.length > 0 ? (
+                              sale.items.map((it, idx) => (
+                                <div
+                                  key={idx}
+                                  className="relative group shrink-0"
+                                  title={`${it.producto?.nombre || 'Producto'} (${it.cantidad}x) ${it.selectedSize ? `- Talla ${it.selectedSize}` : ''}`}
+                                >
+                                  <img
+                                    src={getPrimaryProductImage(it.producto, '/images/logo/logotipo.jpeg')}
+                                    alt={it.producto?.nombre || 'Producto'}
+                                    className="w-9 h-9 rounded-xl object-cover bg-black/60 border border-white/10 group-hover:border-[#c5a059] transition-all"
+                                    onError={(e) => {
+                                      (e.currentTarget as HTMLImageElement).src = '/images/logo/logotipo.jpeg';
+                                    }}
+                                  />
+                                  {it.cantidad > 1 && (
+                                    <span className="absolute -top-1 -right-1 bg-amber-500 text-black text-[9px] font-bold px-1.5 py-0.2 rounded-full shadow">
+                                      {it.cantidad}
+                                    </span>
+                                  )}
+                                </div>
+                              ))
+                            ) : (
+                              <span className="text-stone-500 text-[11px]">Venta registrada</span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 uppercase text-[10px] font-semibold text-stone-300">
+                          <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 inline-block">
+                            {sale.metodo_pago}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right font-mono font-bold text-[#fbbf24] text-sm">
+                          ${sale.total.toFixed(2)}
+                        </td>
+
+                        {/* Actions: View Invoice & Delete Sale */}
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleOpenInvoice(sale)}
+                              className="p-1.5 rounded-lg bg-[#c5a059]/15 hover:bg-[#c5a059]/30 text-[#c5a059] transition-colors cursor-pointer border border-[#c5a059]/30"
+                              title="Ver Factura de Venta"
+                            >
+                              <FileText size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSale(sale)}
+                              disabled={deletingId === sale.id}
+                              className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer border border-rose-500/20 disabled:opacity-50"
+                              title="Eliminar Venta"
+                            >
+                              <Trash2 size={14} className={deletingId === sale.id ? 'animate-pulse' : ''} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Expandable items breakdown */}
+                      {isExpanded && sale.items && sale.items.length > 0 && (
+                        <tr className="bg-black/40 border-b border-white/5">
+                          <td colSpan={6} className="p-4 pl-12">
+                            <div className="space-y-2">
+                              <span className="text-[10px] uppercase font-bold text-[#c5a059] tracking-wider block">
+                                Productos incluidos en la venta:
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                {sale.items.map((it, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center gap-3"
+                                  >
+                                    <img
+                                      src={getPrimaryProductImage(it.producto, '/images/logo/logotipo.jpeg')}
+                                      alt={it.producto?.nombre}
+                                      className="w-12 h-12 rounded-lg object-cover bg-black/80 border border-white/10 shrink-0"
+                                      onError={(e) => {
+                                        (e.currentTarget as HTMLImageElement).src = '/images/logo/logotipo.jpeg';
+                                      }}
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <strong className="text-white text-xs block truncate">
+                                        {it.producto?.nombre || 'Producto'}
+                                      </strong>
+                                      {it.selectedSize && (
+                                        <span className="text-[10px] text-amber-300 font-mono block">
+                                          Talla: {it.selectedSize}
+                                        </span>
+                                      )}
+                                      <div className="flex items-center justify-between text-[11px] text-stone-400 mt-1 font-mono">
+                                        <span>{it.cantidad}x ${it.precio_unitario?.toFixed(2)}</span>
+                                        <span className="text-[#fbbf24] font-bold">
+                                          ${it.subtotal?.toFixed(2)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Delete Sale Confirmation Modal */}
-      {saleToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-[#0e0e12] border border-rose-500/30 rounded-2xl w-full max-w-md p-6 sm:p-8 shadow-2xl">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-4">
-              <Trash2 size={22} />
-            </div>
-            <h3 className="text-lg font-bold text-white mb-2 font-serif-luxury">
-              ¿Eliminar esta venta?
-            </h3>
-            <p className="text-xs text-stone-300 leading-relaxed mb-6">
-              Estás a punto de eliminar la venta <strong className="text-white">#PED-{String(saleToDelete.pedido_id || saleToDelete.id || '').replace(/-/g, '').slice(0, 6).toUpperCase()}</strong> por un monto de <strong className="text-[#c5a059]">{formatMoney(saleToDelete.total)}</strong>. Esta acción eliminará permanentemente la venta y sus ítems de Supabase.
-            </p>
-
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setSaleToDelete(null)}
-                disabled={isDeletingSale}
-                className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 font-medium text-xs cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteSale}
-                disabled={isDeletingSale}
-                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/20 cursor-pointer flex items-center gap-2"
-              >
-                {isDeletingSale ? (
-                  <>
-                    <RefreshCw size={14} className="animate-spin" />
-                    <span>Eliminando...</span>
-                  </>
-                ) : (
-                  <span>Sí, eliminar venta</span>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Invoice Modal for Sales */}
+      {selectedInvoice && (
+        <OfficialInvoiceModal order={selectedInvoice} onClose={() => setSelectedInvoice(null)} />
       )}
-
-      {/* Delete All Sales Confirmation Modal */}
-      {isConfirmDeleteAllOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-          <div className="bg-[#0e0e12] border border-rose-500/30 rounded-2xl w-full max-w-md p-6 sm:p-8 shadow-2xl relative">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-4">
-              <Trash2 size={24} />
-            </div>
-            <h3 className="text-lg font-bold text-white mb-2 font-serif-luxury">
-              ¿Eliminar TODAS las Ventas?
-            </h3>
-            <p className="text-xs text-stone-300 leading-relaxed mb-6 font-light">
-              Estás a punto de eliminar <strong className="text-white">TODAS las ventas registradas ({sales.length})</strong> del sistema.
-              <br /><br />
-              Esta acción restablecerá el historial de facturación a cero y vaciará las métricas de ingresos acumulados.
-            </p>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/[0.08]">
-              <button
-                type="button"
-                onClick={() => setIsConfirmDeleteAllOpen(false)}
-                disabled={isDeletingAllSales}
-                className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 font-medium text-xs cursor-pointer transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteAllSales}
-                disabled={isDeletingAllSales}
-                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-900/40 cursor-pointer flex items-center gap-2 transition-colors"
-              >
-                {isDeletingAllSales ? (
-                  <>
-                    <RefreshCw size={14} className="animate-spin" />
-                    <span>Eliminando Todas...</span>
-                  </>
-                ) : (
-                  <>
-                    <Trash2 size={14} />
-                    <span>Sí, Eliminar Todas las Ventas</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Manual Sale Creation Modal */}
-      <ManualSaleModal
-        isOpen={isManualSaleOpen}
-        onClose={() => setIsManualSaleOpen(false)}
-        onSuccess={() => {
-          setSuccessMsg('¡Venta manual registrada exitosamente en el sistema!');
-          loadData();
-        }}
-      />
     </div>
   );
 };

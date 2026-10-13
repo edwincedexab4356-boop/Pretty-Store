@@ -1,2476 +1,634 @@
-import { getSupabaseClient } from '../lib/supabase';
-import { compressImageFile } from '../utils/imageOptimizer';
-import { sortCategoriesWithOrder, persistCategoryOrder, fetchRemoteCategoryOrder } from '../utils/categoryOrderUtils';
-import { getAllOrderReceipts, StoredOrderReceipt, deleteOrderReceipt, clearAllOrderReceipts } from '../utils/orderReceiptStorage';
-import { getAllVouchersFromDb } from '../utils/voucherDb';
+import { supabase } from '../lib/supabase';
+import { Categoria, Producto, Pedido, Cliente, Inventario, EstadoPedido, PedidoItem } from '../types/database';
 import {
-  Categoria,
-  Producto,
-  Inventario,
-  Pedido,
-  DetallePedido,
-  Cliente,
-  Venta,
-  Perfil,
-  StoreConfig,
-  DashboardStats,
-  EstadoPedido,
-  MetodoPago,
-  TipoEntrega,
-  CourierOption,
-} from '../types/database';
+  getAllSavedOrderReceipts,
+  getOrderReceiptById,
+  deleteOrderReceipt,
+  clearAllSavedOrderReceipts,
+} from '../utils/orderReceiptStorage';
+import { getVoucherImageFromDb } from '../utils/voucherDb';
+import { sortCategoriesByCustomOrder, saveCustomCategoryOrder } from '../utils/categoryOrderUtils';
+import { getPrimaryProductImage } from '../utils/productImages';
 
-// Default configuration fallback
-export const DEFAULT_STORE_CONFIG: StoreConfig = {
-  nombre_tienda: 'Pretty Store',
-  descripcion: 'Boutique exclusiva de alta relojería, perfumería selecta y accesorios de distinción.',
-  logo_url: '/images/logo/logotipo.jpeg',
-  hero_video_url: '/videos/hero.mp4',
-  hero_poster_url: '',
-  catalog_video_url: '',
-  telefono: '+507 6215-0251',
-  whatsapp: '+507 6215-0251',
-  email: 'contacto@prettystore.store',
-  direccion: 'https://maps.app.goo.gl/PxA3suMXNZxuFF5X7',
-  instagram: 'https://instagram.com',
-  tiktok: 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS',
-  facebook: '',
-  twitter: '',
-  yappy_numero: '6215-0251',
-  banco_datos: 'Banco General - Cuenta Corriente #0472985946850 a nombre de JESUS ALEJANDRO CARDONA ESCOBAR',
-  pasarela_tarjeta: 'PagueloFacil',
-  link_pago_tarjeta: 'https://checkout.paguelofacil.com/W_F9464GL',
-};
-
-// ==========================================
-// AUTHENTICATION & ROLES
-// ==========================================
-
-export async function fetchUserProfile(userId: string): Promise<Perfil | null> {
-  const supabase = getSupabaseClient();
+/* ==================== SUBIDA DE IMÁGENES A SUPABASE STORAGE ==================== */
+export async function uploadProductImageToStorage(file: File): Promise<string> {
   try {
-    const { data, error } = await supabase
-      .from('perfiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+    const ext = file.name ? file.name.split('.').pop()?.toLowerCase() || 'jpg' : 'jpg';
+    const cleanExt = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? ext : 'jpg';
+    const mimeType = file.type || `image/${cleanExt === 'jpg' ? 'jpeg' : cleanExt}`;
+    const fileName = `prod_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
 
-    if (!error && data) {
-      return data as Perfil;
-    }
-  } catch (e) {
-    console.warn('Perfil en base de datos no disponible:', e);
-  }
-  return null;
-}
-
-export async function createOrEnsureAdminProfile(
-  userId: string,
-  email: string,
-  name?: string
-): Promise<Perfil | null> {
-  const supabase = getSupabaseClient();
-  const userName = name || email.split('@')[0];
-
-  // Intento 1: insertar con rol 'administrador' (por restricción perfiles_rol_check en español)
-  try {
-    const { data, error } = await supabase
-      .from('perfiles')
-      .upsert(
-        {
-          id: userId,
-          nombre: userName,
-          rol: 'administrador',
-          activo: true,
-        },
-        { onConflict: 'id' }
-      )
-      .select('*')
-      .maybeSingle();
-
-    if (!error && data) {
-      return data as Perfil;
-    }
-  } catch (e) {
-    console.warn('Intento con administrador falló:', e);
-  }
-
-  // Intento 2: si la restricción de la base de datos prefiere 'admin'
-  try {
-    const { data, error } = await supabase
-      .from('perfiles')
-      .upsert(
-        {
-          id: userId,
-          nombre: userName,
-          rol: 'admin',
-          activo: true,
-        },
-        { onConflict: 'id' }
-      )
-      .select('*')
-      .maybeSingle();
-
-    if (!error && data) {
-      return data as Perfil;
-    }
-  } catch (e) {
-    console.warn('Intento con admin falló:', e);
-  }
-
-  return null;
-}
-
-async function loginViaProxy(email: string, password: string) {
-  const supabase = getSupabaseClient();
-  const resp = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  const json = await resp.json();
-  if (!resp.ok || json.error) {
-    throw new Error(json.error || 'Error al iniciar sesión.');
-  }
-  if (json.session) {
-    await supabase.auth.setSession(json.session);
-  }
-  return json;
-}
-
-export async function loginAdmin(email: string, password: string) {
-  const supabase = getSupabaseClient();
-  const cleanEmail = email.trim();
-
-  try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password,
-    });
+    const { data, error } = await supabase.storage
+      .from('product-images')
+      .upload(fileName, file, {
+        contentType: mimeType,
+        upsert: true,
+      });
 
     if (error) {
-      if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
-        return await loginViaProxy(cleanEmail, password);
-      }
-      throw new Error(error.message || 'Error al iniciar sesión.');
+      console.warn('Supabase storage upload error:', error);
+      throw error;
     }
 
-    return data;
+    const { data: pubData } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(fileName);
+
+    if (pubData?.publicUrl) {
+      return pubData.publicUrl;
+    }
+
+    throw new Error('No se pudo generar la URL pública de la imagen.');
   } catch (err: any) {
-    if (err?.message?.includes('Failed to fetch') || err?.message?.includes('NetworkError') || err?.name === 'TypeError') {
-      return await loginViaProxy(cleanEmail, password);
-    }
-    throw err;
-  }
-}
-
-async function registerViaProxy(email: string, password: string, nombre?: string) {
-  const supabase = getSupabaseClient();
-  const resp = await fetch('/api/auth/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, name: nombre }),
-  });
-  const json = await resp.json();
-  if (!resp.ok || json.error) {
-    throw new Error(json.error || 'Error al registrar usuario.');
-  }
-  if (json.session) {
-    await supabase.auth.setSession(json.session);
-  }
-  return json;
-}
-
-export async function registerAdmin(
-  email: string,
-  password: string,
-  nombre?: string,
-  rol: 'admin' | 'cajero' | 'cliente' = 'admin'
-) {
-  const supabase = getSupabaseClient();
-  const cleanEmail = email.trim().toLowerCase();
-
-  let dataResult: any = null;
-
-  try {
-    const { data, error } = await supabase.auth.signUp({
-      email: cleanEmail,
-      password,
-      options: {
-        data: {
-          nombre: nombre || 'Administrador',
-          rol,
-        },
-      },
+    console.error('Error in uploadProductImageToStorage, fallback base64:', err);
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('No se pudo leer el archivo de imagen'));
+      reader.readAsDataURL(file);
     });
-
-    if (error) {
-      if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
-        dataResult = await registerViaProxy(cleanEmail, password, nombre);
-      } else {
-        throw new Error(error.message || 'Error al registrar usuario.');
-      }
-    } else {
-      dataResult = data;
-    }
-  } catch (err: any) {
-    if (err?.message?.includes('Failed to fetch') || err?.message?.includes('NetworkError') || err?.name === 'TypeError') {
-      dataResult = await registerViaProxy(cleanEmail, password, nombre);
-    } else {
-      throw err;
-    }
-  }
-
-  // Si existe tabla perfiles y el usuario fue creado, registrar o actualizar
-  if (dataResult?.user) {
-    try {
-      await supabase.from('perfiles').upsert({
-        id: dataResult.user.id,
-        nombre: nombre || cleanEmail.split('@')[0],
-        rol,
-        activo: true,
-      });
-    } catch {
-      // Ignorar si perfiles se maneja mediante el trigger on_auth_user_created
-    }
-  }
-
-  return dataResult;
-}
-
-export async function logoutAdmin() {
-  const supabase = getSupabaseClient();
-  const { error } = await supabase.auth.signOut();
-  if (error) {
-    console.warn('Error al cerrar sesión:', error.message);
   }
 }
 
-export async function sendMagicLink(email: string) {
-  const supabase = getSupabaseClient();
-  const cleanEmail = email.trim().toLowerCase();
-  const { data, error } = await supabase.auth.signInWithOtp({
-    email: cleanEmail,
-    options: {
-      emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/admin` : undefined,
-    },
-  });
-
-  if (error) {
-    throw new Error(error.message || 'Error al enviar enlace de acceso.');
-  }
-
-  return data;
-}
-
-export async function resetAdminPassword(email: string) {
-  const supabase = getSupabaseClient();
-  const cleanEmail = email.trim().toLowerCase();
-  const { data, error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-    redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/admin` : undefined,
-  });
-
-  if (error) {
-    throw new Error(error.message || 'Error al solicitar restablecimiento de contraseña.');
-  }
-
-  return data;
-}
-
-export async function getAdminSession() {
-  const supabase = getSupabaseClient();
-  const { data } = await supabase.auth.getSession();
-  return data.session;
-}
-
-export function onAdminAuthChange(callback: (event: string, session: any) => void) {
-  const supabase = getSupabaseClient();
-  const { data } = supabase.auth.onAuthStateChange((event, session) => {
-    callback(event, session);
-  });
-  return data.subscription;
-}
-
-// ==========================================
-// DASHBOARD STATS & CHARTS
-// ==========================================
-
-export async function fetchDashboardStats(): Promise<DashboardStats> {
-  const supabase = getSupabaseClient();
-
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-
-  // 1. Pedidos & Ventas
-  let ventas_hoy = 0;
-  let ventas_mes = 0;
-  let pedidos_hoy = 0;
-  let pedidos_pendientes = 0;
-
+/* ==================== CATEGORIAS ==================== */
+export async function getAdminCategories(): Promise<Categoria[]> {
   try {
-    const { data: orders } = await supabase
-      .from('pedidos')
-      .select('id, total, estado, created_at');
+    const { data: cats, error } = await supabase
+      .from('categorias')
+      .select('*')
+      .order('created_at', { ascending: true });
 
-    if (orders) {
-      orders.forEach((o) => {
-        const orderDate = o.created_at || '';
-        const orderTotal = Number(o.total) || 0;
+    if (error) throw error;
 
-        if (orderDate >= startOfToday && o.estado !== 'cancelado') {
-          ventas_hoy += orderTotal;
-          pedidos_hoy += 1;
-        }
-
-        if (orderDate >= startOfMonth && o.estado !== 'cancelado') {
-          ventas_mes += orderTotal;
-        }
-
-        if (o.estado === 'pendiente') {
-          pedidos_pendientes += 1;
-        }
-      });
-    }
-  } catch (err) {
-    console.warn('Error cargando stats de pedidos:', err);
-  }
-
-  // 2. Productos & Stock
-  let total_productos = 0;
-  let productos_agotados = 0;
-  let productos_stock_bajo = 0;
-
-  try {
-    const { data: prods } = await supabase
-      .from('productos')
-      .select('id, stock, activo');
-
-    const { data: invs } = await supabase
-      .from('inventario')
-      .select('producto_id, stock_actual, stock_minimo');
-
-    const invMap = new Map<string, { stock_actual: number; stock_minimo: number }>();
-    if (invs) {
-      invs.forEach((i) => {
-        invMap.set(i.producto_id, {
-          stock_actual: i.stock_actual,
-          stock_minimo: i.stock_minimo || 5,
-        });
-      });
-    }
-
+    // Obtener recuento de productos
+    const { data: prods } = await supabase.from('productos').select('categoria_id');
+    const counts: Record<string, number> = {};
     if (prods) {
-      total_productos = prods.length;
       prods.forEach((p) => {
-        const inv = invMap.get(p.id);
-        const resolvedStock = inv ? inv.stock_actual : (p.stock || 0);
-        const minStock = inv ? inv.stock_minimo : 5;
-
-        if (resolvedStock <= 0) {
-          productos_agotados += 1;
-        } else if (resolvedStock <= minStock) {
-          productos_stock_bajo += 1;
-        }
+        if (p.categoria_id) counts[p.categoria_id] = (counts[p.categoria_id] || 0) + 1;
       });
     }
+
+    const mapped = (cats || []).map((c) => ({
+      ...c,
+      total_productos: counts[c.id] || 0,
+    }));
+
+    return sortCategoriesByCustomOrder(mapped);
   } catch (err) {
-    console.warn('Error cargando stats de productos:', err);
-  }
-
-  return {
-    ventas_hoy,
-    ventas_mes,
-    pedidos_hoy,
-    pedidos_pendientes,
-    total_productos,
-    productos_agotados,
-    productos_stock_bajo,
-  };
-}
-
-export interface ChartDayPoint {
-  label: string;
-  total: number;
-  orders: number;
-}
-
-export async function fetchSalesByPeriod(daysCount = 7): Promise<ChartDayPoint[]> {
-  const supabase = getSupabaseClient();
-  const points: ChartDayPoint[] = [];
-
-  const now = new Date();
-  const dayBuckets: Record<string, { total: number; orders: number; label: string }> = {};
-
-  for (let i = daysCount - 1; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(now.getDate() - i);
-    const key = d.toISOString().split('T')[0];
-    const label = d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
-    dayBuckets[key] = { total: 0, orders: 0, label };
-  }
-
-  try {
-    const startDate = new Date();
-    startDate.setDate(now.getDate() - daysCount);
-
-    const { data: orders } = await supabase
-      .from('pedidos')
-      .select('id, total, estado, created_at')
-      .gte('created_at', startDate.toISOString())
-      .neq('estado', 'cancelado');
-
-    if (orders) {
-      orders.forEach((o) => {
-        const key = (o.created_at || '').split('T')[0];
-        if (dayBuckets[key]) {
-          dayBuckets[key].total += Number(o.total) || 0;
-          dayBuckets[key].orders += 1;
-        }
-      });
-    }
-  } catch (e) {
-    console.warn('Error calculando ventas por periodo:', e);
-  }
-
-  Object.keys(dayBuckets).forEach((k) => {
-    points.push(dayBuckets[k]);
-  });
-
-  return points;
-}
-
-export interface TopProductItem {
-  id: string;
-  nombre: string;
-  cantidad: number;
-  total_ventas: number;
-  imagen_url: string | null;
-}
-
-export async function fetchTopProducts(): Promise<TopProductItem[]> {
-  const supabase = getSupabaseClient();
-
-  try {
-    const { data: details } = await supabase
-      .from('detalle_pedidos')
-      .select('producto_id, cantidad, subtotal, precio_unitario');
-
-    const { data: prods } = await supabase
-      .from('productos')
-      .select('id, nombre, imagen_url');
-
-    const prodMap = new Map<string, { nombre: string; imagen_url: string | null }>();
-    if (prods) {
-      prods.forEach((p) => prodMap.set(p.id, { nombre: p.nombre, imagen_url: p.imagen_url }));
-    }
-
-    const counts: Record<string, { cantidad: number; total_ventas: number }> = {};
-    if (details) {
-      details.forEach((d) => {
-        if (!counts[d.producto_id]) {
-          counts[d.producto_id] = { cantidad: 0, total_ventas: 0 };
-        }
-        counts[d.producto_id].cantidad += Number(d.cantidad) || 0;
-        counts[d.producto_id].total_ventas += Number(d.subtotal) || (Number(d.cantidad) * Number(d.precio_unitario)) || 0;
-      });
-    }
-
-    const list: TopProductItem[] = Object.keys(counts).map((prodId) => {
-      const p = prodMap.get(prodId);
-      return {
-        id: prodId,
-        nombre: p?.nombre || 'Producto #' + String(prodId).slice(0, 6),
-        cantidad: counts[prodId].cantidad,
-        total_ventas: counts[prodId].total_ventas,
-        imagen_url: p?.imagen_url || null,
-      };
-    });
-
-    list.sort((a, b) => b.cantidad - a.cantidad);
-    return list.slice(0, 5);
-  } catch (e) {
-    console.warn('Error obteniendo top productos:', e);
+    console.warn('Error fetching admin categories:', err);
     return [];
   }
 }
 
-// ==========================================
-// STORAGE UPLOAD (SUPABASE STORAGE OPTIMIZADO)
-// ==========================================
-
-// Cache for working bucket and status to eliminate redundant slow network attempts
-let cachedWorkingBucket: string | null = null;
-let storageDisabledForSession = false;
-
-// Helper para subir videos y archivos multimedia directamente al servidor de la tienda
-async function uploadToLocalServer(
-  file: File,
-  onStatusUpdate?: (status: string) => void
-): Promise<string> {
-  onStatusUpdate?.(`Transfiriendo video (${(file.size / (1024 * 1024)).toFixed(1)}MB) al servidor de la tienda...`);
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const base64 = reader.result as string;
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            filename: file.name,
-            base64,
-          }),
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || `HTTP ${res.status}`);
-        }
-
-        const data = await res.json();
-        if (data.url) {
-          resolve(data.url);
-        } else {
-          throw new Error('Respuesta inválida al subir video');
-        }
-      } catch (e) {
-        reject(e);
-      }
-    };
-    reader.onerror = () => reject(new Error('Error al leer archivo local'));
-    reader.readAsDataURL(file);
-  });
-}
-
-export async function uploadProductImageToSupabase(
-  file: File,
-  onStatusUpdate?: (statusText: string) => void
-): Promise<string> {
-  const supabase = getSupabaseClient();
-  const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp)$/i.test(file.name);
-  const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|mkv|avi)$/i.test(file.name);
-
-  // 1. RESTRICCIÓN ESTRICTA DE 10MB PARA VIDEOS
-  if (isVideo && file.size > 10 * 1024 * 1024) {
-    const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-    throw new Error(
-      `El video "${file.name}" pesa ${sizeMB}MB y supera el límite máximo de 10MB. Por rendimiento y velocidad de carga, no se permite agregar videos mayores de 10MB.`
-    );
-  }
-
-  // 2. PARA VIDEOS: Subida directa al servidor (/api/upload -> public/videos/)
-  // Esto garantiza que el video se guarde en menos de 1 segundo, no dependa de políticas RLS externas
-  // y genere una URL corta ("/videos/...") que se guarda en Supabase en 0.05 segundos sin saturar la BD
-  if (isVideo) {
-    try {
-      const localUrl = await uploadToLocalServer(file, onStatusUpdate);
-      if (localUrl) {
-        onStatusUpdate?.('¡Video guardado con éxito!');
-        return localUrl;
-      }
-    } catch (localErr) {
-      console.warn('Endpoint /api/upload no disponible, intentando Supabase Storage:', localErr);
-    }
-  }
-
-  let fileToUpload: File = file;
-  let fallbackDataUrl = '';
-
-  // 3. Compresión instantánea en el navegador para imágenes (reduce 5MB a ~120KB)
-  if (isImage) {
-    onStatusUpdate?.('Optimizando y reduciendo imagen con alta fidelidad...');
-    try {
-      const optimized = await compressImageFile(file, {
-        maxWidth: 1300,
-        maxHeight: 1300,
-        quality: 0.82,
-        mimeType: 'image/jpeg',
-      });
-      fileToUpload = optimized.file;
-      fallbackDataUrl = optimized.dataUrl;
-    } catch (e) {
-      console.warn('Compresión en canvas no disponible, usando original:', e);
-    }
-  }
-
-  // Si para imágenes ya se sabe que el storage no tiene RLS público, devolvemos la imagen comprimida (100KB)
-  if (isImage && storageDisabledForSession && fallbackDataUrl) {
-    onStatusUpdate?.('Guardando imagen ultraligera optimizada...');
-    return fallbackDataUrl;
-  }
-
-  // 4. Subida a Supabase Storage CDN
-  const ext = isImage
-    ? 'jpg'
-    : (file.name.split('.').pop()?.toLowerCase() || 'mp4');
-  const cleanName = file.name
-    .substring(0, file.name.lastIndexOf('.'))
-    .replace(/[^a-zA-Z0-9]/g, '_')
-    .slice(0, 25);
-  const filePath = `${Date.now()}_${cleanName}.${ext}`;
-
-  const candidateBuckets = cachedWorkingBucket
-    ? [cachedWorkingBucket]
-    : isVideo
-    ? ['product-images', 'videos', 'assets']
-    : ['product-images', 'productos', 'products'];
-
-  onStatusUpdate?.(
-    isVideo
-      ? `Subiendo video (${(file.size / (1024 * 1024)).toFixed(1)}MB) a Supabase Storage...`
-      : 'Enviando imagen a Supabase Storage CDN...'
-  );
-
-  let lastError: any = null;
-  const timeoutMs = isVideo ? 60000 : 5000;
-
-  for (const bucket of candidateBuckets) {
-    try {
-      const mimeType = isVideo
-        ? (file.type || 'video/mp4')
-        : (fileToUpload.type || 'image/jpeg');
-
-      const uploadPromise = supabase.storage.from(bucket).upload(filePath, fileToUpload, {
-        cacheControl: '3600',
-        upsert: true,
-        contentType: mimeType,
-      });
-
-      const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
-        setTimeout(
-          () =>
-            reject(
-              new Error(
-                isVideo
-                  ? 'Tiempo de espera agotado al subir el video a Supabase Storage.'
-                  : 'Timeout en Supabase Storage'
-              )
-            ),
-          timeoutMs
-        )
-      );
-
-      const { data, error } = (await Promise.race([uploadPromise, timeoutPromise])) as any;
-
-      if (!error && data) {
-        cachedWorkingBucket = bucket;
-        const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(data.path);
-        return publicData.publicUrl;
-      }
-      lastError = error;
-    } catch (e) {
-      lastError = e;
-    }
-  }
-
-  // 5. MANEJO DE ERRORES:
-  // Para imágenes: si falla el bucket, usamos la dataURL comprimida ultraligera (~100KB)
-  if (isImage && fallbackDataUrl) {
-    storageDisabledForSession = true;
-    console.warn('[Supabase Storage no disponible para imágenes, usando versión comprimida]', lastError);
-    return fallbackDataUrl;
-  }
-
-  // Para VIDEOS: NUNCA convertir a Base64 gigantesco de 15MB que satura y congela la base de datos!
-  const errorMsg = lastError?.message || 'Error de permisos o RLS en Supabase Storage';
-  throw new Error(
-    `No se pudo guardar el video (${errorMsg}). Puedes pegar una URL directa de video (ej. YouTube, Cloudinary o .mp4) en el campo correspondiente.`
-  );
-}
-
-/**
- * Diagnóstico de rendimiento de la base de datos Supabase
- */
-export async function checkDatabaseHealth(): Promise<{
-  latencyMs: number;
-  totalProducts: number;
-  heavyProducts: { id: string | number; nombre: string; payloadSizeKB: number; hasLargeBase64: boolean }[];
-  totalPayloadKB: number;
-}> {
-  const supabase = getSupabaseClient();
-  const t0 = performance.now();
-
-  const { data: prods, error } = await supabase.from('productos').select('id, nombre, imagen_url');
-  const latencyMs = Math.round(performance.now() - t0);
-
-  if (error || !prods) {
-    return { latencyMs, totalProducts: 0, heavyProducts: [], totalPayloadKB: 0 };
-  }
-
-  let totalChars = 0;
-  const heavyProducts: { id: string | number; nombre: string; payloadSizeKB: number; hasLargeBase64: boolean }[] = [];
-
-  prods.forEach((p) => {
-    const imgStr = p.imagen_url || '';
-    const chars = imgStr.length;
-    totalChars += chars;
-    const kb = Math.round(chars / 1024);
-
-    if (kb > 300) {
-      heavyProducts.push({
-        id: p.id,
-        nombre: p.nombre,
-        payloadSizeKB: kb,
-        hasLargeBase64: imgStr.includes('data:'),
-      });
-    }
-  });
-
-  return {
-    latencyMs,
-    totalProducts: prods.length,
-    heavyProducts,
-    totalPayloadKB: Math.round(totalChars / 1024),
-  };
-}
-
-export interface TableStorageDetail {
-  name: string;
-  displayName: string;
-  rows: number;
-  bytes: number;
-  sizeKB: number;
-  sizeMB: number;
-}
-
-export interface BucketStorageDetail {
-  name: string;
-  files: number;
-  bytes: number;
-  sizeMB: number;
-}
-
-export interface SupabaseQuotaReport {
-  storageUsedBytes: number;
-  storageUsedMB: number;
-  storageLimitMB: number; // 1024 MB (Plan Free)
-  storagePercent: number;
-  storageFileCount: number;
-  buckets: BucketStorageDetail[];
-  databaseTables: TableStorageDetail[];
-  databaseTotalBytes: number;
-  databaseTotalKB: number;
-  databaseTotalMB: number;
-  databaseLimitMB: number; // 500 MB (Plan Free)
-  databasePercent: number;
-  totalRecords: number;
-  status: 'optimal' | 'warning' | 'alert' | 'critical';
-  isApproachingLimit: boolean;
-  message: string;
-  recommendation: string;
-}
-
-/**
- * Consulta en tiempo real las cuotas y almacenamiento exacto de cada tabla y del Storage en Supabase
- */
-export async function checkSupabaseStorageAndLimits(): Promise<SupabaseQuotaReport> {
-  const supabase = getSupabaseClient();
-  const STORAGE_LIMIT_MB = 1024; // 1 GB Límite oficial Supabase Free Tier
-  const DATABASE_LIMIT_MB = 500; // 500 MB Límite oficial DB Supabase Free Tier
-
-  let totalStorageBytes = 0;
-  let totalFiles = 0;
-  const bucketsDetail: BucketStorageDetail[] = [];
-
-  // 1. Escanear buckets de almacenamiento (Storage CDN)
-  const bucketsToCheck = ['product-images', 'videos', 'assets'];
-  for (const bucket of bucketsToCheck) {
-    try {
-      const { data: files, error } = await supabase.storage.from(bucket).list('', {
-        limit: 1000,
-        sortBy: { column: 'name', order: 'asc' },
-      });
-
-      if (!error && files) {
-        let bBytes = 0;
-        let bFiles = 0;
-        files.forEach((file) => {
-          if (file.name !== '.emptyFolderPlaceholder') {
-            bFiles += 1;
-            bBytes += file.metadata?.size || 0;
-          }
-        });
-        totalFiles += bFiles;
-        totalStorageBytes += bBytes;
-        bucketsDetail.push({
-          name: bucket,
-          files: bFiles,
-          bytes: bBytes,
-          sizeMB: Number((bBytes / (1024 * 1024)).toFixed(2)),
-        });
-      }
-    } catch (e) {
-      // Ignorar si el bucket no existe
-    }
-  }
-
-  // 2. Medir almacenamiento exacto y filas de cada tabla de la base de datos
-  const tablesToScan = [
-    { name: 'productos', label: 'Productos (Fotos, precios, descripción)' },
-    { name: 'inventario', label: 'Inventario (Existencias y stock)' },
-    { name: 'categorias', label: 'Categorías (Colecciones)' },
-    { name: 'pedidos', label: 'Pedidos (Órdenes de clientes)' },
-    { name: 'clientes', label: 'Clientes (Fichas y contactos)' },
-    { name: 'ventas', label: 'Ventas (Asientos contables)' },
-  ];
-
-  const databaseTables: TableStorageDetail[] = [];
-  let totalDbBytes = 0;
-  let totalRecords = 0;
-
-  for (const t of tablesToScan) {
-    try {
-      const { data, count, error } = await supabase.from(t.name).select('*', { count: 'exact' });
-      if (!error && data) {
-        const rowCount = count ?? data.length;
-        // Calcular bytes serializados de los registros
-        const serialized = JSON.stringify(data);
-        const bytes = new Blob([serialized]).size;
-        const sizeKB = Number((bytes / 1024).toFixed(2));
-        const sizeMB = Number((bytes / (1024 * 1024)).toFixed(3));
-
-        totalDbBytes += bytes;
-        totalRecords += rowCount;
-
-        databaseTables.push({
-          name: t.name,
-          displayName: t.label,
-          rows: rowCount,
-          bytes,
-          sizeKB,
-          sizeMB,
-        });
-      } else {
-        databaseTables.push({
-          name: t.name,
-          displayName: t.label,
-          rows: 0,
-          bytes: 0,
-          sizeKB: 0,
-          sizeMB: 0,
-        });
-      }
-    } catch {
-      databaseTables.push({
-        name: t.name,
-        displayName: t.label,
-        rows: 0,
-        bytes: 0,
-        sizeKB: 0,
-        sizeMB: 0,
-      });
-    }
-  }
-
-  const storageUsedMB = Number((totalStorageBytes / (1024 * 1024)).toFixed(2));
-  const storagePercent = Number(((storageUsedMB / STORAGE_LIMIT_MB) * 100).toFixed(1));
-
-  const databaseTotalKB = Number((totalDbBytes / 1024).toFixed(2));
-  const databaseTotalMB = Number((totalDbBytes / (1024 * 1024)).toFixed(3));
-  const databasePercent = Number(((databaseTotalMB / DATABASE_LIMIT_MB) * 100).toFixed(2));
-
-  // Determinar severidad del estado
-  let status: 'optimal' | 'warning' | 'alert' | 'critical' = 'optimal';
-  let isApproachingLimit = false;
-  let message = `Almacenamiento: ${storageUsedMB} MB de ${STORAGE_LIMIT_MB} MB (${storagePercent}% en uso) en Storage CDN. Tablas BD: ${databaseTotalKB} KB de ${DATABASE_LIMIT_MB} MB. Capacidad óptima.`;
-  let recommendation = 'Tus tablas y almacenamiento en Supabase están en óptimas condiciones.';
-
-  if (storagePercent >= 90 || databasePercent >= 90) {
-    status = 'critical';
-    isApproachingLimit = true;
-    message = `🚨 ¡ALERTA CRÍTICA!: Supabase Storage está al ${storagePercent}% (${storageUsedMB} MB / ${STORAGE_LIMIT_MB} MB).`;
-    recommendation = 'Acción urgente: Elimina fotos o videos que no utilices para liberar espacio de inmediato.';
-  } else if (storagePercent >= 75 || databasePercent >= 75) {
-    status = 'alert';
-    isApproachingLimit = true;
-    message = `⚠️ Advertencia: Supabase Storage está llegando al límite (${storagePercent}% de 1 GB).`;
-    recommendation = 'Te recomendamos no subir videos pesados y utilizar enlaces o comprimir archivos.';
-  } else if (storagePercent >= 50 || databasePercent >= 50) {
-    status = 'warning';
-    isApproachingLimit = true;
-    message = `Atención: Has consumido la mitad del almacenamiento gratuito (${storageUsedMB} MB de 1,024 MB).`;
-    recommendation = 'Mantén tus fotos optimizadas.';
-  }
-
-  return {
-    storageUsedBytes: totalStorageBytes,
-    storageUsedMB,
-    storageLimitMB: STORAGE_LIMIT_MB,
-    storagePercent,
-    storageFileCount: totalFiles,
-    buckets: bucketsDetail,
-    databaseTables,
-    databaseTotalBytes: totalDbBytes,
-    databaseTotalKB,
-    databaseTotalMB,
-    databaseLimitMB: DATABASE_LIMIT_MB,
-    databasePercent,
-    totalRecords,
-    status,
-    isApproachingLimit,
-    message,
-    recommendation,
-  };
-}
-
-/**
- * Limpia y optimiza productos que tienen imágenes/videos pesados en Base64 en la base de datos
- */
-export async function optimizeHeavyProduct(productId: string | number): Promise<boolean> {
-  const supabase = getSupabaseClient();
-  const { data: prod, error } = await supabase
-    .from('productos')
-    .select('id, nombre, imagen_url')
-    .eq('id', productId)
-    .single();
-
-  if (error || !prod || !prod.imagen_url) return false;
-
-  let imgUrl = prod.imagen_url.trim();
-
-  // Si es un array JSON
-  if (imgUrl.startsWith('[') && imgUrl.endsWith(']')) {
-    try {
-      const arr = JSON.parse(imgUrl);
-      if (Array.isArray(arr)) {
-        // Filtrar elementos que son base64 gigantes > 500KB si ya hay una imagen URL válida
-        const cleanedArr = arr.filter((item: string) => {
-          if (typeof item === 'string' && item.startsWith('data:') && item.length > 500000) {
-            return false;
-          }
-          return true;
-        });
-
-        const newPayload = cleanedArr.length > 1
-          ? JSON.stringify(cleanedArr)
-          : (cleanedArr[0] || '');
-
-        await supabase
-          .from('productos')
-          .update({ imagen_url: newPayload, updated_at: new Date().toISOString() })
-          .eq('id', productId);
-
-        return true;
-      }
-    } catch (e) {
-      console.warn('Error parsing product images during cleanup:', e);
-    }
-  }
-
-  return false;
-}
-
-// ==========================================
-// LOCAL EXCLUSION HELPERS (Para evitar errores de permisos 42501 o bloqueos de UI)
-// ==========================================
-
-const EXCLUDED_CLIENTS_KEY = 'pretty_store_excluded_clients_v1';
-const EXCLUDED_PRODUCTS_KEY = 'pretty_store_excluded_products_v1';
-
-export function getExcludedClientIds(): Set<string> {
-  try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem(EXCLUDED_CLIENTS_KEY) : null;
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    return new Set(Array.isArray(parsed) ? parsed.map(String) : []);
-  } catch {
-    return new Set();
-  }
-}
-
-export function saveExcludedClientId(id: string | number): void {
-  try {
-    const current = getExcludedClientIds();
-    current.add(String(id).trim());
-    localStorage.setItem(EXCLUDED_CLIENTS_KEY, JSON.stringify(Array.from(current)));
-  } catch {}
-}
-
-export function removeExcludedClientId(id: string | number): void {
-  try {
-    const current = getExcludedClientIds();
-    current.delete(String(id).trim());
-    localStorage.setItem(EXCLUDED_CLIENTS_KEY, JSON.stringify(Array.from(current)));
-  } catch {}
-}
-
-export function getExcludedProductIds(): Set<string> {
-  try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem(EXCLUDED_PRODUCTS_KEY) : null;
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    return new Set(Array.isArray(parsed) ? parsed.map(String) : []);
-  } catch {
-    return new Set();
-  }
-}
-
-export function saveExcludedProductId(id: string | number): void {
-  try {
-    const current = getExcludedProductIds();
-    current.add(String(id).trim());
-    localStorage.setItem(EXCLUDED_PRODUCTS_KEY, JSON.stringify(Array.from(current)));
-  } catch {}
-}
-
-export function removeExcludedProductId(id: string | number): void {
-  try {
-    const current = getExcludedProductIds();
-    current.delete(String(id).trim());
-    localStorage.setItem(EXCLUDED_PRODUCTS_KEY, JSON.stringify(Array.from(current)));
-  } catch {}
-}
-
-// ==========================================
-// PRODUCTS CRUD
-// ==========================================
-
-export async function getAdminProducts(): Promise<Producto[]> {
-  const supabase = getSupabaseClient();
-
-  const { data: prods, error: pErr } = await supabase
-    .from('productos')
-    .select('*')
-    .order('created_at', { ascending: false });
-
-  if (pErr) throw new Error(`Error al cargar productos: ${pErr.message}`);
-
-  const excluded = getExcludedProductIds();
-  const visibleProds = (prods || []).filter((p) => !excluded.has(String(p.id)));
-
-  const { data: cats } = await supabase.from('categorias').select('*');
-  const catMap = new Map<string, Categoria>();
-  if (cats) {
-    cats.forEach((c) => {
-      catMap.set(String(c.id), c);
-      catMap.set(String(c.id).toLowerCase(), c);
-    });
-  }
-
-  const { data: invs } = await supabase.from('inventario').select('*');
-  const invMap = new Map<string, Inventario>();
-  if (invs) {
-    invs.forEach((i) => {
-      invMap.set(String(i.producto_id), i);
-    });
-  }
-
-  return visibleProds.map((p) => {
-    const inv = invMap.get(String(p.id));
-    const stockResolved = inv && typeof inv.stock_actual === 'number' ? inv.stock_actual : p.stock;
-
-    let imagenes: string[] = [];
-    let primaryImageUrl = p.imagen_url;
-
-    if (p.imagen_url && typeof p.imagen_url === 'string') {
-      const trimmed = p.imagen_url.trim();
-      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            imagenes = parsed;
-            primaryImageUrl = parsed[0];
-          }
-        } catch {
-          imagenes = [trimmed];
-        }
-      } else if (trimmed.includes('|||')) {
-        imagenes = trimmed.split('|||').map((s: string) => s.trim()).filter(Boolean);
-        primaryImageUrl = imagenes[0] || trimmed;
-      } else if (trimmed.length > 0) {
-        imagenes = [trimmed];
-      }
-    }
-
-    return {
-      ...p,
-      stock: stockResolved,
-      imagen_url: primaryImageUrl,
-      imagenes,
-      categoria: catMap.get(String(p.categoria_id)),
-    };
-  });
-}
-
-export async function createAdminProduct(productData: {
-  categoria_id: string;
-  nombre: string;
-  descripcion: string;
-  precio: number;
-  costo: number;
-  stock: number;
-  imagen_url: string;
-  imagenes?: string[];
-  activo: boolean;
-}): Promise<Producto> {
-  const supabase = getSupabaseClient();
-
-  // If multiple images are provided, serialize to JSON in imagen_url
-  let imagePayload = productData.imagen_url?.trim() || null;
-  if (productData.imagenes && productData.imagenes.length > 0) {
-    if (productData.imagenes.length > 1) {
-      imagePayload = JSON.stringify(productData.imagenes);
-    } else {
-      imagePayload = productData.imagenes[0];
-    }
-  }
-
-  const insertPayload = {
-    categoria_id: productData.categoria_id,
-    nombre: productData.nombre.trim(),
-    descripcion: productData.descripcion.trim() || null,
-    precio: Number(productData.precio) || 0,
-    costo: Number(productData.costo) || 0,
-    stock: Number(productData.stock) || 0,
-    imagen_url: imagePayload,
-    activo: Boolean(productData.activo),
-  };
-
-  const { data: newProd, error: pErr } = await supabase
-    .from('productos')
-    .insert([insertPayload])
-    .select()
-    .single();
-
-  if (pErr) throw new Error(`Error al guardar producto: ${pErr.message}`);
-
-  // Create or update inventario row
-  try {
-    await supabase.from('inventario').insert([
-      {
-        producto_id: newProd.id,
-        stock_actual: Number(productData.stock) || 0,
-        stock_minimo: 5,
-      },
-    ]);
-  } catch (invErr) {
-    console.warn('Inventario sync warning:', invErr);
-  }
-
-  return newProd;
-}
-
-export async function updateAdminProduct(
-  id: string,
-  productData: {
-    categoria_id: string;
-    nombre: string;
-    descripcion: string;
-    precio: number;
-    costo: number;
-    stock: number;
-    imagen_url: string;
-    imagenes?: string[];
-    activo: boolean;
-  }
-): Promise<Producto> {
-  const supabase = getSupabaseClient();
-
-  // If multiple images are provided, serialize to JSON in imagen_url
-  let imagePayload = productData.imagen_url?.trim() || null;
-  if (productData.imagenes && productData.imagenes.length > 0) {
-    if (productData.imagenes.length > 1) {
-      imagePayload = JSON.stringify(productData.imagenes);
-    } else {
-      imagePayload = productData.imagenes[0];
-    }
-  }
-
-  const updatePayload = {
-    categoria_id: productData.categoria_id,
-    nombre: productData.nombre.trim(),
-    descripcion: productData.descripcion.trim() || null,
-    precio: Number(productData.precio) || 0,
-    costo: Number(productData.costo) || 0,
-    stock: Number(productData.stock) || 0,
-    imagen_url: imagePayload,
-    activo: Boolean(productData.activo),
-    updated_at: new Date().toISOString(),
-  };
-
-  const { data: updatedProd, error: pErr } = await supabase
-    .from('productos')
-    .update(updatePayload)
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (pErr) throw new Error(`Error al actualizar producto: ${pErr.message}`);
-
-  // Sync inventario
-  try {
-    const { data: existingInv } = await supabase
-      .from('inventario')
-      .select('id')
-      .eq('producto_id', id)
-      .limit(1);
-
-    if (existingInv && existingInv.length > 0) {
-      await supabase
-        .from('inventario')
-        .update({
-          stock_actual: Number(productData.stock) || 0,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('producto_id', id);
-    } else {
-      await supabase.from('inventario').insert([
-        {
-          producto_id: id,
-          stock_actual: Number(productData.stock) || 0,
-          stock_minimo: 5,
-        },
-      ]);
-    }
-  } catch (e) {
-    console.warn('Inventario update error:', e);
-  }
-
-  return updatedProd;
-}
-
-export async function toggleProductActive(id: string, activo: boolean) {
-  const supabase = getSupabaseClient();
-  const { error } = await supabase
-    .from('productos')
-    .update({ activo, updated_at: new Date().toISOString() })
-    .eq('id', id);
-
-  if (error) throw new Error(`Error al cambiar estado: ${error.message}`);
-}
-
-export async function updateProductStock(id: string, newStock: number) {
-  const supabase = getSupabaseClient();
-  const cleanStock = Math.max(0, Math.floor(newStock));
-
-  const { error: pErr } = await supabase
-    .from('productos')
-    .update({ stock: cleanStock, updated_at: new Date().toISOString() })
-    .eq('id', id);
-
-  if (pErr) throw new Error(`Error al actualizar stock: ${pErr.message}`);
-
-  try {
-    await supabase
-      .from('inventario')
-      .update({ stock_actual: cleanStock, updated_at: new Date().toISOString() })
-      .eq('producto_id', id);
-  } catch (e) {
-    // Ignore if table has strict RLS
-  }
-}
-
-/**
- * Elimina automáticamente un archivo de imagen alojado en Supabase Storage
- */
-export async function deleteImageFromSupabaseStorage(imageUrl: string): Promise<boolean> {
-  if (!imageUrl || typeof imageUrl !== 'string') return false;
-
-  const supabase = getSupabaseClient();
-  try {
-    let bucket = '';
-    let filePath = '';
-
-    // Caso 1: URL estándar de Supabase Storage: .../storage/v1/object/(public|authenticated|sign)/<bucket>/<path>
-    const match = imageUrl.match(/\/storage\/v1\/object\/(?:public|authenticated|sign)\/([^/?#]+)\/(.+?)(?:\?|#|$)/);
-    if (match) {
-      bucket = decodeURIComponent(match[1]);
-      filePath = decodeURIComponent(match[2]).replace(/^\/+/, '');
-    }
-
-    // Caso 2: Extraer el nombre de archivo directo de la URL
-    const cleanUrl = imageUrl.split('?')[0].split('#')[0];
-    const filename = cleanUrl.substring(cleanUrl.lastIndexOf('/') + 1);
-
-    if (bucket && filePath) {
-      const { data, error } = await supabase.storage.from(bucket).remove([filePath]);
-      if (!error && data && data.length > 0) {
-        return true;
-      }
-      // Si la ruta con subcarpetas falló, probar solo el nombre de archivo directo
-      if (filename && filename !== filePath) {
-        const { data: d2, error: e2 } = await supabase.storage.from(bucket).remove([filename]);
-        if (!e2 && d2 && d2.length > 0) return true;
-      }
-    }
-
-    // Probar en los buckets estándar si no se eliminó aún
-    if (filename) {
-      const candidateBuckets = ['product-images', 'productos', 'products', 'assets'];
-      for (const b of candidateBuckets) {
-        if (b === bucket) continue;
-        try {
-          const { data: d3, error: e3 } = await supabase.storage.from(b).remove([filename]);
-          if (!e3 && d3 && d3.length > 0) return true;
-        } catch {}
-      }
-    }
-  } catch (err) {
-    console.warn('Excepción al eliminar imagen de Supabase Storage:', err);
-  }
-  return false;
-}
-
-export async function deleteAdminProduct(
-  id: string | number,
-  productFallback?: { imagen_url?: string | null; imagenes?: string[] | null }
-): Promise<{ success: boolean; photosDeleted: number }> {
-  const supabase = getSupabaseClient();
-  const cleanId = String(id).trim();
-  const numId = Number(cleanId);
-  const isNumeric = !isNaN(numId) && cleanId !== '';
-
-  // 0. Recolectar TODAS las fotos del producto para eliminarlas automáticamente del Storage de Supabase
-  const imagesToDelete: string[] = [];
-
-  // Agregar imágenes provistas directamente en memoria
-  if (productFallback?.imagen_url && typeof productFallback.imagen_url === 'string') {
-    imagesToDelete.push(productFallback.imagen_url);
-  }
-  if (Array.isArray(productFallback?.imagenes)) {
-    productFallback.imagenes.forEach((img) => {
-      if (img && typeof img === 'string') imagesToDelete.push(img);
-    });
-  }
-
-  // Consultar también en la base de datos para no omitir ninguna imagen
-  try {
-    let { data: productData } = await supabase
-      .from('productos')
-      .select('imagen_url, imagenes')
-      .eq('id', cleanId)
-      .maybeSingle();
-
-    if (!productData && isNumeric) {
-      const { data: numData } = await supabase
-        .from('productos')
-        .select('imagen_url, imagenes')
-        .eq('id', numId)
-        .maybeSingle();
-      productData = numData;
-    }
-
-    if (productData) {
-      if (productData.imagen_url && typeof productData.imagen_url === 'string') {
-        imagesToDelete.push(productData.imagen_url);
-      }
-      if (Array.isArray(productData.imagenes)) {
-        productData.imagenes.forEach((img: any) => {
-          if (img && typeof img === 'string') {
-            imagesToDelete.push(img);
-          }
-        });
-      }
-    }
-  } catch (fetchErr) {
-    console.warn('Aviso obteniendo fotos de producto antes de eliminar:', fetchErr);
-  }
-
-  // 1. ELIMINAR FOTOS DE SUPABASE STORAGE PRIMERO (Para garantizar que se borren incluso si la base de datos restringe permisos)
-  let photosDeleted = 0;
-  if (imagesToDelete.length > 0) {
-    const uniqueImages = Array.from(new Set(imagesToDelete.filter(Boolean)));
-    const deleteResults = await Promise.allSettled(
-      uniqueImages.map((img) => deleteImageFromSupabaseStorage(img))
-    );
-    photosDeleted = deleteResults.filter(
-      (r) => r.status === 'fulfilled' && r.value === true
-    ).length;
-  }
-
-  // 2. Eliminar o desvincular referencias en detalle_pedidos para evitar violación de Foreign Key
-  try {
-    await supabase.from('detalle_pedidos').delete().eq('producto_id', cleanId);
-    if (isNumeric) {
-      await supabase.from('detalle_pedidos').delete().eq('producto_id', numId);
-    }
-  } catch (e) {
-    console.warn('Aviso detalle_pedidos:', e);
-  }
-
-  // 3. Eliminar registros vinculados en inventario
-  try {
-    await supabase.from('inventario').delete().eq('producto_id', cleanId);
-    if (isNumeric) {
-      await supabase.from('inventario').delete().eq('producto_id', numId);
-    }
-  } catch (e) {
-    console.warn('Aviso inventario:', e);
-  }
-
-  // 4. Eliminar físicamente el producto de la tabla productos en Supabase
-  let res = await supabase.from('productos').delete().eq('id', cleanId);
-  if (res.error && isNumeric) {
-    res = await supabase.from('productos').delete().eq('id', numId);
-  }
-
-  if (res.error) {
-    console.warn('Aviso al eliminar producto en Supabase:', res.error);
-    // Fallback: si RLS o un constraint de PostgreSQL (ej. 42501) bloquea el DELETE físico:
-    // a) Desactivar en la base de datos
-    try {
-      await supabase
-        .from('productos')
-        .update({ activo: false, updated_at: new Date().toISOString() })
-        .eq('id', cleanId);
-    } catch {}
-    // b) Excluir del panel local para que desaparezca inmediatamente
-    saveExcludedProductId(cleanId);
-    if (isNumeric) saveExcludedProductId(String(numId));
-  } else {
-    // Si se eliminó físicamente con éxito, quitar de la lista de exclusión si estuviese
-    removeExcludedProductId(cleanId);
-    if (isNumeric) removeExcludedProductId(String(numId));
-  }
-
-  return { success: true, photosDeleted };
-}
-
-export async function deleteAdminSale(orderId: string | number): Promise<{ success: boolean }> {
-  const supabase = getSupabaseClient();
-  const cleanId = String(orderId).trim();
-  const numId = Number(cleanId);
-  const isNumeric = !isNaN(numId) && cleanId !== '';
-  const orderCode = `#PED-${cleanId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
-
-  // 1. Probar RPC seguro de PostgreSQL si está instalado
-  try {
-    const { data: rpcRes, error: rpcErr } = await supabase.rpc('delete_pedido_safe', {
-      p_pedido_id: cleanId,
-    });
-    if (!rpcErr && rpcRes === true) {
-      deleteOrderReceipt(cleanId);
-      deleteOrderReceipt(orderCode);
-      return { success: true };
-    }
-  } catch {}
-
-  // 2. Eliminar items de detalle_pedidos asociados a este pedido
-  try {
-    await supabase.from('detalle_pedidos').delete().eq('pedido_id', cleanId);
-    if (isNumeric) {
-      await supabase.from('detalle_pedidos').delete().eq('pedido_id', numId);
-    }
-  } catch (e) {
-    console.warn('Aviso detalle_pedidos:', e);
-  }
-
-  // 3. Eliminar de tabla ventas si existiese
-  try {
-    await supabase.from('ventas').delete().eq('pedido_id', cleanId);
-    await supabase.from('ventas').delete().eq('id', cleanId);
-    if (isNumeric) {
-      await supabase.from('ventas').delete().eq('pedido_id', numId);
-      await supabase.from('ventas').delete().eq('id', numId);
-    }
-  } catch {}
-
-  // 4. Eliminar pedido de la tabla pedidos en Supabase
-  let res = await supabase.from('pedidos').delete().eq('id', cleanId);
-  if (res.error && isNumeric) {
-    res = await supabase.from('pedidos').delete().eq('id', numId);
-  }
-
-  // Eliminar también del almacenamiento local de recibos
-  deleteOrderReceipt(cleanId);
-  deleteOrderReceipt(orderCode);
-
-  if (res.error) {
-    console.error('Error al eliminar pedido en Supabase:', res.error);
-    throw new Error(`Error al eliminar pedido en Supabase: ${res.error.message}`);
-  }
-
-  return { success: true };
-}
-
-/**
- * Elimina TODOS los pedidos del sistema (detalle_pedidos, ventas, pedidos y recibos locales)
- */
-export async function deleteAllAdminOrders(): Promise<{ success: boolean }> {
-  const supabase = getSupabaseClient();
-
-  // 1. Intentar RPC seguro si existe
-  try {
-    await supabase.rpc('delete_all_pedidos_safe');
-  } catch {}
-
-  // 2. Eliminar todos los registros de detalle_pedidos
-  try {
-    await supabase.from('detalle_pedidos').delete().not('id', 'is', null);
-  } catch (e) {
-    console.warn('Aviso detalle_pedidos delete all:', e);
-  }
-
-  // 3. Eliminar ventas asociadas
-  try {
-    await supabase.from('ventas').delete().not('id', 'is', null);
-  } catch (e) {
-    console.warn('Aviso ventas delete all:', e);
-  }
-
-  // 4. Eliminar todos los pedidos en Supabase
-  try {
-    const res = await supabase.from('pedidos').delete().not('id', 'is', null);
-    if (res.error) {
-      console.warn('Error eliminando pedidos en Supabase:', res.error);
-    }
-  } catch (e) {
-    console.warn('Excepción al eliminar pedidos en Supabase:', e);
-  }
-
-  // 5. Vaciar los recibos guardados localmente y en memoria
-  clearAllOrderReceipts();
-
-  return { success: true };
-}
-
-/**
- * Elimina TODAS las ventas del sistema
- */
-export async function deleteAllAdminSales(): Promise<{ success: boolean }> {
-  const supabase = getSupabaseClient();
-
-  // 1. Eliminar de la tabla ventas si existe
-  try {
-    await supabase.from('ventas').delete().not('id', 'is', null);
-  } catch (e) {
-    console.warn('Aviso ventas delete all:', e);
-  }
-
-  // 2. Dado que getAdminSales() calcula ventas desde pedidos, eliminamos también detalle_pedidos y pedidos
-  try {
-    await supabase.from('detalle_pedidos').delete().not('id', 'is', null);
-    await supabase.from('pedidos').delete().not('id', 'is', null);
-  } catch (e) {
-    console.warn('Error eliminando pedidos de ventas en Supabase:', e);
-  }
-
-  // 3. Limpiar almacenamiento local de recibos/ventas
-  clearAllOrderReceipts();
-
-  return { success: true };
-}
-
-// ==========================================
-// CATEGORIES CRUD
-// ==========================================
-
-export async function getAdminCategories(): Promise<Categoria[]> {
-  const supabase = getSupabaseClient();
-
-  const [catsResponse, prodsResponse, remoteOrder] = await Promise.all([
-    supabase.from('categorias').select('*'),
-    supabase.from('productos').select('categoria_id'),
-    fetchRemoteCategoryOrder(),
-  ]);
-
-  if (catsResponse.error) throw new Error(`Error al cargar categorías: ${catsResponse.error.message}`);
-
-  const cats = catsResponse.data || [];
-  const prods = prodsResponse.data || [];
-
-  // Count products per category
-  const countMap: Record<string, number> = {};
-  prods.forEach((p) => {
-    countMap[p.categoria_id] = (countMap[p.categoria_id] || 0) + 1;
-  });
-
-  const mappedCats: Categoria[] = cats.map((c) => ({
-    ...c,
-    total_productos: countMap[c.id] || 0,
-  }));
-
-  // Ordenar respetando el orden personalizado sincronizado en Supabase
-  return sortCategoriesWithOrder(mappedCats, remoteOrder);
-}
-
-export async function saveAdminCategoriesOrder(
-  categoryIds: string[]
-): Promise<{ success: boolean; supabaseSynced: boolean; error?: string }> {
-  return persistCategoryOrder(categoryIds);
-}
-
-export async function createAdminCategory(categoryData: {
-  nombre: string;
-  descripcion?: string;
-  activa: boolean;
-}): Promise<Categoria> {
-  const supabase = getSupabaseClient();
-
+export async function createAdminCategory(category: Partial<Categoria>): Promise<Categoria | null> {
   const { data, error } = await supabase
     .from('categorias')
-    .insert([
-      {
-        nombre: categoryData.nombre.trim(),
-        descripcion: categoryData.descripcion?.trim() || null,
-        activa: Boolean(categoryData.activa),
-      },
-    ])
-    .select()
+    .insert({
+      nombre: category.nombre,
+      descripcion: category.descripcion || null,
+      activa: category.activa !== undefined ? category.activa : true,
+    })
+    .select('*')
     .single();
 
-  if (error) throw new Error(`Error al crear categoría: ${error.message}`);
+  if (error) throw error;
   return data;
 }
 
-export async function updateAdminCategory(
-  id: string,
-  categoryData: {
-    nombre: string;
-    descripcion?: string;
-    activa: boolean;
-  }
-): Promise<Categoria> {
-  const supabase = getSupabaseClient();
-
+export async function updateAdminCategory(id: string, category: Partial<Categoria>): Promise<Categoria | null> {
   const { data, error } = await supabase
     .from('categorias')
     .update({
-      nombre: categoryData.nombre.trim(),
-      descripcion: categoryData.descripcion?.trim() || null,
-      activa: Boolean(categoryData.activa),
+      nombre: category.nombre,
+      descripcion: category.descripcion,
+      activa: category.activa,
     })
     .eq('id', id)
-    .select()
+    .select('*')
     .single();
 
-  if (error) throw new Error(`Error al actualizar categoría: ${error.message}`);
+  if (error) throw error;
   return data;
 }
 
-export async function toggleCategoryActive(id: string, activa: boolean) {
-  const supabase = getSupabaseClient();
-  const { error } = await supabase
-    .from('categorias')
-    .update({ activa })
-    .eq('id', id);
-
-  if (error) throw new Error(`Error al cambiar estado: ${error.message}`);
-}
-
-export async function deleteAdminCategory(id: string) {
-  const supabase = getSupabaseClient();
-
-  // Check if products exist in category
-  const { data: prods } = await supabase
-    .from('productos')
-    .select('id')
-    .eq('categoria_id', id)
-    .limit(1);
-
-  if (prods && prods.length > 0) {
-    throw new Error('No se puede eliminar la categoría porque tiene productos asociados. Reasigna o elimina los productos primero.');
-  }
-
+export async function deleteAdminCategory(id: string): Promise<boolean> {
   const { error } = await supabase.from('categorias').delete().eq('id', id);
-  if (error) throw new Error(`Error al eliminar categoría: ${error.message}`);
+  if (error) throw error;
+  return true;
 }
 
-// ==========================================
-// INVENTORY CRUD
-// ==========================================
-
-export interface InventoryItemRow {
-  id: string; // Inventario ID or Product ID
-  producto_id: string;
-  nombre_producto: string;
-  imagen_url: string | null;
-  categoria_nombre: string;
-  categoria_id?: string;
-  stock_actual: number;
-  stock_minimo: number;
-  precio: number;
-  activo: boolean;
+export async function toggleCategoryActive(id: string, activa: boolean): Promise<boolean> {
+  const { error } = await supabase.from('categorias').update({ activa }).eq('id', id);
+  if (error) throw error;
+  return true;
 }
 
-export async function getAdminInventory(): Promise<InventoryItemRow[]> {
-  const supabase = getSupabaseClient();
+export async function saveAdminCategoriesOrder(categoryIds: string[]): Promise<void> {
+  saveCustomCategoryOrder(categoryIds);
+}
 
-  const { data: prods, error: pErr } = await supabase
-    .from('productos')
-    .select('id, nombre, imagen_url, imagenes, precio, stock, activo, categoria_id');
+/* ==================== PRODUCTOS ==================== */
+export async function getAdminProducts(): Promise<Producto[]> {
+  try {
+    const { data, error } = await supabase
+      .from('productos')
+      .select('*, categoria:categorias(*)')
+      .order('nombre', { ascending: true });
 
-  if (pErr) throw new Error(`Error cargando inventario: ${pErr.message}`);
-
-  const { data: cats } = await supabase.from('categorias').select('id, nombre');
-  const catMap = new Map<string, string>();
-  if (cats) cats.forEach((c) => catMap.set(c.id, c.nombre));
-
-  const { data: invs } = await supabase.from('inventario').select('*');
-  const invMap = new Map<string, { id: string; stock_actual: number; stock_minimo: number }>();
-  if (invs) {
-    invs.forEach((i) => {
-      invMap.set(i.producto_id, {
-        id: i.id,
-        stock_actual: i.stock_actual,
-        stock_minimo: i.stock_minimo || 5,
-      });
-    });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.warn('Error fetching admin products:', err);
+    return [];
   }
-
-  return (prods || []).map((p) => {
-    const inv = invMap.get(p.id);
-
-    // Resolver imagen limpia sin formato JSON
-    let finalImg = p.imagen_url || '';
-    if (finalImg && typeof finalImg === 'string' && finalImg.trim().startsWith('[')) {
-      try {
-        const parsed = JSON.parse(finalImg);
-        if (Array.isArray(parsed) && parsed.length > 0) finalImg = parsed[0];
-      } catch {}
-    }
-    if (!finalImg && Array.isArray((p as any).imagenes) && (p as any).imagenes.length > 0) {
-      finalImg = (p as any).imagenes[0];
-    }
-    if (!finalImg) {
-      finalImg = '/images/products/gorra-1.webp';
-    }
-
-    return {
-      id: inv?.id || p.id,
-      producto_id: p.id,
-      nombre_producto: p.nombre,
-      imagen_url: finalImg,
-      categoria_nombre: catMap.get(p.categoria_id) || 'Sin categoría',
-      categoria_id: p.categoria_id || '',
-      stock_actual: inv ? inv.stock_actual : (p.stock || 0),
-      stock_minimo: inv ? inv.stock_minimo : 5,
-      precio: p.precio,
-      activo: p.activo,
-    };
-  });
 }
 
-export async function updateInventoryStock(
-  productoId: string,
-  stockActual: number,
-  stockMinimo = 5
-) {
-  const supabase = getSupabaseClient();
-  const cleanActual = Math.max(0, Math.floor(stockActual));
-  const cleanMin = Math.max(0, Math.floor(stockMinimo));
-
-  // Update product stock
-  await supabase
+export async function createAdminProduct(product: Partial<Producto>): Promise<Producto | null> {
+  const { data, error } = await supabase
     .from('productos')
-    .update({ stock: cleanActual, updated_at: new Date().toISOString() })
-    .eq('id', productoId);
+    .insert({
+      categoria_id: product.categoria_id || null,
+      nombre: product.nombre,
+      descripcion: product.descripcion || null,
+      precio: product.precio || 0,
+      costo: product.costo || 0,
+      stock: product.stock !== undefined ? product.stock : 10,
+      imagen_url: product.imagen_url || null,
+      imagenes: product.imagenes || (product.imagen_url ? [product.imagen_url] : []),
+      activo: product.activo !== undefined ? product.activo : true,
+    })
+    .select('*, categoria:categorias(*)')
+    .single();
 
-  // Update or insert inventario
-  const { data: existing } = await supabase
-    .from('inventario')
-    .select('id')
-    .eq('producto_id', productoId)
-    .limit(1);
+  if (error) throw error;
+  return data;
+}
 
-  if (existing && existing.length > 0) {
-    const { error } = await supabase
-      .from('inventario')
-      .update({
-        stock_actual: cleanActual,
-        stock_minimo: cleanMin,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('producto_id', productoId);
-    if (error) throw new Error(error.message);
-  } else {
-    const { error } = await supabase.from('inventario').insert([
-      {
-        producto_id: productoId,
-        stock_actual: cleanActual,
-        stock_minimo: cleanMin,
-      },
+export async function updateAdminProduct(id: string, product: Partial<Producto>): Promise<Producto | null> {
+  const { data, error } = await supabase
+    .from('productos')
+    .update({
+      categoria_id: product.categoria_id,
+      nombre: product.nombre,
+      descripcion: product.descripcion,
+      precio: product.precio,
+      costo: product.costo,
+      stock: product.stock,
+      imagen_url: product.imagen_url,
+      imagenes: product.imagenes || (product.imagen_url ? [product.imagen_url] : []),
+      activo: product.activo,
+    })
+    .eq('id', id)
+    .select('*, categoria:categorias(*)')
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteAdminProduct(id: string): Promise<boolean> {
+  const { error } = await supabase.from('productos').delete().eq('id', id);
+  if (error) throw error;
+  return true;
+}
+
+/* ==================== PEDIDOS ==================== */
+export async function getAdminOrders(): Promise<Pedido[]> {
+  try {
+    const [{ data: dbOrders }, { data: allProducts }] = await Promise.all([
+      supabase.from('pedidos').select('*, cliente:clientes(*)').order('created_at', { ascending: false }),
+      supabase.from('productos').select('*'),
     ]);
-    if (error) throw new Error(error.message);
-  }
-}
 
-// ==========================================
-// ORDERS CRUD
-// ==========================================
-
-export async function getAdminOrders(statusFilter?: EstadoPedido): Promise<Pedido[]> {
-  const supabase = getSupabaseClient();
-
-  let query = supabase
-    .from('pedidos')
-    .select('*')
-    .order('created_at', { ascending: false });
-
-  if (statusFilter) {
-    query = query.eq('estado', statusFilter);
-  }
-
-  const { data: orders, error: oErr } = await query;
-  if (oErr) throw new Error(`Error al consultar pedidos: ${oErr.message}`);
-
-  // Fetch clients to cross-reference
-  const { data: clients } = await supabase.from('clientes').select('*');
-  const clientMap = new Map<string, Cliente>();
-  if (clients) clients.forEach((c) => clientMap.set(c.id, c));
-
-  // Fetch detail lines
-  const { data: details } = await supabase.from('detalle_pedidos').select('*');
-  const { data: prods } = await supabase.from('productos').select('id, nombre, imagen_url, imagenes, precio');
-  const prodMap = new Map<string, Producto>();
-  if (prods) {
-    prods.forEach((p) => {
-      let finalImg = p.imagen_url || '';
-      if (finalImg && typeof finalImg === 'string' && finalImg.trim().startsWith('[')) {
-        try {
-          const parsed = JSON.parse(finalImg);
-          if (Array.isArray(parsed) && parsed.length > 0) finalImg = parsed[0];
-        } catch {}
-      }
-      if (!finalImg && Array.isArray((p as any).imagenes) && (p as any).imagenes.length > 0) {
-        finalImg = (p as any).imagenes[0];
-      }
-      if (!finalImg) {
-        finalImg = '/images/products/gorra-1.webp';
-      }
-      prodMap.set(String(p.id).trim(), {
-        ...p,
-        imagen_url: finalImg,
-      } as Producto);
-    });
-  }
-
-  const detailsByOrder: Record<string, DetallePedido[]> = {};
-  if (details) {
-    details.forEach((d) => {
-      const orderKeyStr = String(d.pedido_id).trim();
-      if (!detailsByOrder[orderKeyStr]) {
-        detailsByOrder[orderKeyStr] = [];
-      }
-      if (typeof d.pedido_id === 'number' && !detailsByOrder[String(d.pedido_id)]) {
-        detailsByOrder[String(d.pedido_id)] = detailsByOrder[orderKeyStr];
-      }
-
-      const prodIdStr = String(d.producto_id || '').trim();
-      const foundProd = prodMap.get(prodIdStr);
-
-      const resolvedProduct: Producto = foundProd || {
-        id: prodIdStr || 'prod-item',
-        nombre: (d as any).producto_nombre || 'Artículo Pretty Store',
-        imagen_url: (d as any).producto_imagen || '/images/products/gorra-1.webp',
-        precio: Number(d.precio_unitario) || 0,
-        costo: 0,
-        descripcion: null,
-        stock: 1,
-        activo: true,
-        categoria_id: '',
-      };
-
-      detailsByOrder[orderKeyStr].push({
-        ...d,
-        producto: resolvedProduct,
+    // Mapa de productos por ID y nombre para resolver imágenes
+    const productMap = new Map<string, Producto>();
+    const productByNameMap = new Map<string, Producto>();
+    if (allProducts) {
+      allProducts.forEach((p) => {
+        productMap.set(String(p.id), p);
+        if (p.nombre) productByNameMap.set(p.nombre.toLowerCase().trim(), p);
       });
-    });
-  }
-
-  // Enriquecer con recibos y comprobantes persistentes (localStorage + IndexedDB)
-  const localReceipts = getAllOrderReceipts();
-  const idbVouchers = await getAllVouchersFromDb().catch(() => new Map<string, { url: string; fileName?: string }>());
-  const receiptMap = new Map<string, StoredOrderReceipt>();
-  localReceipts.forEach((r) => {
-    if (r.orderId) {
-      const cleanId = String(r.orderId).trim();
-      receiptMap.set(cleanId, r);
-      receiptMap.set(cleanId.toLowerCase(), r);
     }
-    if (r.orderNumber) {
-      const cleanNum = String(r.orderNumber).trim();
-      receiptMap.set(cleanNum, r);
-      receiptMap.set(cleanNum.replace(/#/g, ''), r);
-      receiptMap.set(cleanNum.toLowerCase(), r);
-      receiptMap.set(cleanNum.replace(/#/g, '').toLowerCase(), r);
-    }
-  });
 
-  const mappedOrders: Pedido[] = (orders || []).map((o) => {
-    const rawId = String(o.id || '').trim();
-    const orderCode = `#PED-${rawId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
-    const cleanCodeNoHash = orderCode.replace(/#/g, '');
-    const rec =
-      receiptMap.get(rawId) ||
-      receiptMap.get(rawId.toLowerCase()) ||
-      receiptMap.get(orderCode) ||
-      receiptMap.get(cleanCodeNoHash);
-    const idbMatch =
-      idbVouchers.get(rawId) ||
-      idbVouchers.get(orderCode) ||
-      idbVouchers.get(cleanCodeNoHash) ||
-      idbVouchers.get(rec?.orderNumber || '') ||
-      idbVouchers.get((rec?.orderNumber || '').replace(/#/g, ''));
+    const localReceipts = getAllSavedOrderReceipts();
+    const ordersMap = new Map<string, Pedido>();
 
-    let voucherUrl =
-      (o.comprobante_pago?.startsWith('data:') ||
-      o.comprobante_pago?.startsWith('http') ||
-      o.comprobante_pago?.startsWith('/')
-        ? o.comprobante_pago
-        : null) ||
-      rec?.comprobanteUrl ||
-      idbMatch?.url ||
-      o.comprobante_pago ||
-      null;
+    if (dbOrders) {
+      for (const o of dbOrders) {
+        const orderKey = String(o.id);
+        const localRec = getOrderReceiptById(orderKey) || getOrderReceiptById(o.numero_orden || '');
+        let voucher = o.comprobante_pago || localRec?.comprobanteUrl || null;
 
-    // Si aún no se encontró comprobante, extraer de notas por si vino en URL
-    if (!voucherUrl && o.notas && typeof o.notas === 'string') {
-      const match = o.notas.match(/(https?:\/\/[^\s|]+(?:supabase\.co|storage)[^\s|]+|https?:\/\/[^\s|]+\.(?:jpg|jpeg|png|webp|gif)[^\s|]*|data:image\/[a-zA-Z]+;base64,[^\s|]+)/i);
-      if (match) {
-        voucherUrl = match[1];
-      } else {
-        const refMatch = o.notas.match(/Comprobante\/Ref[^:]*:\s*([^\s|]+)/i);
-        if (refMatch && (refMatch[1].startsWith('http') || refMatch[1].startsWith('data:'))) {
-          voucherUrl = refMatch[1];
+        if (!voucher) {
+          voucher = await getVoucherImageFromDb(orderKey);
         }
+
+        // Extraer items guardados en notas si no están en localReceipt
+        let itemsFromNotes: any[] = [];
+        if (o.notas && o.notas.includes('[ITEMS_JSON]:')) {
+          try {
+            const rawJson = o.notas.split('[ITEMS_JSON]:')[1]?.trim();
+            if (rawJson) {
+              const parsed = JSON.parse(rawJson);
+              if (Array.isArray(parsed)) itemsFromNotes = parsed;
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        const rawItems = localRec?.items || itemsFromNotes;
+        const resolvedItems: PedidoItem[] = (rawItems || []).map((it: any) => {
+          const prodId = String(it.producto_id || it.product?.id || it.id || '');
+          const prodName = it.product?.nombre || it.nombre || '';
+          const matchProd = productMap.get(prodId) || productByNameMap.get(prodName.toLowerCase().trim());
+
+          const effectiveImg =
+            getPrimaryProductImage(it.product || it) ||
+            getPrimaryProductImage(matchProd) ||
+            '/images/logo/logotipo.jpeg';
+
+          const mergedProd: Producto = {
+            id: prodId,
+            nombre: prodName || matchProd?.nombre || 'Producto',
+            precio: it.precio_unitario || it.product?.precio || it.precio || matchProd?.precio || 0,
+            costo: matchProd?.costo || 0,
+            stock: matchProd?.stock || 0,
+            activo: true,
+            categoria_id: matchProd?.categoria_id || null,
+            imagen_url: effectiveImg,
+            descripcion: matchProd?.descripcion || null,
+          };
+
+          return {
+            producto_id: prodId,
+            cantidad: it.quantity || it.cantidad || 1,
+            precio_unitario: it.precio_unitario || it.product?.precio || it.precio || matchProd?.precio || 0,
+            subtotal: it.subtotal || (it.precio_unitario || it.precio || 0) * (it.quantity || 1),
+            producto: mergedProd,
+            selectedSize: it.selectedSize || it.talla,
+          };
+        });
+
+        ordersMap.set(orderKey, {
+          ...o,
+          id: orderKey,
+          comprobante_pago: voucher,
+          items: resolvedItems,
+        });
       }
     }
 
-    const dbDetails = detailsByOrder[rawId] || detailsByOrder[String(o.id)] || [];
-    const finalDetails =
-      dbDetails.length > 0
-        ? dbDetails
-        : (rec?.items || []).map((it) => ({
-            id: it.product.id,
-            pedido_id: o.id,
-            producto_id: it.product.id,
+    // Agregar pedidos locales que no aparecieron en la BD
+    for (const rec of localReceipts) {
+      const recKey = String(rec.orderId);
+      if (!ordersMap.has(recKey)) {
+        let voucher = rec.comprobanteUrl;
+        if (!voucher) {
+          voucher = await getVoucherImageFromDb(recKey);
+        }
+
+        const resolvedItems: PedidoItem[] = (rec.items || []).map((it) => {
+          const prodId = String(it.product.id);
+          const prodName = it.product.nombre;
+          const matchProd = productMap.get(prodId) || productByNameMap.get(prodName.toLowerCase().trim());
+          const effectiveImg =
+            getPrimaryProductImage(it.product) ||
+            getPrimaryProductImage(matchProd) ||
+            '/images/logo/logotipo.jpeg';
+
+          return {
+            producto_id: prodId,
             cantidad: it.quantity,
             precio_unitario: it.product.precio,
             subtotal: it.subtotal,
             producto: {
-              ...it.product,
-              imagen_url: it.product.imagen_url || '/images/products/gorra-1.webp',
-            } as Producto,
-          }));
-
-    return {
-      ...o,
-      comprobante_pago: voucherUrl,
-      cliente: o.cliente_id
-        ? clientMap.get(o.cliente_id)
-        : rec
-        ? {
-            id: 'client-' + rawId,
-            nombre: rec.nombre,
-            email: rec.email,
-            telefono: rec.telefono,
-            direccion: rec.direccion,
-          }
-        : undefined,
-      detalles: finalDetails,
-    };
-  });
-
-  // Agregar pedidos registrados localmente si aún no existen en la base de datos
-  const existingOrderKeys = new Set<string>();
-  mappedOrders.forEach((o) => {
-    existingOrderKeys.add(String(o.id));
-    existingOrderKeys.add(`#PED-${String(o.id).replace(/-/g, '').slice(0, 6).toUpperCase()}`);
-  });
-
-  localReceipts.forEach((r) => {
-    const cleanId = String(r.orderId || r.orderNumber).trim();
-    if (!existingOrderKeys.has(cleanId) && !existingOrderKeys.has(r.orderNumber)) {
-      mappedOrders.push({
-        id: r.orderId,
-        cliente_id: null,
-        direccion: r.direccion,
-        subtotal: r.subtotal,
-        total: r.total,
-        estado: 'pendiente',
-        metodo_pago: (r.metodoPago as MetodoPago) || 'yappy',
-        notas: r.notas || null,
-        tipo_entrega: (r.tipoEntrega as TipoEntrega) || 'delivery',
-        courier: (r.courier as CourierOption) || undefined,
-        comprobante_pago:
-          r.comprobanteUrl ||
-          idbVouchers.get(cleanId)?.url ||
-          idbVouchers.get(r.orderNumber)?.url ||
-          null,
-        created_at: r.createdAt || new Date().toISOString(),
-        cliente: {
-          id: 'client-' + r.orderId,
-          nombre: r.nombre,
-          email: r.email,
-          telefono: r.telefono,
-          direccion: r.direccion,
-        },
-        detalles: (r.items || []).map((it) => ({
-          id: it.product.id,
-          pedido_id: r.orderId,
-          producto_id: it.product.id,
-          cantidad: it.quantity,
-          precio_unitario: it.product.precio,
-          subtotal: it.subtotal,
-          producto: it.product as Producto,
-        })),
-      });
-      existingOrderKeys.add(cleanId);
-    }
-  });
-
-  return mappedOrders;
-}
-
-export async function updateOrderStatus(orderId: string, estado: EstadoPedido) {
-  const supabase = getSupabaseClient();
-  const { error } = await supabase
-    .from('pedidos')
-    .update({ estado, updated_at: new Date().toISOString() })
-    .eq('id', orderId);
-
-  if (error) throw new Error(`Error al actualizar estado del pedido: ${error.message}`);
-}
-
-// ==========================================
-// CLIENTS
-// ==========================================
-
-export async function getAdminClients(): Promise<Cliente[]> {
-  const supabase = getSupabaseClient();
-
-  const { data: clients, error } = await supabase
-    .from('clientes')
-    .select('*')
-    .order('created_at', { ascending: false });
-
-  if (error) throw new Error(`Error al cargar clientes: ${error.message}`);
-
-  const excluded = getExcludedClientIds();
-
-  // Si existen clientes que fueron excluidos localmente durante un bloqueo previo de permisos,
-  // intentar eliminarlos definitivamente de Supabase ahora que los permisos están desbloqueados.
-  if (excluded.size > 0 && clients && clients.length > 0) {
-    for (const client of clients) {
-      const cId = String(client.id);
-      if (excluded.has(cId)) {
-        try {
-          const numId = Number(cId);
-          if (!isNaN(numId)) {
-            await supabase.from('pedidos').update({ cliente_id: null } as any).eq('cliente_id', numId);
-            await supabase.from('ventas').update({ cliente_id: null } as any).eq('cliente_id', numId);
-            await supabase.from('clientes').delete().eq('id', numId);
-          } else {
-            await supabase.from('pedidos').update({ cliente_id: null } as any).eq('cliente_id', cId);
-            await supabase.from('ventas').update({ cliente_id: null } as any).eq('cliente_id', cId);
-            await supabase.from('clientes').delete().eq('id', cId);
-          }
-          removeExcludedClientId(cId);
-        } catch {}
-      }
-    }
-  }
-
-  const updatedExcluded = getExcludedClientIds();
-  const visibleClients = (clients || []).filter(
-    (c) =>
-      !updatedExcluded.has(String(c.id)) &&
-      !c.email?.includes('system_') &&
-      !c.nombre?.startsWith('__system')
-  );
-
-  // Cross-reference with pedidos
-  const { data: orders } = await supabase
-    .from('pedidos')
-    .select('id, cliente_id, total, created_at, estado');
-
-  const statsByClient: Record<string, { count: number; total: number; latest: string }> = {};
-  if (orders) {
-    orders.forEach((o) => {
-      if (o.cliente_id !== null && o.cliente_id !== undefined) {
-        const cKey = String(o.cliente_id);
-        if (!statsByClient[cKey]) {
-          statsByClient[cKey] = { count: 0, total: 0, latest: o.created_at || '' };
-        }
-        statsByClient[cKey].count += 1;
-        if (o.estado !== 'cancelado') {
-          statsByClient[cKey].total += Number(o.total) || 0;
-        }
-        if ((o.created_at || '') > statsByClient[cKey].latest) {
-          statsByClient[cKey].latest = o.created_at || '';
-        }
-      }
-    });
-  }
-
-  return visibleClients.map((c) => {
-    const cId = String(c.id);
-    return {
-      ...c,
-      id: cId,
-      nombre: c.nombre || 'Cliente sin nombre',
-      email: c.email || '',
-      telefono: c.telefono || '',
-      pedidos_count: statsByClient[cId]?.count || 0,
-      total_gastado: statsByClient[cId]?.total || 0,
-      ultimo_pedido: statsByClient[cId]?.latest || c.created_at,
-    };
-  });
-}
-
-export async function deleteAdminClient(clientId: string | number): Promise<{ success: boolean; localOnly?: boolean }> {
-  const supabase = getSupabaseClient();
-  const cleanId = String(clientId).trim();
-  const numId = Number(cleanId);
-  const isNumeric = !isNaN(numId) && cleanId !== '';
-
-  // 1. Probar RPC seguro de PostgreSQL si está instalado
-  try {
-    const { data: rpcRes, error: rpcErr } = await supabase.rpc('delete_cliente_safe', {
-      p_cliente_id: cleanId,
-    });
-    if (!rpcErr && rpcRes === true) {
-      removeExcludedClientId(cleanId);
-      if (isNumeric) removeExcludedClientId(String(numId));
-      return { success: true, localOnly: false };
-    }
-  } catch {}
-
-  // 2. Desvincular pedidos del cliente para evitar violación de Foreign Key (tanto numérico como texto)
-  try {
-    if (isNumeric) {
-      await supabase
-        .from('pedidos')
-        .update({ cliente_id: null } as any)
-        .eq('cliente_id', numId);
-    }
-    await supabase
-      .from('pedidos')
-      .update({ cliente_id: null } as any)
-      .eq('cliente_id', cleanId);
-  } catch (unlinkErr) {
-    console.warn('Advertencia desvinculando pedidos del cliente:', unlinkErr);
-  }
-
-  // 3. Desvincular de ventas si existiese referencia directa
-  try {
-    if (isNumeric) {
-      await supabase.from('ventas').update({ cliente_id: null } as any).eq('cliente_id', numId);
-    }
-    await supabase.from('ventas').update({ cliente_id: null } as any).eq('cliente_id', cleanId);
-  } catch {}
-
-  // 4. Eliminar de la tabla clientes sin .select() para evitar requerir permisos de lectura sobre filas borradas
-  let deleteRes = isNumeric
-    ? await supabase.from('clientes').delete().eq('id', numId)
-    : await supabase.from('clientes').delete().eq('id', cleanId);
-
-  if (deleteRes.error && isNumeric) {
-    deleteRes = await supabase.from('clientes').delete().eq('id', cleanId);
-  }
-
-  // Si falló por falta de permisos en PostgreSQL (code 42501 o similar)
-  if (deleteRes.error) {
-    console.warn('Aviso Supabase permisos al eliminar cliente:', deleteRes.error);
-    // Registrar en exclusión local para que desaparezca inmediatamente del panel
-    saveExcludedClientId(cleanId);
-    if (isNumeric) saveExcludedClientId(String(numId));
-    return { success: true, localOnly: true };
-  }
-
-  // Eliminado exitosamente en la base de datos
-  removeExcludedClientId(cleanId);
-  if (isNumeric) removeExcludedClientId(String(numId));
-  return { success: true, localOnly: false };
-}
-
-/**
- * Elimina TODOS los clientes de la base de datos y desvincula pedidos y ventas
- */
-export async function deleteAllAdminClients(): Promise<{ success: boolean; localOnly?: boolean }> {
-  const supabase = getSupabaseClient();
-
-  // 1. Desvincular de pedidos y ventas para evitar violaciones de clave foránea
-  try {
-    await supabase.from('pedidos').update({ cliente_id: null } as any).not('cliente_id', 'is', null);
-  } catch (e) {
-    console.warn('Aviso desvinculando pedidos de clientes:', e);
-  }
-  try {
-    await supabase.from('ventas').update({ cliente_id: null } as any).not('cliente_id', 'is', null);
-  } catch (e) {
-    console.warn('Aviso desvinculando ventas de clientes:', e);
-  }
-
-  // 2. Probar RPC si existe
-  try {
-    await supabase.rpc('delete_all_clientes_safe');
-  } catch {}
-
-  // 3. Eliminar todos los clientes de Supabase
-  let deleteRes = await supabase.from('clientes').delete().not('id', 'is', null);
-  if (deleteRes.error) {
-    console.warn('Aviso Supabase al eliminar todos los clientes:', deleteRes.error);
-  }
-
-  // 4. Limpiar exclusiones locales
-  try {
-    localStorage.removeItem(EXCLUDED_CLIENTS_KEY);
-  } catch {}
-
-  return { success: true, localOnly: Boolean(deleteRes.error) };
-}
-
-// ==========================================
-// VENTAS / SALES
-// ==========================================
-
-export interface ManualSaleItem {
-  producto_id?: string;
-  nombre: string;
-  cantidad: number;
-  precio_unitario: number;
-  subtotal: number;
-}
-
-export interface CreateManualSalePayload {
-  cliente_id?: string | null;
-  cliente_nombre?: string;
-  cliente_email?: string;
-  cliente_telefono?: string;
-  cliente_direccion?: string;
-  items: ManualSaleItem[];
-  subtotal: number;
-  total: number;
-  metodo_pago: MetodoPago;
-  tipo_entrega?: TipoEntrega;
-  courier?: CourierOption;
-  notas?: string;
-  fecha?: string;
-  estado?: EstadoPedido;
-}
-
-export async function createManualSale(payload: CreateManualSalePayload): Promise<{ orderId: string }> {
-  const supabase = getSupabaseClient();
-
-  let resolvedClientId: string | null = payload.cliente_id ? String(payload.cliente_id) : null;
-
-  // Si no se seleccionó un cliente existente pero se ingresó información, buscar o crear cliente
-  if (!resolvedClientId && (payload.cliente_nombre || payload.cliente_email || payload.cliente_telefono)) {
-    try {
-      const emailTrimmed = (payload.cliente_email || '').trim().toLowerCase();
-      if (emailTrimmed) {
-        const { data: existing } = await supabase
-          .from('clientes')
-          .select('id')
-          .eq('email', emailTrimmed)
-          .limit(1);
-        if (existing && existing.length > 0) {
-          resolvedClientId = String(existing[0].id);
-        }
-      }
-
-      if (!resolvedClientId) {
-        const { data: newClient, error: clientErr } = await supabase
-          .from('clientes')
-          .insert([
-            {
-              nombre: (payload.cliente_nombre || 'Cliente Venta Directa').trim(),
-              email: emailTrimmed || `cliente-${Date.now()}@aura.local`,
-              telefono: (payload.cliente_telefono || '').trim(),
-              direccion: (payload.cliente_direccion || 'Venta en tienda').trim(),
+              ...(matchProd || it.product),
+              id: prodId,
+              nombre: prodName,
+              precio: it.product.precio,
+              costo: matchProd?.costo || 0,
+              stock: matchProd?.stock || 0,
+              activo: true,
+              categoria_id: matchProd?.categoria_id || null,
+              imagen_url: effectiveImg,
+              descripcion: matchProd?.descripcion || null,
             },
-          ])
-          .select('id')
-          .single();
+            selectedSize: it.selectedSize,
+          };
+        });
 
-        if (!clientErr && newClient) {
-          resolvedClientId = String(newClient.id);
+        ordersMap.set(recKey, {
+          id: recKey,
+          numero_orden: rec.orderNumber,
+          total: rec.total,
+          subtotal: rec.subtotal,
+          descuento: rec.discount,
+          envio: rec.shipping,
+          metodo_pago: rec.metodoPago as any,
+          tipo_entrega: rec.tipoEntrega as any,
+          courier: rec.courier,
+          estado: 'confirmado',
+          notas: rec.notas,
+          comprobante_pago: voucher,
+          created_at: rec.createdAt,
+          cliente: {
+            id: recKey,
+            nombre: rec.nombre,
+            telefono: rec.telefono,
+            email: rec.email || null,
+            direccion: rec.direccion || null,
+          },
+          items: resolvedItems,
+        });
+      }
+    }
+
+    return Array.from(ordersMap.values()).sort(
+      (a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime()
+    );
+  } catch (err) {
+    console.warn('Error fetching admin orders:', err);
+    return [];
+  }
+}
+
+export async function updateOrderStatus(orderId: string | number, estado: EstadoPedido): Promise<boolean> {
+  try {
+    const cleanId = String(orderId);
+    const { error } = await supabase.from('pedidos').update({ estado }).eq('id', cleanId);
+    if (error) console.warn('Supabase update status error:', error);
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+export async function deleteAdminOrder(orderId: string | number): Promise<boolean> {
+  const cleanId = String(orderId);
+  const isNum = !isNaN(Number(cleanId));
+  try {
+    // 1. Eliminar de Supabase ventas vinculadas
+    try {
+      if (isNum) {
+        await supabase.from('ventas').delete().eq('pedido_id', Number(cleanId));
+      }
+      await supabase.from('ventas').delete().eq('pedido_id', cleanId);
+    } catch {
+      // ignore
+    }
+
+    // 2. Eliminar de Supabase pedidos
+    if (isNum) {
+      await supabase.from('pedidos').delete().eq('id', Number(cleanId));
+    }
+    const { error } = await supabase.from('pedidos').delete().eq('id', cleanId);
+    if (error) console.warn('Supabase delete order warning:', error);
+
+    // 3. Eliminar de copias locales
+    deleteOrderReceipt(cleanId);
+    return true;
+  } catch (err) {
+    console.warn('Error in deleteAdminOrder:', err);
+    deleteOrderReceipt(cleanId);
+    return true;
+  }
+}
+
+export async function deleteAllAdminOrders(): Promise<boolean> {
+  try {
+    // 1. Eliminar ventas asociadas
+    try {
+      await supabase.from('ventas').delete().gte('id', 0);
+    } catch {}
+
+    // 2. Obtener y eliminar todos los pedidos en Supabase
+    try {
+      const { data: allP } = await supabase.from('pedidos').select('id');
+      if (allP && allP.length > 0) {
+        for (const p of allP) {
+          await supabase.from('pedidos').delete().eq('id', p.id);
         }
       }
-    } catch (cErr) {
-      console.warn('Error gestionando cliente para venta manual:', cErr);
-    }
-  }
-
-  const saleDate = payload.fecha ? new Date(payload.fecha).toISOString() : new Date().toISOString();
-
-  // 1. Crear el pedido
-  const { data: orderData, error: orderErr } = await supabase
-    .from('pedidos')
-    .insert([
-      {
-        cliente_id: resolvedClientId,
-        subtotal: Number(payload.subtotal) || 0,
-        total: Number(payload.total) || 0,
-        estado: payload.estado || 'entregado',
-        metodo_pago: payload.metodo_pago || 'efectivo',
-        tipo_entrega: payload.tipo_entrega || 'retiro',
-        courier: payload.courier || null,
-        notas: payload.notas ? `[Venta Manual] ${payload.notas}` : '[Venta Manual]',
-        direccion: payload.cliente_direccion || 'Venta directa en tienda',
-        created_at: saleDate,
-        updated_at: saleDate,
-      },
-    ])
-    .select()
-    .single();
-
-  if (orderErr) {
-    throw new Error(`Error al registrar venta en pedidos: ${orderErr.message}`);
-  }
-
-  const orderId = orderData.id;
-
-  // 2. Crear registros de detalle si hay productos
-  if (payload.items && payload.items.length > 0) {
-    const details = payload.items
-      .filter((it) => it.producto_id)
-      .map((it) => ({
-        pedido_id: orderId,
-        producto_id: it.producto_id,
-        cantidad: Number(it.cantidad) || 1,
-        precio_unitario: Number(it.precio_unitario) || 0,
-        subtotal: Number(it.subtotal) || (Number(it.cantidad) * Number(it.precio_unitario)),
-      }));
-
-    if (details.length > 0) {
-      const { error: detailsErr } = await supabase.from('detalle_pedidos').insert(details);
-      if (detailsErr) {
-        console.warn('Error al registrar detalle_pedidos en venta manual:', detailsErr.message);
-      }
+      await supabase.from('pedidos').delete().gte('id', 0);
+    } catch (e) {
+      console.warn('Error clearing pedidos table:', e);
     }
 
-    // 3. Descontar stock
-    for (const it of payload.items) {
-      if (!it.producto_id) continue;
-      const qty = Number(it.cantidad) || 1;
-      try {
-        const { data: curInv } = await supabase
-          .from('inventario')
-          .select('id, stock_actual')
-          .eq('producto_id', it.producto_id)
-          .limit(1);
+    // 3. Limpiar almacenamiento local de pedidos
+    clearAllSavedOrderReceipts();
+    return true;
+  } catch (err) {
+    console.warn('Error in deleteAllAdminOrders:', err);
+    clearAllSavedOrderReceipts();
+    return true;
+  }
+}
 
-        if (curInv && curInv.length > 0) {
-          const newStock = Math.max(0, (curInv[0].stock_actual || 0) - qty);
-          await supabase
-            .from('inventario')
-            .update({ stock_actual: newStock, updated_at: new Date().toISOString() })
-            .eq('producto_id', it.producto_id);
-          await supabase
-            .from('productos')
-            .update({ stock: newStock, updated_at: new Date().toISOString() })
-            .eq('id', it.producto_id);
-        } else {
-          const { data: curProd } = await supabase
-            .from('productos')
-            .select('stock')
-            .eq('id', it.producto_id)
-            .single();
-          if (curProd) {
-            const newStock = Math.max(0, (curProd.stock || 0) - qty);
-            await supabase
-              .from('productos')
-              .update({ stock: newStock, updated_at: new Date().toISOString() })
-              .eq('id', it.producto_id);
-          }
+/* ==================== VENTAS ==================== */
+export interface VentaRecord {
+  id: string;
+  pedido_id?: string | null;
+  numero_orden?: string;
+  total: number;
+  subtotal?: number;
+  descuento?: number;
+  fecha: string;
+  created_at?: string;
+  metodo_pago?: string;
+  tipo_entrega?: string;
+  estado?: string;
+  cliente: {
+    id?: string;
+    nombre: string;
+    telefono: string;
+    email?: string | null;
+    direccion?: string | null;
+  };
+  items: PedidoItem[];
+}
+
+export async function getAdminSales(): Promise<VentaRecord[]> {
+  try {
+    // Obtener pedidos para construir el historial de ventas completo
+    const orders = await getAdminOrders();
+
+    // Filtrar pedidos que no estén cancelados
+    const salesList: VentaRecord[] = orders
+      .filter((o) => o.estado !== 'cancelado')
+      .map((o) => {
+        const saleId = String(o.id);
+        const orderNum = o.numero_orden || (saleId.length > 8 ? saleId.slice(0, 8) : saleId);
+        return {
+          id: saleId,
+          pedido_id: saleId,
+          numero_orden: `#${orderNum}`,
+          total: Number(o.total) || 0,
+          subtotal: Number(o.subtotal) || Number(o.total) || 0,
+          descuento: Number(o.descuento) || 0,
+          fecha: o.created_at || new Date().toISOString(),
+          created_at: o.created_at || new Date().toISOString(),
+          metodo_pago: o.metodo_pago || 'efectivo',
+          tipo_entrega: o.tipo_entrega || 'delivery',
+          estado: o.estado,
+          cliente: {
+            id: o.cliente?.id || saleId,
+            nombre: o.cliente?.nombre || 'Cliente',
+            telefono: o.cliente?.telefono || '—',
+            email: o.cliente?.email || null,
+            direccion: o.cliente?.direccion || null,
+          },
+          items: o.items || [],
+        };
+      });
+
+    return salesList.sort(
+      (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+    );
+  } catch (err) {
+    console.warn('Error fetching admin sales:', err);
+    return [];
+  }
+}
+
+export async function deleteAdminSale(saleId: string | number, pedidoId?: string | number): Promise<boolean> {
+  const targetSaleId = String(saleId);
+  const targetOrderId = pedidoId ? String(pedidoId) : targetSaleId;
+
+  try {
+    // 1. Eliminar de tabla ventas si existe registro
+    try {
+      await supabase.from('ventas').delete().eq('id', targetSaleId);
+      await supabase.from('ventas').delete().eq('pedido_id', targetOrderId);
+    } catch {
+      // ignore
+    }
+
+    // 2. Eliminar de tabla pedidos
+    try {
+      await supabase.from('pedidos').delete().eq('id', targetOrderId);
+    } catch {
+      // ignore
+    }
+
+    // 3. Eliminar de recibos locales
+    deleteOrderReceipt(targetOrderId);
+    deleteOrderReceipt(targetSaleId);
+    return true;
+  } catch (err) {
+    console.warn('Error deleting admin sale:', err);
+    deleteOrderReceipt(targetSaleId);
+    return true;
+  }
+}
+
+/* ==================== CLIENTES ==================== */
+export async function getAdminClients(): Promise<Cliente[]> {
+  try {
+    const { data: clients, error } = await supabase
+      .from('clientes')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Calcular totales desde pedidos
+    const { data: orders } = await supabase.from('pedidos').select('cliente_id, total, estado');
+    const spentMap: Record<string, number> = {};
+    const countMap: Record<string, number> = {};
+
+    if (orders) {
+      orders.forEach((o) => {
+        if (o.cliente_id && o.estado !== 'cancelado') {
+          spentMap[o.cliente_id] = (spentMap[o.cliente_id] || 0) + (o.total || 0);
+          countMap[o.cliente_id] = (countMap[o.cliente_id] || 0) + 1;
         }
-      } catch (stkErr) {
-        console.warn('Error actualizando stock en venta manual:', stkErr);
+      });
+    }
+
+    return (clients || []).map((c) => ({
+      ...c,
+      total_pedidos: countMap[c.id] || 0,
+      total_gastado: Number((spentMap[c.id] || 0).toFixed(2)),
+    }));
+  } catch (err) {
+    console.warn('Error fetching clients:', err);
+    return [];
+  }
+}
+
+export async function deleteAdminClient(clientId: string | number): Promise<boolean> {
+  const cleanId = String(clientId);
+  const isNum = !isNaN(Number(cleanId));
+  const numericId = isNum ? Number(cleanId) : null;
+  try {
+    // 1. Eliminar pedidos del cliente para evitar violación de clave foránea (pedidos_cliente_id_fkey)
+    try {
+      if (numericId !== null) {
+        await supabase.from('pedidos').delete().eq('cliente_id', numericId);
+      }
+      await supabase.from('pedidos').delete().eq('cliente_id', cleanId);
+    } catch {
+      // ignore
+    }
+
+    // 2. Eliminar cliente de Supabase
+    let error: any = null;
+    if (numericId !== null) {
+      const res = await supabase.from('clientes').delete().eq('id', numericId);
+      error = res.error;
+    } else {
+      const res = await supabase.from('clientes').delete().eq('id', cleanId);
+      error = res.error;
+    }
+
+    if (error) {
+      console.warn('Supabase delete client error:', error);
+      throw error;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Error deleting client:', err);
+    return false;
+  }
+}
+
+export async function deleteAllAdminClients(): Promise<boolean> {
+  try {
+    // 1. Eliminar ventas y pedidos primero para evitar restricciones de clave foránea
+    try {
+      await supabase.from('ventas').delete().gte('id', 0);
+    } catch {}
+    try {
+      await supabase.from('pedidos').delete().gte('id', 0);
+    } catch {}
+
+    // 2. Eliminar todos los clientes en Supabase
+    const { data: allC } = await supabase.from('clientes').select('id');
+    if (allC && allC.length > 0) {
+      for (const c of allC) {
+        await supabase.from('clientes').delete().eq('id', c.id);
       }
     }
+    await supabase.from('clientes').delete().gte('id', 0);
+
+    // 3. Limpiar almacenamiento local
+    clearAllSavedOrderReceipts();
+    return true;
+  } catch (err) {
+    console.warn('Error in deleteAllAdminClients:', err);
+    return false;
   }
-
-  // 4. Registrar en la tabla ventas si está disponible
-  try {
-    await supabase.from('ventas').insert([
-      {
-        pedido_id: orderId,
-        total: Number(payload.total) || 0,
-        fecha: saleDate,
-        created_at: saleDate,
-      },
-    ]);
-  } catch (vErr) {
-    console.warn('Tabla ventas no disponible o restringida:', vErr);
-  }
-
-  return { orderId };
 }
 
-export async function getAdminSales() {
-  const supabase = getSupabaseClient();
+/* ==================== INVENTARIO ==================== */
+export async function updateAdminStock(productId: string, newStock: number): Promise<boolean> {
+  const { error } = await supabase
+    .from('productos')
+    .update({ stock: Math.max(0, newStock) })
+    .eq('id', productId);
 
-  const { data: orders, error } = await supabase
-    .from('pedidos')
-    .select('*')
-    .neq('estado', 'cancelado')
-    .order('created_at', { ascending: false });
-
-  if (error) throw new Error(`Error al cargar ventas: ${error.message}`);
-
-  const { data: clients } = await supabase.from('clientes').select('id, nombre, email, telefono, direccion');
-  const clientMap = new Map<string, Cliente>();
-  if (clients) clients.forEach((c) => clientMap.set(c.id, c));
-
-  return (orders || []).map((o) => ({
-    id: o.id,
-    pedido_id: o.id,
-    fecha: o.created_at,
-    total: Number(o.total) || 0,
-    subtotal: Number(o.subtotal) || 0,
-    metodo_pago: o.metodo_pago,
-    cliente: o.cliente_id ? clientMap.get(o.cliente_id) : undefined,
-    estado: o.estado,
-  }));
+  if (error) throw error;
+  return true;
 }
-
-// ==========================================
-// STORE CONFIGURATION & HERO VIDEO
-// ==========================================
-
-const CONFIG_STORAGE_KEY = 'elegance_store_config';
-
-export function getLocalStoreConfig(): StoreConfig {
-  try {
-    const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      // Ensure the watch photo is permanently eliminated
-      if (parsed.hero_poster_url) {
-        parsed.hero_poster_url = '';
-      }
-      if (!parsed.hero_video_url || parsed.hero_video_url.includes('mixkit') || parsed.hero_video_url.includes('2026-09-23')) {
-        parsed.hero_video_url = '/videos/WhatsApp Video 2026-09-26 at 15.05.22.mp4';
-      }
-      if (!parsed.logo_url || parsed.logo_url === '/images/logo/logo.png') {
-        parsed.logo_url = '/images/logo/logotipo.jpeg';
-      }
-      return { ...DEFAULT_STORE_CONFIG, ...parsed, hero_poster_url: '' };
-    }
-  } catch (e) {}
-  return DEFAULT_STORE_CONFIG;
-}
-
-export function saveLocalStoreConfig(config: StoreConfig) {
-  try {
-    localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
-  } catch (e) {}
-}
-
-export interface ProjectMediaOption {
-  label: string;
-  value: string;
-}
-
-export const PROJECT_MEDIA_OPTIONS = {
-  products: [] as ProjectMediaOption[],
-  categories: [] as ProjectMediaOption[],
-  logo: [
-    { label: 'Logotipo Oficial Aura (/images/logo/logotipo.jpeg)', value: '/images/logo/logotipo.jpeg' },
-    { label: 'Logo PNG Aura (/images/logo/logo.png)', value: '/images/logo/logo.png' },
-  ],
-  banners: [
-    { label: 'Banner 1 (/images/banners/banner-1.jpg)', value: '/images/banners/banner-1.jpg' },
-    { label: 'Banner 2 (/images/banners/banner-2.jpg)', value: '/images/banners/banner-2.jpg' },
-  ],
-  videos: [
-    { label: 'Video WhatsApp Oficial (/videos/WhatsApp Video 2026-09-26 at 15.05.22.mp4)', value: '/videos/WhatsApp Video 2026-09-26 at 15.05.22.mp4' },
-    { label: 'Video Hero Alias (/videos/hero.mp4)', value: '/videos/hero.mp4' },
-  ],
-};

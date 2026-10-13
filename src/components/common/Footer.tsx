@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
-import { Smartphone, Mail, MapPin, Instagram, MessageCircle } from 'lucide-react';
-import { Categoria } from '../../types/database';
+import React, { useState, useRef } from 'react';
+import { Phone, Mail, MapPin, Instagram, MessageCircle, ShieldCheck } from 'lucide-react';
 import { useStoreConfig } from '../../context/StoreConfigContext';
-import { LegalModal, LegalTab } from './LegalModal';
+import { Categoria } from '../../types/database';
 
 interface FooterProps {
   categories: Categoria[];
@@ -10,50 +9,72 @@ interface FooterProps {
   onOpenAdmin?: () => void;
   onOpenTerms?: () => void;
   onOpenPrivacy?: () => void;
+  onOpenLegal?: (tab: 'terminos' | 'privacidad') => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
-  categories,
+  categories = [],
   onSelectCategory,
   onOpenAdmin,
   onOpenTerms,
   onOpenPrivacy,
+  onOpenLegal,
 }) => {
   const { config } = useStoreConfig();
-  const [isLegalOpen, setIsLegalOpen] = useState(false);
-  const [legalTab, setLegalTab] = useState<LegalTab>('privacidad');
+  const [tapCount, setTapCount] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [footerTaps, setFooterTaps] = useState(0);
+  const handleLogoTap = () => {
+    const next = tapCount + 1;
+    if (timerRef.current) clearTimeout(timerRef.current);
 
-  const handleFooterLogoTap = () => {
-    const next = footerTaps + 1;
     if (next >= 5) {
-      setFooterTaps(0);
+      setTapCount(0);
       if (onOpenAdmin) onOpenAdmin();
       return;
     }
-    setFooterTaps(next);
-    setTimeout(() => setFooterTaps(0), 2500);
-    scrollToTop();
-  };
 
-  const openLegal = (tab: LegalTab) => {
-    setLegalTab(tab);
-    setIsLegalOpen(true);
-  };
+    setTapCount(next);
+    timerRef.current = setTimeout(() => {
+      setTapCount(0);
+    }, 2500);
 
-  const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const scrollToSection = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleTermsClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onOpenTerms) {
+      onOpenTerms();
+    } else if (onOpenLegal) {
+      onOpenLegal('terminos');
+    }
+  };
+
+  const handlePrivacyClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onOpenPrivacy) {
+      onOpenPrivacy();
+    } else if (onOpenLegal) {
+      onOpenLegal('privacidad');
+    }
   };
 
   return (
     <footer id="contacto" className="bg-[#070709] border-t border-white/[0.08] text-stone-400 text-xs scroll-mt-10">
       <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12 py-16 sm:py-20">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-12">
-          {/* Brand Info (4 cols) */}
+          {/* Brand Col */}
           <div className="lg:col-span-4 space-y-4">
             <button
-              onClick={handleFooterLogoTap}
+              onClick={handleLogoTap}
               className="flex items-center gap-3 text-left group cursor-pointer focus:outline-none"
               title="Pretty Store"
             >
@@ -85,9 +106,19 @@ export const Footer: React.FC<FooterProps> = ({
                 'Boutique exclusiva de gorras legendarias, accesorios selectos y moda urbana diseñada con los más elevados estándares de distinción.'}
             </p>
 
-            {/* Social links con el nombre debajo de cada logo */}
+            {/* Garantía de Agotamiento de Stock y Reembolso */}
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-1.5 max-w-sm">
+              <div className="flex items-center gap-1.5 text-amber-300 font-bold text-xs uppercase tracking-wider">
+                <ShieldCheck size={15} className="text-[#fbbf24]" />
+                <span>Garantía Oficial de Compra</span>
+              </div>
+              <p className="text-[11px] text-stone-300 font-light leading-relaxed">
+                Si un producto se agota y fue pagado por equivocación, le respondemos de dos maneras: la primera es la devolución completa del 100% de su dinero de inmediato, o la segunda opción que es el cambio por otro producto de su agrado.
+              </p>
+            </div>
+
+            {/* Redes Sociales Oficiales */}
             <div className="pt-2 flex flex-wrap items-start gap-4 sm:gap-5 text-stone-400">
-              {/* Instagram Principal */}
               <a
                 href={config.instagram || 'https://instagram.com/pretty_store_pty'}
                 target="_blank"
@@ -104,7 +135,6 @@ export const Footer: React.FC<FooterProps> = ({
                 </span>
               </a>
 
-              {/* Instagram (2) Solicitado */}
               <a
                 href="https://www.instagram.com/tienda_prettystore2?stkn=MTR1MGo5YTJ1N3VycQ=="
                 target="_blank"
@@ -124,7 +154,6 @@ export const Footer: React.FC<FooterProps> = ({
                 </span>
               </a>
 
-              {/* TikTok */}
               <a
                 href={config.tiktok || 'https://www.tiktok.com/@tienda_prettystore?_r=1&_t=ZS-9A8sgqEMvKS'}
                 target="_blank"
@@ -143,7 +172,6 @@ export const Footer: React.FC<FooterProps> = ({
                 </span>
               </a>
 
-              {/* WhatsApp Oficial 6215-0251 */}
               <a
                 href="https://wa.me/50762150251"
                 target="_blank"
@@ -162,7 +190,7 @@ export const Footer: React.FC<FooterProps> = ({
             </div>
           </div>
 
-          {/* Navigation Links (2 cols) */}
+          {/* Navigation Col */}
           <div className="lg:col-span-2 space-y-3">
             <h4 className="text-white text-[11px] uppercase tracking-[0.25em] font-medium font-serif-luxury">
               Navegación
@@ -170,7 +198,7 @@ export const Footer: React.FC<FooterProps> = ({
             <ul className="space-y-2 text-xs font-light">
               <li>
                 <button
-                  onClick={scrollToTop}
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
                   Inicio
@@ -178,9 +206,7 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <button
-                  onClick={() => {
-                    document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
-                  }}
+                  onClick={() => scrollToSection('catalogo')}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
                   Tienda
@@ -188,9 +214,7 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <button
-                  onClick={() => {
-                    document.getElementById('categorias')?.scrollIntoView({ behavior: 'smooth' });
-                  }}
+                  onClick={() => scrollToSection('categorias')}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
                   Colecciones
@@ -198,9 +222,7 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <button
-                  onClick={() => {
-                    document.getElementById('editoriales')?.scrollIntoView({ behavior: 'smooth' });
-                  }}
+                  onClick={() => scrollToSection('editoriales')}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
                   Sobre Nosotros
@@ -208,9 +230,7 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <button
-                  onClick={() => {
-                    document.getElementById('contacto')?.scrollIntoView({ behavior: 'smooth' });
-                  }}
+                  onClick={() => scrollToSection('contacto')}
                   className="hover:text-white text-[#fbbf24] font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <MessageCircle size={13} className="text-[#fbbf24]" />
@@ -220,12 +240,7 @@ export const Footer: React.FC<FooterProps> = ({
               <li>
                 <a
                   href="/terminos-y-condiciones"
-                  onClick={(e) => {
-                    if (onOpenTerms) {
-                      e.preventDefault();
-                      onOpenTerms();
-                    }
-                  }}
+                  onClick={handleTermsClick}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
                   Términos y Condiciones
@@ -234,12 +249,7 @@ export const Footer: React.FC<FooterProps> = ({
               <li>
                 <a
                   href="/politica-de-privacidad"
-                  onClick={(e) => {
-                    if (onOpenPrivacy) {
-                      e.preventDefault();
-                      onOpenPrivacy();
-                    }
-                  }}
+                  onClick={handlePrivacyClick}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
                   Política de Privacidad
@@ -248,7 +258,7 @@ export const Footer: React.FC<FooterProps> = ({
             </ul>
           </div>
 
-          {/* Categories (3 cols) */}
+          {/* Categories Col */}
           <div className="lg:col-span-3 space-y-3">
             <h4 className="text-white text-[11px] uppercase tracking-[0.25em] font-medium font-serif-luxury">
               Colecciones
@@ -258,7 +268,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <button
                   onClick={() => {
                     onSelectCategory('all');
-                    document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
+                    scrollToSection('catalogo');
                   }}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
@@ -270,7 +280,7 @@ export const Footer: React.FC<FooterProps> = ({
                   <button
                     onClick={() => {
                       onSelectCategory(cat.id);
-                      document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
+                      scrollToSection('catalogo');
                     }}
                     className="hover:text-white transition-colors cursor-pointer"
                   >
@@ -281,14 +291,14 @@ export const Footer: React.FC<FooterProps> = ({
             </ul>
           </div>
 
-          {/* Contact & Payments (3 cols) */}
+          {/* Customer Service & Hours Col */}
           <div className="lg:col-span-3 space-y-4">
             <h4 className="text-white text-[11px] uppercase tracking-[0.25em] font-medium font-serif-luxury">
               Atención al Cliente
             </h4>
             <div className="space-y-2 text-stone-400 font-light text-xs">
               <p className="flex items-center gap-2 text-stone-300">
-                <Smartphone size={13} className="text-[#c5a059]" />
+                <Phone size={13} className="text-[#c5a059]" />
                 <span>{config.whatsapp || '+507 6215-0251'}</span>
               </p>
               <p className="flex items-center gap-2 text-stone-300">
@@ -296,7 +306,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <span>{config.email || 'contacto@prettystore.store'}</span>
               </p>
               <a
-                href="https://maps.app.goo.gl/PxA3suMXNZxuFF5X7"
+                href={config.direccion || 'https://maps.app.goo.gl/PxA3suMXNZxuFF5X7'}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-2 text-stone-400 hover:text-white transition-colors group cursor-pointer"
@@ -307,7 +317,6 @@ export const Footer: React.FC<FooterProps> = ({
               </a>
             </div>
 
-            {/* Payment methods list */}
             <div className="pt-2 border-t border-white/[0.06]">
               <span className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-medium block mb-1.5">
                 Métodos de Pago
@@ -321,61 +330,28 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
         </div>
 
-        {/* Bottom Bar */}
+        {/* Bottom copyright bar */}
         <div className="mt-14 pt-8 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4 text-stone-500 font-light text-[11px]">
           <p>© {new Date().getFullYear()} {config.nombre_tienda || 'Pretty Store'}. Todos los derechos reservados.</p>
           <div className="flex flex-wrap items-center justify-center sm:justify-end gap-x-4 gap-y-2 text-stone-400">
             <a
               href="/politica-de-privacidad"
-              onClick={(e) => {
-                if (onOpenPrivacy) {
-                  e.preventDefault();
-                  onOpenPrivacy();
-                } else {
-                  e.preventDefault();
-                  openLegal('privacidad');
-                }
-              }}
+              onClick={handlePrivacyClick}
               className="hover:text-white transition-colors cursor-pointer"
             >
               Política de Privacidad
             </a>
-            <span className="text-stone-700">•</span>
+            <span className="text-stone-700">·</span>
             <a
               href="/terminos-y-condiciones"
-              onClick={(e) => {
-                if (onOpenTerms) {
-                  e.preventDefault();
-                  onOpenTerms();
-                } else {
-                  e.preventDefault();
-                  openLegal('terminos');
-                }
-              }}
+              onClick={handleTermsClick}
               className="hover:text-white transition-colors cursor-pointer"
             >
               Términos y Condiciones
             </a>
-            <span className="text-stone-700">•</span>
-            <button
-              onClick={() => {
-                const footerEl = document.getElementById('contacto') || document.querySelector('footer');
-                footerEl?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="hover:text-white transition-colors cursor-pointer"
-            >
-              Contacto
-            </button>
           </div>
         </div>
       </div>
-
-      {/* Modal de Privacidad, Términos y Soporte */}
-      <LegalModal
-        isOpen={isLegalOpen}
-        onClose={() => setIsLegalOpen(false)}
-        initialTab={legalTab}
-      />
     </footer>
   );
 };

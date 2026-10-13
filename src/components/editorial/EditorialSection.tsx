@@ -2,28 +2,28 @@ import React from 'react';
 import { ArrowRight } from 'lucide-react';
 
 interface EditorialSectionProps {
-  onSelectCategory?: (categoryId: string) => void;
+  onSelectCategory?: (id?: string) => void;
   onExploreClick?: () => void;
 }
 
-export const EditorialSection: React.FC<EditorialSectionProps> = ({
-  onSelectCategory,
-  onExploreClick,
-}) => {
-  const handleAction = (categoryId?: string) => {
-    if (categoryId && onSelectCategory) {
-      onSelectCategory(categoryId);
+export const EditorialSection: React.FC<EditorialSectionProps> = ({ onSelectCategory, onExploreClick }) => {
+  const handleAction = (catId?: string) => {
+    if (catId && onSelectCategory) {
+      onSelectCategory(catId);
     }
     const el = document.getElementById('catalogo');
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    } else if (onExploreClick) {
+      onExploreClick();
+    }
   };
 
   return (
     <section id="editoriales" className="py-24 sm:py-32 bg-[#09090b] text-stone-100 overflow-hidden">
       <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12 space-y-28 sm:space-y-40">
-        {/* Editorial Block 1: Image Left + Text Right */}
+        {/* Block 1 */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
-          {/* Large Image Frame */}
           <div className="lg:col-span-7">
             <div className="relative aspect-[4/3] sm:aspect-[16/10] overflow-hidden bg-stone-900 border border-white/[0.08] group">
               <img
@@ -38,8 +38,6 @@ export const EditorialSection: React.FC<EditorialSectionProps> = ({
               <div className="absolute inset-0 bg-black/20" />
             </div>
           </div>
-
-          {/* Text Right */}
           <div className="lg:col-span-5 lg:pl-6 space-y-6">
             <span className="text-[10px] sm:text-xs uppercase tracking-[0.35em] text-[#c5a059] font-medium block">
               Maestría & Precisión
@@ -62,9 +60,8 @@ export const EditorialSection: React.FC<EditorialSectionProps> = ({
           </div>
         </div>
 
-        {/* Editorial Block 2: Text Left + Image Right */}
+        {/* Block 2 */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
-          {/* Text Left (ordered first on lg, second on mobile) */}
           <div className="lg:col-span-5 order-2 lg:order-1 lg:pr-6 space-y-6">
             <span className="text-[10px] sm:text-xs uppercase tracking-[0.35em] text-[#c5a059] font-medium block">
               Atelier Exclusivo
@@ -85,8 +82,6 @@ export const EditorialSection: React.FC<EditorialSectionProps> = ({
               </button>
             </div>
           </div>
-
-          {/* Large Image Frame Right */}
           <div className="lg:col-span-7 order-1 lg:order-2">
             <div className="relative aspect-[4/3] sm:aspect-[16/10] overflow-hidden bg-stone-900 border border-white/[0.08] group">
               <img

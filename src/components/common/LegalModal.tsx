@@ -1,192 +1,146 @@
 import React, { useState } from 'react';
-import { X, ShieldCheck, FileText } from 'lucide-react';
+import { X, ShieldCheck, FileText, Lock, Clock } from 'lucide-react';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 
-export type LegalTab = 'privacidad' | 'terminos';
-
 interface LegalModalProps {
-  isOpen: boolean;
+  initialTab?: 'terminos' | 'privacidad';
   onClose: () => void;
-  initialTab?: LegalTab;
 }
 
-export const LegalModal: React.FC<LegalModalProps> = ({
-  isOpen,
-  onClose,
-  initialTab = 'privacidad',
-}) => {
+export const LegalModal: React.FC<LegalModalProps> = ({ initialTab = 'terminos', onClose }) => {
+  const [activeTab, setActiveTab] = useState<'terminos' | 'privacidad'>(initialTab);
   const { config } = useStoreConfig();
-  const [activeTab, setActiveTab] = useState<LegalTab>(initialTab);
-
-  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-3xl bg-[#0e0e12] border border-white/10 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col selection:bg-[#c5a059] selection:text-black">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+      <div className="bg-[#100f14] border border-white/10 rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="p-5 sm:p-6 border-b border-white/[0.08] flex items-center justify-between bg-black/40">
-          <div>
-            <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block mb-0.5">
-              {config.nombre_tienda || 'Pretty Store'} • Información Legal
-            </span>
-            <h2 className="text-lg sm:text-xl font-serif-luxury font-medium text-white">
-              Términos de Servicio & Privacidad
-            </h2>
+        <div className="p-5 border-b border-white/10 flex items-center justify-between bg-black/40 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#c5a059]/15 border border-[#c5a059]/30 flex items-center justify-center text-[#c5a059]">
+              <ShieldCheck size={18} />
+            </div>
+            <div>
+              <h3 className="font-serif-luxury font-bold text-white text-base">Políticas y Garantías Oficiales</h3>
+              <p className="text-[11px] text-stone-400 font-light">{config.nombre_tienda || 'Pretty-Store'}</p>
+            </div>
           </div>
-
           <button
             onClick={onClose}
-            className="p-2 text-stone-400 hover:text-white transition-colors cursor-pointer rounded-full hover:bg-white/5"
-            aria-label="Cerrar modal"
+            className="p-2 rounded-xl text-stone-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* Tab Selector */}
-        <div className="flex border-b border-white/[0.08] bg-black/20 overflow-x-auto text-xs font-medium">
-          <button
-            onClick={() => setActiveTab('privacidad')}
-            className={`flex items-center gap-2 px-4 py-3 border-b-2 cursor-pointer transition-colors whitespace-nowrap ${
-              activeTab === 'privacidad'
-                ? 'border-[#c5a059] text-white bg-white/[0.02]'
-                : 'border-transparent text-stone-400 hover:text-white'
-            }`}
-          >
-            <ShieldCheck size={14} className={activeTab === 'privacidad' ? 'text-[#c5a059]' : 'text-stone-400'} />
-            <span>Política de Privacidad</span>
-          </button>
-
+        {/* Tabs */}
+        <div className="flex border-b border-white/10 bg-black/20 shrink-0">
           <button
             onClick={() => setActiveTab('terminos')}
-            className={`flex items-center gap-2 px-4 py-3 border-b-2 cursor-pointer transition-colors whitespace-nowrap ${
+            className={`flex-1 py-3 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
               activeTab === 'terminos'
-                ? 'border-[#c5a059] text-white bg-white/[0.02]'
-                : 'border-transparent text-stone-400 hover:text-white'
+                ? 'text-[#c5a059] border-b-2 border-[#c5a059] bg-[#c5a059]/5'
+                : 'text-stone-400 hover:text-white'
             }`}
           >
-            <FileText size={14} className={activeTab === 'terminos' ? 'text-[#c5a059]' : 'text-stone-400'} />
-            <span>Términos y Condiciones</span>
+            <FileText size={14} />
+            <span>Términos y Devoluciones</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('privacidad')}
+            className={`flex-1 py-3 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+              activeTab === 'privacidad'
+                ? 'text-[#c5a059] border-b-2 border-[#c5a059] bg-[#c5a059]/5'
+                : 'text-stone-400 hover:text-white'
+            }`}
+          >
+            <Lock size={14} />
+            <span>Privacidad y Atención</span>
           </button>
         </div>
 
-        {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6 text-xs text-stone-300 font-light leading-relaxed">
-          {activeTab === 'privacidad' && (
-            <div className="space-y-4">
+        {/* Content */}
+        <div className="p-6 overflow-y-auto space-y-5 text-xs text-stone-300 font-light leading-relaxed">
+          {activeTab === 'terminos' ? (
+            <>
+              {/* Cláusula Clave Requerida por el Usuario */}
+              <div className="p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-500/40 text-stone-200 space-y-2">
+                <span className="font-bold text-amber-300 block text-xs uppercase tracking-wide flex items-center gap-2">
+                  <ShieldCheck size={16} className="text-[#fbbf24]" />
+                  <span>Política Especial de Stock y Devolución por Equivocación:</span>
+                </span>
+                <p className="text-xs text-stone-200 leading-relaxed">
+                  Si en caso tal un artículo se acabó y fue pagado por equivocación, <strong>nosotros le responderemos de dos maneras</strong>:
+                </p>
+                <div className="space-y-2 pt-1">
+                  <div className="p-3 rounded-xl bg-black/60 border border-white/10">
+                    <strong className="text-white block font-semibold">1️⃣ Devolución completa de su dinero (100% Reembolso):</strong>
+                    <span className="text-stone-300 text-[11px] block mt-0.5">
+                      Reembolso total e inmediato transferido a su cuenta bancaria o Yappy sin ningún descuento ni cargo adicional.
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-black/60 border border-white/10">
+                    <strong className="text-white block font-semibold">2️⃣ Cambio por otro producto:</strong>
+                    <span className="text-stone-300 text-[11px] block mt-0.5">
+                      Sustitución inmediata por cualquier otra prenda, gorra, perfume o accesorio de su agrado disponible en nuestra tienda.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               <div>
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  1. Tratamiento y Protección de Datos Personales
-                </h3>
+                <h4 className="font-bold text-white text-sm mb-1">1. Proceso de Pedidos y Envíos</h4>
                 <p>
-                  En {config.nombre_tienda || 'Pretty Store'}, nos comprometemos a salvaguardar la privacidad de nuestros clientes de conformidad con las mejores prácticas internacionales y las leyes aplicables de protección de datos personales. Los datos recabados a través de nuestro sitio web (incluyendo nombre, número de teléfono, dirección de entrega y correo electrónico) son utilizados exclusivamente para la gestión, facturación, despacho y seguimiento de sus pedidos.
+                  Todos los pedidos se gestionan con empresas de logística reconocidas como Uno Express, Ferguson o Servientrega a nivel nacional en Panamá, o mediante retiro coordinado.
                 </p>
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  2. Confidencialidad y Seguridad
-                </h3>
+                <h4 className="font-bold text-white text-sm mb-1">2. Medios de Pago Verificados</h4>
                 <p>
-                  Sus datos personales nunca serán vendidos, transferidos ni comercializados a terceras partes ajenas a la relación comercial directa con la boutique. El acceso a su información de contacto y pedidos está estrictamente restringido al personal autorizado y debidamente autenticado mediante controles de seguridad por roles (Row Level Security).
+                  Aceptamos Yappy, transferencias directas de Banco General y otros bancos de la plaza, y tarjetas de crédito o débito mediante pasarelas seguras. El comprobante de pago es verificado antes del despacho de la orden.
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <h4 className="font-bold text-white text-sm mb-1">Protección de Datos y Confidencialidad</h4>
+                <p>
+                  En Pretty-Store tratamos su información personal (nombre, teléfono y dirección de entrega) exclusivamente con la finalidad de coordinar y enviar sus pedidos oficiales. Sus datos no son compartidos con terceros ni comercializados.
                 </p>
               </div>
 
-              <div>
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  3. Transacciones y Datos Financieros
-                </h3>
-                <p>
-                  {config.nombre_tienda || 'Pretty Store'} no almacena números completos de tarjetas de crédito o débito, códigos de seguridad (CVV) ni contraseñas bancarias en sus bases de datos. Los pagos electrónicos se coordinan a través de canales bancarios seguros (Yappy, ACH) o pasarelas de pago certificadas con cifrado SSL.
+              <div className="p-4 rounded-2xl bg-black/60 border border-white/10 space-y-2">
+                <span className="text-xs uppercase font-bold text-[#fbbf24] flex items-center gap-2">
+                  <Clock size={15} />
+                  <span>Horario Oficial de Atención al Cliente</span>
+                </span>
+                <p className="text-xs text-stone-300">
+                  Nuestro equipo de soporte y atención vía WhatsApp y canales oficiales opera en los siguientes horarios:
                 </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono text-xs">
+                  <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5">
+                    <span className="text-stone-400 block text-[10px] uppercase font-sans">Días de semana:</span>
+                    <strong className="text-white">Lunes a Sábado: 8:00 AM - 7:00 PM</strong>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5">
+                    <span className="text-stone-400 block text-[10px] uppercase font-sans">Fin de semana:</span>
+                    <strong className="text-[#fbbf24]">Domingo: 8:00 AM - 5:00 PM</strong>
+                  </div>
+                </div>
               </div>
-
-              <div>
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  4. Disponibilidad de Stock y Notificación por WhatsApp
-                </h3>
-                <p className="text-amber-300/90 bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20">
-                  En caso de que algún producto seleccionado se agote en el inventario al momento de procesar la orden, el equipo de Pretty Store se comunicará directamente con usted a través de WhatsApp para coordinar la devolución completa de su dinero o el cambio del producto por otro artículo de igual precio, según su preferencia.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  5. Derechos de los Titulares
-                </h3>
-                <p>
-                  Usted tiene derecho a consultar, actualizar, rectificar o solicitar la supresión de sus datos personales de nuestro directorio en cualquier momento contactándonos directamente a través de nuestros canales oficiales de atención al cliente.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'terminos' && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  1. Ámbito de Aplicación
-                </h3>
-                <p>
-                  Los presentes Términos y Condiciones regulan el uso del catálogo en línea y los procesos de compra en la boutique {config.nombre_tienda || 'Pretty Store'}. Al registrar un pedido a través de nuestro sitio web, el cliente acepta los términos aquí descritos.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  2. Precios y Disponibilidad de Stock
-                </h3>
-                <p>
-                  Todos los precios están expresados en dólares de los Estados Unidos de América (USD) y corresponden a valores autorizados por la tienda. Las compras están sujetas a la verificación de existencias en inventario al momento de procesar el pedido. Si un producto se acaba en el stock, se le contactará directamente por WhatsApp y se le devolverá el dinero o se le cambiará por otro producto de igual precio.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  3. Modalidades de Entrega
-                </h3>
-                <p>
-                  Ofrecemos opciones de retiro en boutique física y envíos a nivel nacional a través de empresas de logística reconocidas (Uno Express, Ferguson, Servi Entrega). Los tiempos estimados y costos específicos de flete se coordinan directamente según la localidad de destino.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-2">
-                  4. Verificación de Pagos
-                </h3>
-                <p>
-                  El registro de un pedido genera un comprobante con estado 'Pendiente'. La confirmación y despacho de la orden queda sujeta a la validación efectiva del pago por parte de nuestro departamento de administración o a la confirmación de la pasarela autorizada.
-                </p>
-              </div>
-            </div>
+            </>
           )}
         </div>
 
         {/* Footer */}
-        <div className="p-4 sm:p-5 border-t border-white/[0.08] bg-black/30 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-3 text-[11px] text-stone-400">
-            <a
-              href="/terminos-y-condiciones"
-              onClick={onClose}
-              className="hover:text-[#c5a059] underline underline-offset-4 transition-colors"
-            >
-              Página de Términos
-            </a>
-            <span className="text-stone-700">•</span>
-            <a
-              href="/politica-de-privacidad"
-              onClick={onClose}
-              className="hover:text-[#c5a059] underline underline-offset-4 transition-colors"
-            >
-              Página de Privacidad
-            </a>
-          </div>
-
+        <div className="p-4 border-t border-white/10 flex justify-end bg-black/40 shrink-0">
           <button
             onClick={onClose}
-            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-white hover:bg-stone-200 text-black text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer"
+            className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold text-xs transition-colors cursor-pointer"
           >
-            Entendido
+            Entendido y Aceptar
           </button>
         </div>
       </div>

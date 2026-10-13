@@ -5,21 +5,16 @@ import {
   Search,
   Edit2,
   Trash2,
-  Check,
   X,
-  AlertCircle,
-  CheckCircle2,
   RefreshCw,
   Eye,
   EyeOff,
   Package,
-  GripVertical,
-  ChevronUp,
-  ChevronDown,
-  ChevronsUp,
-  ArrowUpDown,
-  Sparkles,
-  Info,
+  Ruler,
+  AlertCircle,
+  ArrowUp,
+  ArrowDown,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   getAdminCategories,
@@ -30,45 +25,41 @@ import {
   saveAdminCategoriesOrder,
 } from '../../../services/adminService';
 import { Categoria } from '../../../types/database';
-import { isPermissionError } from '../../../utils/supabaseSqlFix';
-import { PermissionErrorBanner } from '../PermissionErrorBanner';
+import {
+  SIZE_PRESETS,
+  resolveSizeOptions,
+  saveCategorySizeConfig,
+  embedSizeConfigInDescription,
+  getCleanDescription,
+} from '../../../utils/categorySizesStorage';
 
-interface CategoriesViewProps {
-  onOpenSqlFix?: (actionDesc?: string) => void;
-}
-
-export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) => {
+export const CategoriesView: React.FC = () => {
   const [categories, setCategories] = useState<Categoria[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Reordering state
-  const [isSavingOrder, setIsSavingOrder] = useState(false);
-  const [orderToast, setOrderToast] = useState<string | null>(null);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-
-  // Modals
+  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Categoria | null>(null);
-  const [isDeleting, setIsDeleting] = useState<Categoria | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
 
-  // Form
+  // Form Fields
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formActive, setFormActive] = useState(true);
-  const [formPosition, setFormPosition] = useState<'end' | 'start'>('end');
+
+  // Apartado de Tamaños / Tallas
+  const [sizeEnabled, setSizeEnabled] = useState(false);
+  const [sizeLabel, setSizeLabel] = useState('Tamaño');
+  const [sizeOptions, setSizeOptions] = useState<string[]>(['Pequeño', 'Grande']);
+  const [newOptionInput, setNewOptionInput] = useState('');
 
   const loadData = async () => {
     setIsLoading(true);
     try {
       const cats = await getAdminCategories();
       setCategories(cats);
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err?.message || 'Error al cargar categorías.' });
     } finally {
       setIsLoading(false);
     }
@@ -78,531 +69,307 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
     loadData();
   }, []);
 
-  // Save new categories ordering
-  const applyNewCategoryOrder = async (newOrder: Categoria[], successMessage = '✓ Orden de categorías actualizado') => {
-    setCategories(newOrder);
-    setIsSavingOrder(true);
-    try {
-      const ids = newOrder.map((c) => String(c.id));
-      await saveAdminCategoriesOrder(ids);
-      setOrderToast(successMessage);
-      setTimeout(() => {
-        setOrderToast((prev) => (prev === successMessage ? null : prev));
-      }, 3000);
-    } catch (err: any) {
-      console.warn('Error al guardar orden:', err);
-    } finally {
-      setIsSavingOrder(false);
-    }
-  };
-
-  const handleMoveUp = (catId: string) => {
-    const currentIndex = categories.findIndex((c) => c.id === catId);
-    if (currentIndex <= 0) return;
-    const newOrder = [...categories];
-    const temp = newOrder[currentIndex];
-    newOrder[currentIndex] = newOrder[currentIndex - 1];
-    newOrder[currentIndex - 1] = temp;
-    applyNewCategoryOrder(newOrder, `Posición #${currentIndex} asignada a "${temp.nombre}"`);
-  };
-
-  const handleMoveDown = (catId: string) => {
-    const currentIndex = categories.findIndex((c) => c.id === catId);
-    if (currentIndex < 0 || currentIndex >= categories.length - 1) return;
-    const newOrder = [...categories];
-    const temp = newOrder[currentIndex];
-    newOrder[currentIndex] = newOrder[currentIndex + 1];
-    newOrder[currentIndex + 1] = temp;
-    applyNewCategoryOrder(newOrder, `Posición #${currentIndex + 2} asignada a "${temp.nombre}"`);
-  };
-
-  const handleMoveToTop = (catId: string) => {
-    const currentIndex = categories.findIndex((c) => c.id === catId);
-    if (currentIndex <= 0) return;
-    const newOrder = [...categories];
-    const [item] = newOrder.splice(currentIndex, 1);
-    newOrder.unshift(item);
-    applyNewCategoryOrder(newOrder, `"${item.nombre}" movida al primer lugar (#1)`);
-  };
-
-  const handleMoveToPosition = (catId: string, targetPosition: number) => {
-    const currentIndex = categories.findIndex((c) => c.id === catId);
-    if (currentIndex < 0) return;
-    const targetIndex = Math.max(0, Math.min(categories.length - 1, targetPosition - 1));
-    if (currentIndex === targetIndex) return;
-
-    const newOrder = [...categories];
-    const [item] = newOrder.splice(currentIndex, 1);
-    newOrder.splice(targetIndex, 0, item);
-    applyNewCategoryOrder(newOrder, `"${item.nombre}" movida a la posición #${targetPosition}`);
-  };
-
-  const handleResetAlphabetical = () => {
-    if (!window.confirm('¿Deseas restablecer el orden de todas las categorías en orden alfabético (A-Z)?')) {
-      return;
-    }
-    const sorted = [...categories].sort((a, b) =>
-      a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
-    );
-    applyNewCategoryOrder(sorted, '✓ Categorías ordenadas alfabéticamente (A-Z)');
-  };
-
-  // Drag & drop handlers
-  const handleDragStart = (e: React.DragEvent, catId: string) => {
-    const index = categories.findIndex((c) => c.id === catId);
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', catId);
-  };
-
-  const handleDragOver = (e: React.DragEvent, catId: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const overIdx = categories.findIndex((c) => c.id === catId);
-    if (dragOverIndex !== overIdx) {
-      setDragOverIndex(overIdx);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent, targetCatId: string) => {
-    e.preventDefault();
-    setDragOverIndex(null);
-    if (draggedIndex === null) return;
-
-    const targetIndex = categories.findIndex((c) => c.id === targetCatId);
-    if (targetIndex < 0 || draggedIndex === targetIndex) {
-      setDraggedIndex(null);
-      return;
-    }
-
-    const newOrder = [...categories];
-    const [item] = newOrder.splice(draggedIndex, 1);
-    newOrder.splice(targetIndex, 0, item);
-    setDraggedIndex(null);
-    applyNewCategoryOrder(newOrder, `"${item.nombre}" movida a la posición #${targetIndex + 1}`);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
   const openCreateModal = () => {
     setEditingCategory(null);
     setFormName('');
     setFormDescription('');
     setFormActive(true);
-    setFormPosition('end');
+    setSizeEnabled(false);
+    setSizeLabel('Tamaño');
+    setSizeOptions(['Pequeño', 'Grande']);
+    setNewOptionInput('');
     setModalError(null);
     setIsModalOpen(true);
-    setActionMessage(null);
   };
 
   const openEditModal = (cat: Categoria) => {
     setEditingCategory(cat);
     setFormName(cat.nombre);
-    setFormDescription(cat.descripcion || '');
+    setFormDescription(getCleanDescription(cat.descripcion || ''));
     setFormActive(cat.activa);
+
+    const existing = resolveSizeOptions(cat.id, cat.nombre, '', cat.descripcion || '');
+    setSizeEnabled(existing.enabled);
+    setSizeLabel(existing.label || 'Tamaño');
+    setSizeOptions(existing.options.length > 0 ? existing.options : ['Pequeño', 'Grande']);
+    setNewOptionInput('');
     setModalError(null);
     setIsModalOpen(true);
-    setActionMessage(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) {
-      setModalError('El nombre de la categoría es requerido.');
+      setModalError('El nombre de la categoría es obligatorio.');
       return;
     }
 
     setIsSubmitting(true);
     setModalError(null);
+
     try {
+      // 1. Incrustar metadatos de tallas en la descripción para persistencia en base de datos
+      const finalDesc = embedSizeConfigInDescription(formDescription, {
+        categoryId: editingCategory ? editingCategory.id : '',
+        enabled: sizeEnabled,
+        label: sizeLabel,
+        options: sizeOptions,
+      });
+
+      let targetId = editingCategory?.id;
+
       if (editingCategory) {
         await updateAdminCategory(editingCategory.id, {
-          nombre: formName,
-          descripcion: formDescription,
+          nombre: formName.trim(),
+          descripcion: finalDesc,
           activa: formActive,
         });
-        setActionMessage({ type: 'success', text: 'Categoría actualizada con éxito.' });
       } else {
         const created = await createAdminCategory({
-          nombre: formName,
-          descripcion: formDescription,
+          nombre: formName.trim(),
+          descripcion: finalDesc,
           activa: formActive,
         });
+        if (created) targetId = created.id;
+      }
 
-        // Insertar en la posición deseada
-        if (created) {
-          const updatedList = formPosition === 'start' 
-            ? [created, ...categories]
-            : [...categories, created];
-          await saveAdminCategoriesOrder(updatedList.map((c) => c.id));
-        }
-
-        setActionMessage({ type: 'success', text: 'Categoría creada y colocada en la tienda.' });
+      // 2. Guardar en almacenamiento de tallas local para respuesta instantánea
+      if (targetId) {
+        saveCategorySizeConfig({
+          categoryId: targetId,
+          enabled: sizeEnabled,
+          label: sizeLabel,
+          options: sizeOptions,
+        });
       }
 
       setIsModalOpen(false);
       await loadData();
     } catch (err: any) {
-      const msg = err?.message || 'Error al guardar categoría.';
-      setModalError(msg);
-      setActionMessage({ type: 'error', text: msg });
-      if (isPermissionError(msg) && onOpenSqlFix) {
-        onOpenSqlFix(editingCategory ? `Actualizar categoría: ${formName}` : `Crear categoría: ${formName}`);
-      }
+      setModalError(err?.message || 'Error al guardar la categoría.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleToggleActive = async (cat: Categoria) => {
+    await toggleCategoryActive(cat.id, !cat.activa);
+    setCategories((prev) =>
+      prev.map((c) => (c.id === cat.id ? { ...c, activa: !c.activa } : c))
+    );
+  };
+
+  const handleDelete = async (cat: Categoria) => {
+    if (!window.confirm(`¿Seguro que deseas eliminar la categoría "${cat.nombre}"?`)) return;
     try {
-      await toggleCategoryActive(cat.id, !cat.activa);
-      setCategories((prev) =>
-        prev.map((c) => (c.id === cat.id ? { ...c, activa: !c.activa } : c))
-      );
+      await deleteAdminCategory(cat.id);
+      setCategories((prev) => prev.filter((c) => c.id !== cat.id));
     } catch (err: any) {
-      setActionMessage({ type: 'error', text: err?.message || 'Error al cambiar estado.' });
+      alert('No se pudo eliminar la categoría. Asegúrate de que no tenga productos asociados.');
     }
   };
 
-  const handleDelete = async () => {
-    if (!isDeleting) return;
-    try {
-      await deleteAdminCategory(isDeleting.id);
-      setActionMessage({ type: 'success', text: 'Categoría eliminada de Supabase.' });
-      setIsDeleting(null);
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err?.message || 'Error al eliminar categoría.' });
-      setIsDeleting(null);
-    }
+  const [orderSavedToast, setOrderSavedToast] = useState(false);
+
+  const handleMoveUp = async (catId: string) => {
+    const currentIndex = categories.findIndex((c) => c.id === catId);
+    if (currentIndex <= 0) return;
+
+    const newCats = [...categories];
+    const item = newCats[currentIndex];
+    newCats.splice(currentIndex, 1);
+    newCats.splice(currentIndex - 1, 0, item);
+
+    setCategories(newCats);
+    await saveAdminCategoriesOrder(newCats.map((c) => c.id));
+    setOrderSavedToast(true);
+    setTimeout(() => setOrderSavedToast(false), 2500);
+  };
+
+  const handleMoveDown = async (catId: string) => {
+    const currentIndex = categories.findIndex((c) => c.id === catId);
+    if (currentIndex < 0 || currentIndex >= categories.length - 1) return;
+
+    const newCats = [...categories];
+    const item = newCats[currentIndex];
+    newCats.splice(currentIndex, 1);
+    newCats.splice(currentIndex + 1, 0, item);
+
+    setCategories(newCats);
+    await saveAdminCategoriesOrder(newCats.map((c) => c.id));
+    setOrderSavedToast(true);
+    setTimeout(() => setOrderSavedToast(false), 2500);
   };
 
   const filteredCategories = categories.filter((c) =>
-    c.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.descripcion && c.descripcion.toLowerCase().includes(searchTerm.toLowerCase()))
+    c.nombre.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
     <div className="space-y-6">
-      {/* Toast Alert / Permission Alert */}
-      {actionMessage && isPermissionError(actionMessage.text) ? (
-        <PermissionErrorBanner
-          errorMessage={actionMessage.text}
-          onOpenFixModal={() => onOpenSqlFix?.('Permisos en tabla categorias')}
-          onDismiss={() => setActionMessage(null)}
-        />
-      ) : actionMessage ? (
-        <div
-          className={`p-4 rounded-2xl flex items-center justify-between gap-3 text-xs ${
-            actionMessage.type === 'success'
-              ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
-              : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {actionMessage.type === 'success' ? (
-              <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-            ) : (
-              <AlertCircle size={16} className="text-rose-400 shrink-0" />
-            )}
-            <span>{actionMessage.text}</span>
-          </div>
-          <button
-            onClick={() => setActionMessage(null)}
-            className="p-1 hover:bg-black/20 rounded cursor-pointer"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      ) : null}
-
-      {/* Reordering Notification Toast */}
-      {orderToast && (
-        <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-[#c5a059]/40 text-[#c5a059] flex items-center justify-between gap-3 text-xs animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center gap-2">
-            <Sparkles size={16} className="shrink-0 text-[#c5a059]" />
-            <span className="font-medium text-white">{orderToast}</span>
-          </div>
-          <button
-            onClick={() => setOrderToast(null)}
-            className="p-1 hover:bg-black/20 rounded cursor-pointer text-stone-400 hover:text-white"
-          >
-            <X size={13} />
-          </button>
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block">
-              Organización del Catálogo
-            </span>
-            {isSavingOrder && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-300">
-                <RefreshCw size={10} className="animate-spin" /> Guardando orden...
-              </span>
-            )}
-          </div>
-          <h2 className="text-xl sm:text-2xl font-serif-luxury font-semibold text-white tracking-wide">
-            Categorías ({categories.length})
-          </h2>
-          <p className="text-xs text-stone-400 mt-1 font-light max-w-2xl">
-            Acomoda las categorías en el orden exacto que prefieras. Usa las flechas (▲ / ▼), arrastra las filas con el icono, o elige el número de posición. El orden se sincroniza al instante en el menú desplegable y en la barra de colecciones de la tienda.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <button
-            type="button"
-            onClick={handleResetAlphabetical}
-            title="Ordenar categorías de la A a la Z"
-            className="px-3.5 py-2.5 rounded-xl border border-white/10 hover:border-[#c5a059]/40 bg-white/[0.03] hover:bg-white/[0.06] text-stone-300 hover:text-white font-medium text-xs flex items-center gap-2 cursor-pointer transition-colors"
-          >
-            <ArrowUpDown size={14} className="text-[#c5a059]" />
-            <span>Ordenar A-Z</span>
-          </button>
-
-          <button
-            onClick={openCreateModal}
-            className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-semibold text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors"
-          >
-            <Plus size={16} />
-            <span>Nueva Categoría</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Search and Helper Info */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="relative max-w-md w-full">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
+      {/* Top Controls */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="relative w-full sm:w-80">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
           <input
             type="text"
-            placeholder="Buscar categoría..."
+            placeholder="Buscar categorías..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-[#c5a059] transition-colors"
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-black/60 border border-white/10 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-[#c5a059]"
           />
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-white text-xs cursor-pointer"
-            >
-              <X size={14} />
-            </button>
-          )}
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] text-stone-400 bg-white/[0.02] border border-white/[0.06] px-3.5 py-2 rounded-xl">
-          <Info size={14} className="text-[#c5a059] shrink-0" />
-          <span>Tip: El orden #1 aparece de primero en la tienda.</span>
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          {orderSavedToast && (
+            <div className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-medium flex items-center gap-1.5 animate-fadeIn">
+              <CheckCircle2 size={13} />
+              <span>Orden guardado</span>
+            </div>
+          )}
+          <button
+            onClick={openCreateModal}
+            className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-lg shadow-[#c5a059]/20"
+          >
+            <Plus size={15} />
+            <span>Nueva Categoría</span>
+          </button>
+          <button
+            onClick={loadData}
+            disabled={isLoading}
+            className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-stone-300 border border-white/10 transition-colors cursor-pointer"
+            title="Recargar"
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          </button>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-[#0e0e12] border border-white/[0.08] rounded-2xl shadow-xl overflow-hidden">
-        {isLoading ? (
-          <div className="p-12 text-center text-xs text-[#c5a059] flex items-center justify-center gap-2">
-            <RefreshCw size={16} className="animate-spin text-[#c5a059]" />
-            <span>Sincronizando categorías con Supabase...</span>
-          </div>
-        ) : filteredCategories.length === 0 ? (
-          <div className="p-12 text-center text-xs text-stone-400 space-y-3">
-            <Layers size={36} className="mx-auto text-stone-600 mb-2" />
-            <p className="font-semibold text-white text-sm">No se encontraron categorías</p>
-            <p className="text-stone-500 max-w-sm mx-auto font-light">
-              {searchTerm
-                ? 'Ninguna categoría coincide con el término de búsqueda.'
-                : 'Crea tu primera categoría para organizar los productos de la tienda.'}
-            </p>
-            {searchTerm ? (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="mt-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white font-medium text-xs cursor-pointer"
-              >
-                Limpiar búsqueda
-              </button>
-            ) : (
-              <button
-                onClick={openCreateModal}
-                className="mt-2 px-4 py-2 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
-              >
-                <Plus size={14} />
-                <span>Crear Categoría</span>
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-white/[0.02] text-stone-400 uppercase text-[10px] font-medium border-b border-white/[0.06]">
+      {/* Categories Table */}
+      <div className="bg-[#100f14] border border-white/10 rounded-2xl overflow-hidden shadow-xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-white/10 text-[10px] uppercase tracking-wider text-stone-400 bg-black/40">
+                <th className="py-3 px-4 w-32">Orden</th>
+                <th className="py-3 px-4">Nombre de Categoría</th>
+                <th className="py-3 px-4">Apartado de Tallas / Opciones</th>
+                <th className="py-3 px-4 text-center">Productos</th>
+                <th className="py-3 px-4">Estado</th>
+                <th className="py-3 px-4 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5 text-stone-300">
+              {isLoading ? (
                 <tr>
-                  <th className="py-3.5 px-4 w-44">Orden en Tienda</th>
-                  <th className="py-3.5 px-4">Categoría</th>
-                  <th className="py-3.5 px-4">Descripción</th>
-                  <th className="py-3.5 px-4">Productos</th>
-                  <th className="py-3.5 px-4">Estado</th>
-                  <th className="py-3.5 px-4 text-right">Acciones</th>
+                  <td colSpan={6} className="py-12 text-center text-stone-500">
+                    Cargando categorías...
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.04]">
-                {filteredCategories.map((c) => {
-                  const fullIndex = categories.findIndex((item) => item.id === c.id);
-                  const isFirst = fullIndex === 0;
-                  const isLast = fullIndex === categories.length - 1;
-                  const isBeingDragged = draggedIndex === fullIndex;
-                  const isOver = dragOverIndex === fullIndex;
+              ) : filteredCategories.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-stone-500">
+                    No hay categorías registradas.
+                  </td>
+                </tr>
+              ) : (
+                filteredCategories.map((cat) => {
+                  const sizeInfo = resolveSizeOptions(cat.id, cat.nombre, '', cat.descripcion || '');
+                  const catIndex = categories.findIndex((c) => c.id === cat.id);
 
                   return (
-                    <tr
-                      key={c.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, c.id)}
-                      onDragOver={(e) => handleDragOver(e, c.id)}
-                      onDrop={(e) => handleDrop(e, c.id)}
-                      onDragEnd={handleDragEnd}
-                      className={`transition-colors ${
-                        isBeingDragged
-                          ? 'opacity-40 bg-amber-500/10'
-                          : isOver
-                          ? 'bg-[#c5a059]/15 border-y border-[#c5a059]'
-                          : 'hover:bg-slate-800/40'
-                      }`}
-                    >
-                      {/* ORDEN CONTROLS */}
-                      <td className="py-3 px-4">
+                    <tr key={cat.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="py-3.5 px-4 font-mono">
                         <div className="flex items-center gap-2">
-                          {/* Drag Handle */}
-                          <div
-                            className="cursor-grab active:cursor-grabbing p-1 text-stone-500 hover:text-[#c5a059] transition-colors"
-                            title="Arrastra para reordenar"
-                          >
-                            <GripVertical size={16} />
-                          </div>
-
-                          {/* Position Badge & Dropdown Selector */}
-                          <div className="relative group">
-                            <select
-                              value={fullIndex + 1}
-                              onChange={(e) => handleMoveToPosition(c.id, Number(e.target.value))}
-                              title="Cambiar posición directa"
-                              className="appearance-none px-2.5 py-1 rounded-lg bg-black/60 border border-white/10 hover:border-[#c5a059]/60 font-mono font-bold text-xs text-[#c5a059] cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#c5a059] pr-6"
+                          <span className="text-[11px] font-bold text-[#c5a059] bg-[#c5a059]/10 px-2 py-0.5 rounded-lg border border-[#c5a059]/30 min-w-8 text-center">
+                            #{catIndex + 1}
+                          </span>
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              onClick={() => handleMoveUp(cat.id)}
+                              disabled={catIndex <= 0}
+                              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-stone-300 disabled:opacity-20 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                              title="Subir de posición"
                             >
-                              {categories.map((_, idx) => (
-                                <option key={idx} value={idx + 1} className="bg-stone-900 text-white">
-                                  #{idx + 1}
-                                </option>
-                              ))}
-                            </select>
-                            <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-[#c5a059]">
-                              ▼
+                              <ArrowUp size={12} />
+                            </button>
+                            <button
+                              onClick={() => handleMoveDown(cat.id)}
+                              disabled={catIndex >= categories.length - 1}
+                              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-stone-300 disabled:opacity-20 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                              title="Bajar de posición"
+                            >
+                              <ArrowDown size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-4 font-bold text-white">
+                        <span>{cat.nombre}</span>
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        {sizeInfo.enabled && sizeInfo.options.length > 0 ? (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] uppercase tracking-wider text-[#c5a059] font-bold">
+                              📏 {sizeInfo.label}:
                             </span>
-                          </div>
-
-                          {/* Quick Up / Down Arrows */}
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => handleMoveUp(c.id)}
-                              disabled={isFirst}
-                              title="Subir una posición"
-                              className="p-1 rounded-md bg-white/[0.04] hover:bg-[#c5a059]/20 text-stone-300 hover:text-white disabled:opacity-20 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer transition-colors"
-                            >
-                              <ChevronUp size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleMoveDown(c.id)}
-                              disabled={isLast}
-                              title="Bajar una posición"
-                              className="p-1 rounded-md bg-white/[0.04] hover:bg-[#c5a059]/20 text-stone-300 hover:text-white disabled:opacity-20 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer transition-colors"
-                            >
-                              <ChevronDown size={14} />
-                            </button>
-                            {!isFirst && (
-                              <button
-                                type="button"
-                                onClick={() => handleMoveToTop(c.id)}
-                                title="Mover al primer lugar (#1)"
-                                className="p-1 rounded-md bg-white/[0.04] hover:bg-[#c5a059]/20 text-[#c5a059] hover:text-amber-300 cursor-pointer transition-colors"
+                            {sizeInfo.options.slice(0, 3).map((opt, i) => (
+                              <span
+                                key={i}
+                                className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[11px] text-stone-300 font-mono"
                               >
-                                <ChevronsUp size={14} />
-                              </button>
+                                {opt}
+                              </span>
+                            ))}
+                            {sizeInfo.options.length > 3 && (
+                              <span className="text-[10px] text-stone-500">
+                                +{sizeInfo.options.length - 3} más
+                              </span>
                             )}
                           </div>
-                        </div>
+                        ) : (
+                          <span className="text-stone-500 text-[11px] italic">
+                            Sin tallas configuradas (Estándar)
+                          </span>
+                        )}
                       </td>
 
-                      {/* NOMBRE */}
-                      <td className="py-3.5 px-4 font-bold text-white">
-                        <div className="flex items-center gap-2">
-                          <span>{c.nombre}</span>
-                          {fullIndex === 0 && (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider bg-[#c5a059]/20 text-[#c5a059] border border-[#c5a059]/30">
-                              Principal
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* DESCRIPCION */}
-                      <td className="py-3.5 px-4 text-slate-400 max-w-xs truncate">
-                        {c.descripcion || '—'}
-                      </td>
-
-                      {/* PRODUCTOS */}
-                      <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300">
+                      <td className="py-3.5 px-4 text-center font-mono">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-black/60 border border-white/10 text-stone-300">
                           <Package size={12} className="text-[#c5a059]" />
-                          <span>{c.total_productos ?? 0}</span>
+                          <span>{cat.total_productos ?? 0}</span>
                         </span>
                       </td>
 
-                      {/* ESTADO */}
                       <td className="py-3.5 px-4">
                         <button
-                          onClick={() => handleToggleActive(c)}
+                          onClick={() => handleToggleActive(cat)}
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors cursor-pointer ${
-                            c.activa
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
-                              : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
+                            cat.activa
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-stone-800 text-stone-500 border border-stone-700'
                           }`}
-                          title="Haz clic para activar o desactivar"
                         >
-                          {c.activa ? (
-                            <>
-                              <Eye size={12} />
-                              <span>Activa</span>
-                            </>
-                          ) : (
-                            <>
-                              <EyeOff size={12} />
-                              <span>Inactiva</span>
-                            </>
-                          )}
+                          {cat.activa ? <Eye size={12} /> : <EyeOff size={12} />}
+                          <span>{cat.activa ? 'Visible' : 'Oculta'}</span>
                         </button>
                       </td>
 
-                      {/* ACCIONES */}
                       <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => openEditModal(c)}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                            title="Editar categoría"
+                            onClick={() => openEditModal(cat)}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-stone-300 hover:text-white transition-colors cursor-pointer"
+                            title="Editar Categoría y Tallas"
                           >
                             <Edit2 size={14} />
                           </button>
                           <button
-                            onClick={() => setIsDeleting(c)}
+                            onClick={() => handleDelete(cat)}
                             className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
-                            title="Eliminar categoría"
+                            title="Eliminar Categoría"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -610,124 +377,218 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* CREATE / EDIT MODAL */}
+      {/* CREATE / EDIT CATEGORY MODAL WITH SIZE CONFIGURATION */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl relative">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="bg-[#100f14] border border-white/10 rounded-3xl w-full max-w-xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="p-5 border-b border-white/10 flex items-center justify-between bg-black/40 shrink-0">
               <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-[#c5a059] block">
-                  {editingCategory ? 'Modificar' : 'Nueva Categoría'}
+                <span className="text-[10px] uppercase font-bold tracking-widest text-[#c5a059] block">
+                  {editingCategory ? 'Modificar' : 'Crear'}
                 </span>
-                <h3 className="text-xl font-bold text-white font-serif-luxury">
-                  {editingCategory ? 'Editar Categoría' : 'Crear Categoría'}
+                <h3 className="font-serif-luxury font-bold text-white text-base sm:text-lg">
+                  {editingCategory ? 'Editar Categoría & Tallas' : 'Nueva Categoría'}
                 </h3>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                className="p-2 rounded-xl text-stone-400 hover:text-white hover:bg-white/5 cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5 text-xs flex-1">
               {modalError && (
-                <div className="mb-2">
-                  {isPermissionError(modalError) ? (
-                    <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-200 space-y-2">
-                      <div className="font-bold flex items-center gap-1.5 text-rose-400">
-                        <AlertCircle size={15} />
-                        <span>Permiso denegado en Supabase (Error 42501)</span>
-                      </div>
-                      <p className="text-[11px] text-slate-300">
-                        PostgreSQL rechazó la creación porque faltan los permisos <strong>GRANT</strong> o políticas <strong>RLS</strong> en la tabla <code>categorias</code>.
-                      </p>
-                      {onOpenSqlFix && (
-                        <button
-                          type="button"
-                          onClick={() => onOpenSqlFix(editingCategory ? 'Modificar categoría' : 'Crear categoría')}
-                          className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] flex items-center gap-1.5 cursor-pointer transition-colors"
-                        >
-                          <span>🔧 Ver y Copiar Script SQL de Solución</span>
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center gap-2">
-                      <AlertCircle size={15} className="shrink-0" />
-                      <span>{modalError}</span>
-                    </div>
-                  )}
+                <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-center gap-2">
+                  <AlertCircle size={15} className="shrink-0" />
+                  <span>{modalError}</span>
                 </div>
               )}
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Nombre de la Categoría *</label>
+                <label className="block text-stone-300 font-semibold mb-1">Nombre de la Categoría *</label>
                 <input
                   type="text"
                   required
-                  placeholder="Ej. Perfumes de Nicho"
+                  placeholder="Ej. Gorras Bélicas, Perfumes Virales, Pastelitos..."
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-[#c5a059]"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/15 text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059]"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Descripción (Opcional)</label>
+                <label className="block text-stone-300 font-semibold mb-1">Descripción Breve (Opcional)</label>
                 <textarea
-                  rows={3}
-                  placeholder="Breve reseña de la categoría..."
+                  rows={2}
+                  placeholder="Descripción de la colección..."
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-[#c5a059] resize-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/15 text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] resize-none"
                 />
               </div>
 
-              {!editingCategory && (
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Posición inicial en el catálogo</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setFormPosition('start')}
-                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                        formPosition === 'start'
-                          ? 'border-[#c5a059] bg-[#c5a059]/15 text-[#c5a059] font-bold'
-                          : 'border-white/10 bg-slate-950 text-stone-400 hover:text-white'
-                      }`}
-                    >
-                      Al Inicio (Posición #1)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFormPosition('end')}
-                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                        formPosition === 'end'
-                          ? 'border-[#c5a059] bg-[#c5a059]/15 text-[#c5a059] font-bold'
-                          : 'border-white/10 bg-slate-950 text-stone-400 hover:text-white'
-                      }`}
-                    >
-                      Al Final (#{categories.length + 1})
-                    </button>
+              {/* APARTADO DE TAMAÑOS / TALLAS PARA EL CLIENTE */}
+              <div className="p-4 rounded-2xl bg-black/50 border border-white/10 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-[#c5a059]/20 flex items-center justify-center text-[#c5a059]">
+                      <Ruler size={15} />
+                    </div>
+                    <div>
+                      <span className="font-bold text-white text-xs block">
+                        Apartado de Tamaños / Tallas / Presentaciones
+                      </span>
+                      <span className="text-[11px] text-stone-400 font-light block">
+                        Permite que el cliente seleccione su tamaño antes de comprar
+                      </span>
+                    </div>
                   </div>
+                  <input
+                    type="checkbox"
+                    checked={sizeEnabled}
+                    onChange={(e) => setSizeEnabled(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#c5a059] accent-[#c5a059] cursor-pointer"
+                  />
                 </div>
-              )}
 
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
+                {sizeEnabled && (
+                  <div className="space-y-3.5 pt-3 border-t border-white/10 animate-fadeIn">
+                    <div>
+                      <label className="block text-stone-300 font-semibold mb-1">
+                        Título del Selector (ej. Tamaño, Talla de Gorra, Presentación)
+                      </label>
+                      <input
+                        type="text"
+                        value={sizeLabel}
+                        onChange={(e) => setSizeLabel(e.target.value)}
+                        placeholder="Ej. Tamaño de Pastelito o Talla"
+                        className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/15 text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059]"
+                      />
+                    </div>
+
+                    {/* Plantillas Rápidas (1 Clic) */}
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-stone-400 tracking-wider block mb-1.5">
+                        Plantillas Rápidas (1 Clic):
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.entries(SIZE_PRESETS).map(([key, preset]) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              setSizeLabel(preset.label);
+                              setSizeOptions([...preset.options]);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-[#c5a059]/20 hover:text-[#c5a059] text-stone-300 text-[11px] border border-white/10 transition-colors cursor-pointer"
+                          >
+                            {preset.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Lista de Opciones Activas */}
+                    <div>
+                      <label className="block text-stone-300 font-semibold mb-1">
+                        Opciones que podrá elegir el cliente ({sizeOptions.length})
+                      </label>
+                      <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-black/60 border border-white/15 min-h-[42px] items-center">
+                        {sizeOptions.map((opt, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#c5a059]/20 border border-[#c5a059]/40 text-[#c5a059] text-xs font-semibold"
+                          >
+                            <span>{opt}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSizeOptions(sizeOptions.filter((_, i) => i !== idx))}
+                              className="text-stone-400 hover:text-white cursor-pointer"
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Input para agregar opción */}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newOptionInput}
+                        onChange={(e) => setNewOptionInput(e.target.value)}
+                        placeholder="Escribe una o varias separadas por coma..."
+                        className="flex-1 px-3 py-2 rounded-xl bg-black/60 border border-white/15 text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059]"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (newOptionInput.trim()) {
+                              const parts = newOptionInput.split(',').map((p) => p.trim()).filter(Boolean);
+                              setSizeOptions([...sizeOptions, ...parts]);
+                              setNewOptionInput('');
+                            }
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newOptionInput.trim()) {
+                            const parts = newOptionInput.split(',').map((p) => p.trim()).filter(Boolean);
+                            setSizeOptions([...sizeOptions, ...parts]);
+                            setNewOptionInput('');
+                          }
+                        }}
+                        className="px-4 py-2 rounded-xl bg-white/10 hover:bg-[#c5a059] hover:text-black text-white font-bold text-xs transition-colors cursor-pointer"
+                      >
+                        + Agregar
+                      </button>
+                    </div>
+
+                    {/* Vista Previa para el Cliente */}
+                    {sizeOptions.length > 0 && (
+                      <div className="p-3 rounded-xl bg-black/80 border border-white/10 space-y-1.5">
+                        <span className="text-[10px] text-stone-400 uppercase tracking-wider block font-mono">
+                          Vista previa en la tienda:
+                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-white text-xs font-bold mr-1">{sizeLabel}:</span>
+                          {sizeOptions.map((opt, i) => (
+                            <span
+                              key={i}
+                              className={`px-2.5 py-0.5 rounded-lg text-[11px] ${
+                                i === 0
+                                  ? 'bg-[#c5a059] text-black font-bold'
+                                  : 'bg-white/5 text-stone-300 border border-white/10'
+                              }`}
+                            >
+                              {opt}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Categoría Activa Switch */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-black/40 border border-white/10">
                 <div>
-                  <span className="font-semibold text-white block">Categoría Activa</span>
-                  <span className="text-[11px] text-slate-400">
-                    Visible en los filtros del catálogo de la tienda
-                  </span>
+                  <span className="font-semibold text-white block">Categoría Visible</span>
+                  <span className="text-[11px] text-stone-400">Mostrar en el catálogo para los clientes</span>
                 </div>
                 <input
                   type="checkbox"
@@ -737,62 +598,24 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ onOpenSqlFix }) 
                 />
               </div>
 
-              <div className="pt-3 flex items-center justify-end gap-3">
+              {/* Footer */}
+              <div className="pt-3 flex items-center justify-end gap-3 border-t border-white/10">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-stone-300 font-semibold cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-6 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold shadow-lg shadow-[#c5a059]/20 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="px-6 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  {isSubmitting ? (
-                    <>
-                      <RefreshCw size={14} className="animate-spin" />
-                      <span>Guardando...</span>
-                    </>
-                  ) : (
-                    <span>{editingCategory ? 'Guardar Cambios' : 'Crear Categoría'}</span>
-                  )}
+                  {isSubmitting ? 'Guardando...' : editingCategory ? 'Guardar Cambios' : 'Crear Categoría'}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* DELETE MODAL */}
-      {isDeleting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-rose-500/30 rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-4">
-              <Trash2 size={24} />
-            </div>
-            <h3 className="text-xl font-bold text-white mb-2 font-serif-luxury">
-              ¿Eliminar categoría?
-            </h3>
-            <p className="text-xs text-slate-300 leading-relaxed mb-6">
-              ¿Seguro que deseas eliminar <strong>"{isDeleting.nombre}"</strong>? No se podrá eliminar si tiene productos asignados actualmente.
-            </p>
-
-            <div className="flex items-center justify-end gap-3">
-              <button
-                onClick={() => setIsDeleting(null)}
-                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/20 cursor-pointer"
-              >
-                Sí, eliminar
-              </button>
-            </div>
           </div>
         </div>
       )}

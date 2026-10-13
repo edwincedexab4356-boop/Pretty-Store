@@ -1,55 +1,32 @@
 import React from 'react';
-import { Check, ShoppingCart, X } from 'lucide-react';
-import { useCart } from '../../context/CartContext';
+import { ShoppingCart, Check } from 'lucide-react';
 
-export const ToastNotification: React.FC = () => {
-  const { notification, clearNotification, setIsCartOpen } = useCart();
+interface ToastNotificationProps {
+  notification: { id: string; name: string; image?: string | null } | null;
+  onOpenCart: () => void;
+}
 
+export const ToastNotification: React.FC<ToastNotificationProps> = ({ notification, onOpenCart }) => {
   if (!notification) return null;
 
-  const handleOpenCart = () => {
-    clearNotification();
-    setIsCartOpen(true);
-  };
-
   return (
-    <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <div className="bg-[#0c0c0f] border border-white/15 p-4 shadow-2xl flex items-center gap-3.5">
-        {/* Check Icon or thumbnail */}
-        {notification.image ? (
-          <img
-            src={notification.image}
-            alt={notification.productName}
-            className="w-12 h-14 object-cover border border-white/10 shrink-0"
-          />
-        ) : (
-          <div className="w-10 h-10 border border-white/15 text-[#c5a059] flex items-center justify-center shrink-0 bg-stone-900">
-            <Check size={16} className="stroke-[2.5]" />
-          </div>
-        )}
-
-        <div className="flex-1 min-w-0">
-          <p className="text-[10px] uppercase tracking-[0.2em] font-medium text-[#c5a059] flex items-center gap-1">
-            <Check size={12} className="stroke-[2.5]" /> Añadido al carrito
-          </p>
-          <p className="text-xs font-serif-luxury font-normal text-white truncate mt-0.5">
-            {notification.productName}
-          </p>
-          <button
-            onClick={handleOpenCart}
-            className="text-[11px] text-stone-300 hover:text-white font-medium uppercase tracking-[0.16em] mt-1.5 inline-flex items-center gap-1.5 cursor-pointer"
-          >
-            <ShoppingCart size={11} />
-            <span>Ver Carrito</span>
-          </button>
+    <div className="fixed bottom-5 right-5 z-50 animate-in fade-in slide-in-from-bottom-5 duration-300">
+      <div className="bg-[#121118] border border-[#c5a059]/40 rounded-2xl p-4 shadow-2xl shadow-black/80 flex items-center gap-3.5 max-w-sm">
+        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+          <Check size={18} className="stroke-[3]" />
         </div>
-
+        <div className="flex-1 min-w-0">
+          <span className="text-[10px] uppercase font-bold tracking-wider text-[#c5a059] block">
+            Añadido al Carrito
+          </span>
+          <p className="text-xs font-semibold text-white truncate">{notification.name}</p>
+        </div>
         <button
-          onClick={clearNotification}
-          className="p-1 text-stone-500 hover:text-white transition-colors cursor-pointer"
-          aria-label="Cerrar notificación"
+          onClick={onOpenCart}
+          className="px-3 py-1.5 rounded-lg bg-[#c5a059] hover:bg-[#b5914a] text-black font-bold text-xs flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
         >
-          <X size={15} />
+          <ShoppingCart size={13} />
+          <span>Ver</span>
         </button>
       </div>
     </div>

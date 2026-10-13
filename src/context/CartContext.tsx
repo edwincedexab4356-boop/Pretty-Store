@@ -1,19 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { CartItem, Producto } from '../types/database';
-import { calculateLegendaryCapsPromo, PromoCalculationResult } from '../utils/promoUtils';
-
-interface CartNotification {
-  id: string;
-  message: string;
-  productName: string;
-  image?: string | null;
-}
+import { calculatePromotions, PromoCalculationResult } from '../utils/promoUtils';
 
 interface CartContextType {
   items: CartItem[];
-  addItem: (product: Producto, quantity?: number) => boolean;
-  updateQuantity: (productId: string, quantity: number) => void;
-  removeItem: (productId: string) => void;
+  addItem: (product: Producto, quantity?: number, selectedSize?: string) => boolean;
+  removeItem: (productId: string, selectedSize?: string) => void;
+  updateQuantity: (productId: string, quantity: number, selectedSize?: string) => void;
   clearCart: () => void;
   totalItems: number;
   subtotal: number;
@@ -23,20 +16,18 @@ interface CartContextType {
   total: number;
   isCartOpen: boolean;
   setIsCartOpen: (open: boolean) => void;
-  isCheckoutOpen: boolean;
-  setIsCheckoutOpen: (open: boolean) => void;
-  notification: CartNotification | null;
-  clearNotification: () => void;
+  notification: { id: string; name: string; image?: string | null } | null;
 }
 
-const CartContext = createContext<CartContextType | undefined>(undefined);
+const CartContext = createContext<CartContextType | null>(null);
 
-const CART_STORAGE_KEY = 'aura_store_cart_v1';
+const STORAGE_KEY = 'pretty_store_cart_v1';
 
-export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>(() => {
+    if (typeof window === 'undefined') return [];
     try {
-      const saved = localStorage.getItem(CART_STORAGE_KEY);
+      const saved = localStorage.getItem(STORAGE_KEY);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -44,141 +35,120 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   });
 
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [notification, setNotification] = useState<CartNotification | null>(null);
+  const [notification, setNotification] = useState<{ id: string; name: string; image?: string | null } | null>(null);
 
-  // Sync with localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
-    } catch {
-      // Ignore in private modes
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    } catch (e) {
+      console.warn('Error saving cart to localStorage:', e);
     }
   }, [items]);
 
-  const clearNotification = () => {
-    setNotification(null);
-  };
-
-  const showNotification = (productName: string, image?: string | null) => {
+  const showNotification = (name: string, image?: string | null) => {
     const id = Date.now().toString();
-    setNotification({
-      id,
-      message: '✓ Producto agregado al carrito',
-      productName,
-      image,
-    });
-
+    setNotification({ id, name, image });
     setTimeout(() => {
       setNotification((prev) => (prev?.id === id ? null : prev));
     }, 3500);
   };
 
-  const addItem = (product: Producto, quantity = 1): boolean => {
-    if (product.stock <= 0) {
-      return false;
-    }
+  const addItem = (product: Producto, quantity = 1, selectedSize?: string): boolean => {
+    if (product.stock <= 0) return false;
 
-    let addedSuccessfully = false;
+    const cleanSize = selectedSize?.trim() || undefined;
+    let added = false;
 
-    setItems((prevItems) => {
-      const existingIndex = prevItems.findIndex((item) => item.product.id === product.id);
+    setItems((prev) => {
+      const existingIdx = prev.findIndex(
+        (it) => it.product.id === product.id && (it.selectedSize || undefined) === cleanSize
+      );
 
-      if (existingIndex > -1) {
-        const currentQty = prevItems[existingIndex].quantity;
-        const newQty = Math.min(currentQty + quantity, product.stock);
+      if (existingIdx > -1) {
+        const curQty = prev[existingIdx].quantity;
+        const newQty = Math.min(curQty + quantity, product.stock);
+        if (newQty === curQty) return prev;
 
-        if (newQty === currentQty) {
-          // Ya alcanzó el stock máximo
-          return prevItems;
-        }
-
-        const updated = [...prevItems];
-        updated[existingIndex] = {
-          ...updated[existingIndex],
+        const next = [...prev];
+        next[existingIdx] = {
+          ...next[existingIdx],
           quantity: newQty,
           subtotal: Number((newQty * product.precio).toFixed(2)),
+          selectedSize: cleanSize,
         };
-        addedSuccessfully = true;
-        return updated;
+        added = true;
+        return next;
       } else {
         const validQty = Math.min(quantity, product.stock);
-        if (validQty <= 0) return prevItems;
-
-        addedSuccessfully = true;
+        if (validQty <= 0) return prev;
+        added = true;
         return [
-          ...prevItems,
+          ...prev,
           {
             product,
             quantity: validQty,
             subtotal: Number((validQty * product.precio).toFixed(2)),
+            selectedSize: cleanSize,
           },
         ];
       }
     });
 
     if (quantity > 0) {
-      showNotification(product.nombre, product.imagen_url);
+      const label = cleanSize ? `${product.nombre} (${cleanSize})` : product.nombre;
+      showNotification(label, product.imagen_url);
     }
 
-    return addedSuccessfully;
+    return added;
   };
 
-  const updateQuantity = (productId: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeItem(productId);
-      return;
-    }
-
-    setItems((prevItems) =>
-      prevItems.map((item) => {
-        if (item.product.id === productId) {
-          // Limit to available stock
-          const safeQty = Math.min(quantity, item.product.stock);
-          return {
-            ...item,
-            quantity: safeQty,
-            subtotal: Number((safeQty * item.product.precio).toFixed(2)),
-          };
-        }
-        return item;
-      })
+  const removeItem = (productId: string, selectedSize?: string) => {
+    const cleanSize = selectedSize?.trim() || undefined;
+    setItems((prev) =>
+      prev.filter((it) => !(it.product.id === productId && (it.selectedSize || undefined) === cleanSize))
     );
   };
 
-  const removeItem = (productId: string) => {
-    setItems((prevItems) => prevItems.filter((item) => item.product.id !== productId));
+  const updateQuantity = (productId: string, quantity: number, selectedSize?: string) => {
+    const cleanSize = selectedSize?.trim() || undefined;
+    if (quantity <= 0) {
+      removeItem(productId, cleanSize);
+      return;
+    }
+
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.product.id === productId && (it.selectedSize || undefined) === cleanSize) {
+          const validQty = Math.min(quantity, it.product.stock);
+          return {
+            ...it,
+            quantity: validQty,
+            subtotal: Number((validQty * it.product.precio).toFixed(2)),
+          };
+        }
+        return it;
+      })
+    );
   };
 
   const clearCart = () => {
     setItems([]);
   };
 
-  // Computations
-  const totalItems = items.reduce((acc, item) => acc + item.quantity, 0);
-
-  const subtotal = Number(
-    items.reduce((acc, item) => acc + item.subtotal, 0).toFixed(2)
-  );
-
-  // Promoción: 2 Gorras Legendarias por $55 USD (-$5.00 de descuento por cada 2 gorras)
-  const promo = calculateLegendaryCapsPromo(items);
-  const discount = promo.discount;
-
-  const effectiveSubtotal = Math.max(0, subtotal - discount);
-
-  // El costo de envío se coordina directamente tras confirmar el pedido (no se suma en el carrito)
+  const totalItems = items.reduce((acc, it) => acc + it.quantity, 0);
+  const subtotal = Number(items.reduce((acc, it) => acc + it.product.precio * it.quantity, 0).toFixed(2));
+  const promo = calculatePromotions(items);
+  const discount = promo.totalDiscount;
   const shipping = 0;
-
-  const total = Number(effectiveSubtotal.toFixed(2));
+  const total = Number(Math.max(0, subtotal - discount + shipping).toFixed(2));
 
   return (
     <CartContext.Provider
       value={{
         items,
         addItem,
-        updateQuantity,
         removeItem,
+        updateQuantity,
         clearCart,
         totalItems,
         subtotal,
@@ -188,10 +158,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         total,
         isCartOpen,
         setIsCartOpen,
-        isCheckoutOpen,
-        setIsCheckoutOpen,
         notification,
-        clearNotification,
       }}
     >
       {children}
@@ -199,10 +166,8 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
 };
 
-export const useCart = (): CartContextType => {
+export const useCart = () => {
   const context = useContext(CartContext);
-  if (!context) {
-    throw new Error('useCart must be used within a CartProvider');
-  }
+  if (!context) throw new Error('useCart must be used within CartProvider');
   return context;
 };

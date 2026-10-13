@@ -1,345 +1,299 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { CartProvider } from './context/CartContext';
-import { AdminAuthProvider } from './context/AdminAuthContext';
+import React, { useState, useEffect, useMemo } from 'react';
 import { StoreConfigProvider, useStoreConfig } from './context/StoreConfigContext';
-import { useAppNavigation } from './hooks/useAppRoute';
-import { AdminLayout } from './components/admin/AdminLayout';
-import { TermsPage } from './components/legal/TermsPage';
-import { PrivacyPage } from './components/legal/PrivacyPage';
+import { CartProvider, useCart } from './context/CartContext';
+import { AdminAuthProvider, useAdminAuth } from './context/AdminAuthContext';
 import { Header } from './components/common/Header';
 import { Hero } from './components/hero/Hero';
 import { EditorialSection } from './components/editorial/EditorialSection';
-import { CategoryFilter } from './components/catalog/CategoryFilter';
+import { CategorySection } from './components/catalog/CategorySection';
 import { ProductGrid } from './components/catalog/ProductGrid';
-import { ProductGridSkeleton } from './components/catalog/ProductGridSkeleton';
-import { FeaturesSection } from './components/common/FeaturesSection';
-import { Footer } from './components/common/Footer';
+import { BenefitsBar } from './components/common/BenefitsBar';
+import { ProductDetailModal } from './components/catalog/ProductDetailModal';
 import { CartDrawer } from './components/cart/CartDrawer';
 import { CheckoutDemoModal } from './components/checkout/CheckoutDemoModal';
+import { Footer } from './components/common/Footer';
+import { LegalModal } from './components/common/LegalModal';
+import { TermsPage } from './components/legal/TermsPage';
+import { PrivacyPage } from './components/legal/PrivacyPage';
 import { ToastNotification } from './components/common/ToastNotification';
-import { fetchCatalogData, CatalogError } from './services/catalogService';
-import { getSupabaseConfig, getSupabaseClient } from './lib/supabase';
+import { AdminLogin } from './components/admin/AdminLogin';
+import { AdminSidebar, AdminTab } from './components/admin/AdminSidebar';
+import { AdminHeader } from './components/admin/AdminHeader';
+import { DashboardView } from './components/admin/views/DashboardView';
+import { OrdersView } from './components/admin/views/OrdersView';
+import { ProductsView } from './components/admin/views/ProductsView';
+import { CategoriesView } from './components/admin/views/CategoriesView';
+import { ClientsView } from './components/admin/views/ClientsView';
+import { InventoryView } from './components/admin/views/InventoryView';
+import { SalesView } from './components/admin/views/SalesView';
+import { SettingsView } from './components/admin/views/SettingsView';
+import { getActiveCategories, getActiveProducts } from './services/catalogService';
 import { Categoria, Producto } from './types/database';
-import { subscribeToCategoryOrder, sortCategoriesWithOrder } from './utils/categoryOrderUtils';
 
-export type LoadStatus = 'loading' | 'unconfigured' | 'error' | 'empty' | 'success';
-
-interface StoreAppProps {
-  onOpenAdmin: () => void;
-  onOpenTerms?: () => void;
-  onOpenPrivacy?: () => void;
-}
-
-function StoreApp({ onOpenAdmin, onOpenTerms, onOpenPrivacy }: StoreAppProps) {
+function MainAppContent() {
+  const { isCartOpen, setIsCartOpen, notification } = useCart();
+  const { isAuthenticated, logout } = useAdminAuth();
   const { config } = useStoreConfig();
-  const [status, setStatus] = useState<LoadStatus>('loading');
+
+  // Navigation states
+  const [currentView, setCurrentView] = useState<'store' | 'admin' | 'terms' | 'privacy'>('store');
+  const [adminTab, setAdminTab] = useState<AdminTab>('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Legal modal tab
+  const [legalModalTab, setLegalModalTab] = useState<'terminos' | 'privacidad' | null>(null);
+
+  // Catalog state
   const [categories, setCategories] = useState<Categoria[]>([]);
   const [products, setProducts] = useState<Producto[]>([]);
-  const [catalogError, setCatalogError] = useState<CatalogError | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
 
-  // Load real catalog data from Supabase
-  const loadData = useCallback(async () => {
-    setStatus('loading');
-    setCatalogError(null);
+  // Modals
+  const [quickViewProduct, setQuickViewProduct] = useState<Producto | null>(null);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
-    try {
-      const result = await fetchCatalogData();
-
-      if (!result.isConfigured) {
-        setStatus('unconfigured');
-        setCategories([]);
-        setProducts([]);
-        return;
-      }
-
-      setCategories(result.categories);
-      setProducts(result.products);
-
-      if (result.products.length === 0) {
-        setStatus('empty');
-      } else {
-        setStatus('success');
-      }
-    } catch (err: unknown) {
-      console.warn('[Supabase Query Error]', err);
-      const castError = err as CatalogError;
-      setCatalogError({
-        failedQuery: castError.failedQuery || 'connection',
-        message: castError.message || 'Error al cargar el catálogo.',
-        details: castError.details,
-        hint: castError.hint,
-        code: castError.code,
-      });
-      setCategories([]);
-      setProducts([]);
-      setStatus('error');
-    }
-  }, []);
-
+  // Keep page title synced
   useEffect(() => {
-    loadData();
+    if (currentView === 'store') {
+      document.title = 'prettystroe.store';
+    }
+  }, [currentView]);
 
-    // Supabase Realtime subscriptions
+  // Fetch catalog data
+  const loadCatalog = async () => {
+    setIsLoadingCatalog(true);
     try {
-      const supabase = getSupabaseClient();
-      const channel = supabase
-        .channel('store-realtime-catalog')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'productos' },
-          () => {
-            loadData();
-          }
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'categorias' },
-          () => {
-            loadData();
-          }
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'inventario' },
-          () => {
-            loadData();
-          }
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'clientes' },
-          () => {
-            loadData();
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
+      const [cats, prods] = await Promise.all([
+        getActiveCategories(),
+        getActiveProducts(),
+      ]);
+      setCategories(cats);
+      setProducts(prods);
     } catch (e) {
-      // Realtime channel creation fallback
+      console.warn('Error loading catalog:', e);
+    } finally {
+      setIsLoadingCatalog(false);
     }
-  }, [loadData]);
+  };
 
-  // Sincronizar reordenamiento instantáneo de categorías
   useEffect(() => {
-    const unsubscribe = subscribeToCategoryOrder(() => {
-      setCategories((prev) => sortCategoriesWithOrder(prev));
-    });
-    return unsubscribe;
+    loadCatalog();
   }, []);
 
-  // Compute products count per category (only active products)
   const productCountMap = useMemo(() => {
-    const counts: Record<string, number> = {};
+    const map: Record<string, number> = {};
     products.forEach((p) => {
-      if (p.activo) {
-        counts[p.categoria_id] = (counts[p.categoria_id] || 0) + 1;
+      if (p.activo && p.categoria_id) {
+        map[p.categoria_id] = (map[p.categoria_id] || 0) + 1;
       }
     });
-    return counts;
+    return map;
   }, [products]);
 
-  const totalActiveProducts = useMemo(() => {
-    return products.filter((p) => p.activo).length;
-  }, [products]);
-
-  const handleExploreClick = () => {
-    const el = document.getElementById('catalogo');
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const handleCategoriesClick = () => {
-    const el = document.getElementById('categorias');
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const handleNavigateSection = (sectionId: string) => {
-    const el = document.getElementById(sectionId);
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  return (
-    <div className="min-h-screen bg-[#09090b] text-stone-100 flex flex-col font-sans-clean antialiased selection:bg-[#c5a059] selection:text-black">
-      {/* 1. Header / Navbar */}
-      <Header
-        categories={categories}
-        onSelectCategory={(id) => {
-          setSelectedCategoryId(id);
-          const el = document.getElementById('catalogo');
-          if (el) el.scrollIntoView({ behavior: 'smooth' });
-        }}
-        onNavigateSection={handleNavigateSection}
-        onOpenAdmin={onOpenAdmin}
-      />
-
-      {/* 2. Cinematic Hero with Auto-Playing Video */}
-      <div id="hero">
-        <Hero
-          videoUrl={config.hero_video_url}
-          onExploreClick={handleExploreClick}
-          onCategoriesClick={handleCategoriesClick}
-        />
-      </div>
-
-      {/* 3. Alternating Editorial Blocks (Big Images + Text) */}
-      <EditorialSection
-        onSelectCategory={(id) => {
-          setSelectedCategoryId(id);
-          const el = document.getElementById('catalogo');
-          if (el) el.scrollIntoView({ behavior: 'smooth' });
-        }}
-        onExploreClick={handleExploreClick}
-      />
-
-      {/* 4. Minimalist Category Filter Strip */}
-      {status !== 'unconfigured' && status !== 'error' && (
-        <CategoryFilter
-          categories={categories}
-          selectedCategoryId={selectedCategoryId}
-          onSelectCategory={(id) => {
-            setSelectedCategoryId(id);
+  // Admin Screen
+  if (currentView === 'admin') {
+    if (!isAuthenticated) {
+      return (
+        <AdminLogin
+          onBackToStore={() => {
+            setCurrentView('store');
           }}
-          productCountMap={productCountMap}
-          totalProductsCount={totalActiveProducts}
         />
-      )}
+      );
+    }
 
-      {/* 5. Main Catalog Section */}
-      <main className="flex-1">
-        {status === 'loading' ? (
-          <section id="catalogo" className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12">
-            <ProductGridSkeleton />
-          </section>
-        ) : status === 'error' ? (
-          <section className="max-w-md mx-auto py-20 px-4 text-center">
-            <p className="text-stone-400 text-xs mb-4 font-light">
-              No se pudo conectar con el catálogo en este momento.
-            </p>
-            <button
-              onClick={loadData}
-              className="px-6 py-2.5 bg-white hover:bg-stone-200 text-stone-950 text-xs uppercase tracking-[0.16em] font-medium transition-colors cursor-pointer"
-            >
-              Reintentar
-            </button>
-          </section>
-        ) : (
-          <ProductGrid
-            products={products}
-            categories={categories}
-            selectedCategoryId={selectedCategoryId}
-            onSelectCategory={setSelectedCategoryId}
+    return (
+      <div className="flex h-screen bg-[#070608] text-stone-100 overflow-hidden">
+        {/* Mobile Sidebar Overlay */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/80 z-40 md:hidden"
+            onClick={() => setSidebarOpen(false)}
           />
         )}
 
-        {/* 6. Brand Commitment & Value Proposition */}
-        <FeaturesSection />
+        {/* Sidebar */}
+        <div
+          className={`fixed inset-y-0 left-0 z-50 transform md:relative md:translate-x-0 transition-transform duration-300 ease-in-out ${
+            sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+        >
+          <AdminSidebar
+            currentTab={adminTab}
+            onSelectTab={(tab) => {
+              setAdminTab(tab);
+              setSidebarOpen(false);
+            }}
+            onLogout={() => {
+              logout();
+              setCurrentView('store');
+            }}
+            onGoToStore={() => setCurrentView('store')}
+          />
+        </div>
+
+        {/* Main Admin View Container */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <AdminHeader
+            currentTab={adminTab}
+            onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+            onGoToStore={() => setCurrentView('store')}
+          />
+
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+            <div className="max-w-7xl mx-auto">
+              {adminTab === 'dashboard' && <DashboardView onNavigateTab={(tab) => setAdminTab(tab)} />}
+              {adminTab === 'orders' && <OrdersView />}
+              {adminTab === 'products' && <ProductsView />}
+              {adminTab === 'categories' && <CategoriesView />}
+              {adminTab === 'clients' && <ClientsView />}
+              {adminTab === 'inventory' && <InventoryView />}
+              {adminTab === 'sales' && <SalesView />}
+              {adminTab === 'settings' && <SettingsView />}
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  // Full Page Terms
+  if (currentView === 'terms') {
+    return <TermsPage onBack={() => setCurrentView('store')} />;
+  }
+
+  // Full Page Privacy
+  if (currentView === 'privacy') {
+    return <PrivacyPage onBack={() => setCurrentView('store')} />;
+  }
+
+  // Main Storefront
+  return (
+    <div className="min-h-screen bg-[#09090b] text-[#f4f4f6] flex flex-col selection:bg-[#fbbf24] selection:text-black font-sans-clean">
+      {/* Header */}
+      <Header
+        categories={categories}
+        selectedCategoryId={selectedCategoryId}
+        onSelectCategory={(id) => {
+          setSelectedCategoryId(id);
+        }}
+        onOpenAdmin={() => setCurrentView('admin')}
+      />
+
+      {/* Hero Section */}
+      <div id="hero">
+        <Hero
+          videoUrl={config.hero_video_url}
+          onExploreClick={() => {
+            const el = document.getElementById('catalogo');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }}
+          onCategoriesClick={() => {
+            const el = document.getElementById('categorias');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }}
+        />
+      </div>
+
+      {/* Editorial Section */}
+      <EditorialSection
+        onSelectCategory={(id) => {
+          if (id) setSelectedCategoryId(id);
+          const el = document.getElementById('catalogo');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }}
+        onExploreClick={() => {
+          const el = document.getElementById('catalogo');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }}
+      />
+
+      {/* Collections / Category Showcase Bar */}
+      <CategorySection
+        categories={categories}
+        selectedCategoryId={selectedCategoryId}
+        onSelectCategory={(id) => {
+          setSelectedCategoryId(id);
+          const el = document.getElementById('catalogo');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }}
+        productCountMap={productCountMap}
+        totalProductsCount={products.filter((p) => p.activo).length}
+      />
+
+      {/* Main Catalog & Guarantees */}
+      <main className="flex-1">
+        <ProductGrid
+          products={products}
+          categories={categories}
+          selectedCategoryId={selectedCategoryId}
+          onSelectCategory={setSelectedCategoryId}
+          onQuickView={(p) => setQuickViewProduct(p)}
+          isLoading={isLoadingCatalog}
+        />
+
+        <BenefitsBar />
       </main>
 
-      {/* 7. Clean Minimalist Luxury Footer */}
+      {/* Footer */}
       <Footer
         categories={categories}
-        onSelectCategory={setSelectedCategoryId}
-        onOpenAdmin={onOpenAdmin}
-        onOpenTerms={onOpenTerms}
-        onOpenPrivacy={onOpenPrivacy}
+        onSelectCategory={(id) => {
+          setSelectedCategoryId(id);
+          const el = document.getElementById('catalogo');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }}
+        onOpenAdmin={() => setCurrentView('admin')}
+        onOpenTerms={() => setCurrentView('terms')}
+        onOpenPrivacy={() => setCurrentView('privacy')}
+        onOpenLegal={(tab) => setLegalModalTab(tab)}
       />
 
-      {/* 8. Slide-Over Cart Drawer */}
-      <CartDrawer />
+      {/* Modals & Drawers */}
+      {quickViewProduct && (
+        <ProductDetailModal
+          product={quickViewProduct}
+          categories={categories}
+          onClose={() => setQuickViewProduct(null)}
+        />
+      )}
 
-      {/* 9. Interactive Checkout Modal */}
-      <CheckoutDemoModal />
+      <CartDrawer
+        onProceedToCheckout={() => {
+          setIsCartOpen(false);
+          setIsCheckoutOpen(true);
+        }}
+      />
 
-      {/* 10. Quiet Toast Notification */}
-      <ToastNotification />
+      {isCheckoutOpen && (
+        <CheckoutDemoModal onClose={() => setIsCheckoutOpen(false)} />
+      )}
+
+      {legalModalTab && (
+        <LegalModal
+          initialTab={legalModalTab}
+          onClose={() => setLegalModalTab(null)}
+        />
+      )}
+
+      {/* Cart Toast Notification */}
+      <ToastNotification
+        notification={notification}
+        onOpenCart={() => setIsCartOpen(true)}
+      />
     </div>
-  );
-}
-
-function MainRoot() {
-  const { config } = useStoreConfig();
-  const {
-    route,
-    navigateToAdmin,
-    navigateToStore,
-    navigateToTerms,
-    navigateToPrivacy,
-  } = useAppNavigation();
-
-  useEffect(() => {
-    if (route.type === 'store') {
-      document.title = 'prettystroe.store';
-    }
-    const logoUrl = config.logo_url || '/images/logo/logotipo.jpeg';
-    let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'icon';
-      document.head.appendChild(link);
-    }
-    link.href = logoUrl;
-  }, [config.logo_url, route.type]);
-
-  if (route.type === 'admin') {
-    return (
-      <AdminLayout
-        currentTab={route.adminTab}
-        onNavigateTab={navigateToAdmin}
-        onGoToStore={navigateToStore}
-      />
-    );
-  }
-
-  if (route.type === 'terms') {
-    return (
-      <>
-        <TermsPage
-          onGoToStore={navigateToStore}
-          onGoToPrivacy={navigateToPrivacy}
-          onOpenAdmin={() => navigateToAdmin('dashboard')}
-        />
-        <CartDrawer />
-        <CheckoutDemoModal />
-        <ToastNotification />
-      </>
-    );
-  }
-
-  if (route.type === 'privacy') {
-    return (
-      <>
-        <PrivacyPage
-          onGoToStore={navigateToStore}
-          onGoToTerms={navigateToTerms}
-          onOpenAdmin={() => navigateToAdmin('dashboard')}
-        />
-        <CartDrawer />
-        <CheckoutDemoModal />
-        <ToastNotification />
-      </>
-    );
-  }
-
-  return (
-    <StoreApp
-      onOpenAdmin={() => navigateToAdmin('dashboard')}
-      onOpenTerms={navigateToTerms}
-      onOpenPrivacy={navigateToPrivacy}
-    />
   );
 }
 
 export default function App() {
   return (
-    <AdminAuthProvider>
-      <StoreConfigProvider>
+    <StoreConfigProvider>
+      <AdminAuthProvider>
         <CartProvider>
-          <MainRoot />
+          <MainAppContent />
         </CartProvider>
-      </StoreConfigProvider>
-    </AdminAuthProvider>
+      </AdminAuthProvider>
+    </StoreConfigProvider>
   );
 }

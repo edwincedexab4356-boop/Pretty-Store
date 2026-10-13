@@ -1,39 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import {
   DollarSign,
-  ShoppingBag,
-  Package,
-  AlertTriangle,
-  Clock,
   TrendingUp,
+  ShoppingCart,
+  AlertTriangle,
+  Package,
+  Plus,
   ArrowRight,
-  Boxes,
-  ChevronRight,
+  Eye,
+  Calendar,
 } from 'lucide-react';
-import {
-  fetchDashboardStats,
-  fetchSalesByPeriod,
-  fetchTopProducts,
-  getAdminOrders,
-  ChartDayPoint,
-  TopProductItem,
-} from '../../../services/adminService';
-import { DashboardStats, Pedido } from '../../../types/database';
-import { AdminTab } from '../../../hooks/useAdminRoute';
-import { isPermissionError } from '../../../utils/supabaseSqlFix';
-import { PermissionErrorBanner } from '../PermissionErrorBanner';
+import { Pedido, Producto } from '../../../types/database';
+import { getAdminOrders, getAdminProducts } from '../../../services/adminService';
+import { AdminTab } from '../AdminSidebar';
 
-interface DashboardViewProps {
-  onNavigate: (tab: AdminTab) => void;
-  onSelectOrder?: (order: Pedido) => void;
-  onOpenSqlFix?: (desc?: string) => void;
+interface DashboardStats {
+  ventas_hoy: number;
+  ventas_mes: number;
+  pedidos_hoy: number;
+  pedidos_pendientes: number;
+  total_productos: number;
+  productos_agotados: number;
+  productos_stock_bajo: number;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({
-  onNavigate,
-  onSelectOrder,
-  onOpenSqlFix,
-}) => {
+interface DailySales {
+  date: string;
+  label: string;
+  total: number;
+}
+
+export const DashboardView: React.FC<{ onNavigateTab: (tab: AdminTab) => void }> = ({ onNavigateTab }) => {
+  const [orders, setOrders] = useState<Pedido[]>([]);
+  const [products, setProducts] = useState<Producto[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     ventas_hoy: 0,
     ventas_mes: 0,
@@ -43,87 +42,117 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     productos_agotados: 0,
     productos_stock_bajo: 0,
   });
-
-  const [period, setPeriod] = useState<7 | 30>(7);
-  const [chartData, setChartData] = useState<ChartDayPoint[]>([]);
-  const [topProducts, setTopProducts] = useState<TopProductItem[]>([]);
-  const [recentOrders, setRecentOrders] = useState<Pedido[]>([]);
+  const [daysFilter, setDaysFilter] = useState<number>(7);
+  const [salesHistory, setSalesHistory] = useState<DailySales[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  const loadAllData = async () => {
-    setIsLoading(true);
-    setLoadError(null);
-    try {
-      const [s, chart, top, orders] = await Promise.all([
-        fetchDashboardStats(),
-        fetchSalesByPeriod(period),
-        fetchTopProducts(),
-        getAdminOrders(),
-      ]);
-
-      setStats(s);
-      setChartData(chart);
-      setTopProducts(top);
-      setRecentOrders(orders.slice(0, 5));
-    } catch (e: any) {
-      const msg = e?.message || 'Error al conectar con la base de datos de Supabase.';
-      console.warn('Error loading dashboard data:', e);
-      setLoadError(msg);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   useEffect(() => {
-    loadAllData();
-  }, [period]);
+    setIsLoading(true);
+    Promise.all([getAdminOrders(), getAdminProducts()])
+      .then(([oList, pList]) => {
+        setOrders(oList);
+        setProducts(pList);
 
-  const maxSaleValue = Math.max(...chartData.map((d) => d.total), 10);
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-  const formatMoney = (val: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-    }).format(val);
-  };
+        let vHoy = 0;
+        let vMes = 0;
+        let pHoy = 0;
+        let pPend = 0;
 
-  const getStatusBadge = (estado: string) => {
+        oList.forEach((o) => {
+          const createdAt = o.created_at || '';
+          const total = Number(o.total) || 0;
+          if (createdAt >= startOfDay && o.estado !== 'cancelado') {
+            vHoy += total;
+            pHoy += 1;
+          }
+          if (createdAt >= startOfMonth && o.estado !== 'cancelado') {
+            vMes += total;
+          }
+          if (o.estado === 'pendiente' || o.estado === 'confirmado' || o.estado === 'preparando') {
+            pPend += 1;
+          }
+        });
+
+        let pAgotados = 0;
+        let pBajo = 0;
+        pList.forEach((p) => {
+          const stock = Number(p.stock) || 0;
+          if (stock <= 0) pAgotados += 1;
+          else if (stock <= 5) pBajo += 1;
+        });
+
+        setStats({
+          ventas_hoy: vHoy,
+          ventas_mes: vMes,
+          pedidos_hoy: pHoy,
+          pedidos_pendientes: pPend,
+          total_productos: pList.length,
+          productos_agotados: pAgotados,
+          productos_stock_bajo: pBajo,
+        });
+
+        const history: DailySales[] = [];
+        for (let i = daysFilter - 1; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          const dateStr = d.toISOString().split('T')[0];
+          const dayLabel = d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' });
+
+          const dayTotal = oList
+            .filter((ord) => ord.created_at && ord.created_at.startsWith(dateStr) && ord.estado !== 'cancelado')
+            .reduce((sum, ord) => sum + (Number(ord.total) || 0), 0);
+
+          history.push({ date: dateStr, label: dayLabel, total: dayTotal });
+        }
+        setSalesHistory(history);
+      })
+      .finally(() => setIsLoading(false));
+  }, [daysFilter]);
+
+  const formatUSD = (val: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(val);
+
+  const maxDailySale = Math.max(...salesHistory.map((s) => s.total), 50);
+
+  const renderStatusBadge = (estado?: string) => {
     switch (estado) {
       case 'entregado':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
             Entregado
           </span>
         );
       case 'confirmado':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-blue-500/15 text-blue-400 border border-blue-500/30">
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30">
             Confirmado
           </span>
         );
       case 'preparando':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30">
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
             Preparando
           </span>
         );
       case 'enviado':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-purple-500/15 text-purple-400 border border-purple-500/30">
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30">
             Enviado
           </span>
         );
       case 'cancelado':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-rose-500/15 text-rose-400 border border-rose-500/30">
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
             Cancelado
           </span>
         );
       default:
         return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-stone-500/15 text-stone-300 border border-stone-500/30">
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-stone-500/15 text-stone-300 border border-stone-500/30">
             Pendiente
           </span>
         );
@@ -131,20 +160,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 sm:space-y-8 animate-fadeIn">
-      {/* Permission Warning Banner if any error */}
-      {loadError && isPermissionError(loadError) && (
-        <PermissionErrorBanner
-          errorMessage={loadError}
-          onOpenFixModal={() => onOpenSqlFix?.('Permisos en tablas de métricas (pedidos, productos, inventario)')}
-          onDismiss={() => setLoadError(null)}
-        />
-      )}
-
-      {/* Top Welcome Banner */}
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
+      {/* Banner / Control Panel Card */}
       <div className="rounded-2xl bg-[#0e0e12] border border-white/[0.08] p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-xl">
         <div>
-          <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-medium block mb-1">
+          <span className="text-[10px] uppercase tracking-[0.25em] text-[#c5a059] font-semibold block mb-1">
             Resumen General
           </span>
           <h2 className="text-xl sm:text-2xl font-serif-luxury font-semibold text-white tracking-wide">
@@ -157,29 +177,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={() => onNavigate('productos')}
-            className="px-4 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-medium text-xs transition-colors flex items-center gap-2 cursor-pointer shadow-md"
+            onClick={() => onNavigateTab('products')}
+            className="px-4 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#b5914a] text-black font-semibold text-xs transition-colors flex items-center gap-2 cursor-pointer shadow-md shadow-[#c5a059]/20"
           >
-            <Package size={15} />
+            <Plus size={15} />
             <span>Nuevo Producto</span>
           </button>
           <button
-            onClick={() => onNavigate('pedidos')}
+            onClick={() => onNavigateTab('orders')}
             className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-200 font-medium text-xs border border-white/[0.08] transition-colors flex items-center gap-2 cursor-pointer"
           >
-            <ShoppingBag size={15} />
+            <ShoppingCart size={15} className="text-[#c5a059]" />
             <span>Ver Pedidos</span>
           </button>
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
+      {/* 4 Primary Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-        {/* Module 1: Ventas Hoy */}
+        {/* Card 1: Ventas de Hoy */}
         <div className="p-5 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-lg">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <span className="text-[10px] uppercase tracking-wider text-stone-400 block font-medium">
+              <span className="text-[10px] uppercase tracking-wider text-stone-400 block font-semibold">
                 Hoy
               </span>
               <h4 className="text-xs font-medium text-stone-300 mt-0.5">Ventas de Hoy</h4>
@@ -188,20 +208,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <DollarSign size={18} />
             </div>
           </div>
-          <div className="text-2xl font-semibold text-white font-mono">
-            {formatMoney(stats.ventas_hoy)}
-          </div>
+          <div className="text-2xl font-semibold text-white font-mono">{formatUSD(stats.ventas_hoy)}</div>
           <div className="mt-3 pt-2.5 border-t border-white/[0.06] flex items-center justify-between text-xs text-stone-400">
-            <span className="text-[#c5a059]">{stats.pedidos_hoy} pedidos hoy</span>
+            <span className="text-[#c5a059] font-medium">{stats.pedidos_hoy} pedidos hoy</span>
             <span className="text-stone-500 text-[11px]">En tiempo real</span>
           </div>
         </div>
 
-        {/* Module 2: Ventas del Mes */}
+        {/* Card 2: Ventas del Mes */}
         <div className="p-5 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-lg">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <span className="text-[10px] uppercase tracking-wider text-stone-400 block font-medium">
+              <span className="text-[10px] uppercase tracking-wider text-stone-400 block font-semibold">
                 Mes Actual
               </span>
               <h4 className="text-xs font-medium text-stone-300 mt-0.5">Ventas del Mes</h4>
@@ -210,50 +228,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <TrendingUp size={18} />
             </div>
           </div>
-          <div className="text-2xl font-semibold text-white font-mono">
-            {formatMoney(stats.ventas_mes)}
-          </div>
+          <div className="text-2xl font-semibold text-white font-mono">{formatUSD(stats.ventas_mes)}</div>
           <div className="mt-3 pt-2.5 border-t border-white/[0.06] flex items-center justify-between text-xs text-stone-400">
-            <span className="text-purple-300">Periodo activo</span>
+            <span className="text-purple-300 font-medium">Periodo activo</span>
             <span className="text-stone-500 text-[11px]">Últimos 30 días</span>
           </div>
         </div>
 
-        {/* Module 3: Pedidos Pendientes */}
+        {/* Card 3: Pedidos Pendientes */}
         <div
-          onClick={() => onNavigate('pedidos')}
+          onClick={() => onNavigateTab('orders')}
           className="p-5 rounded-2xl bg-[#0e0e12] border border-white/[0.08] hover:border-amber-500/30 transition-all shadow-lg cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-3">
             <div>
-              <span className="text-[10px] uppercase tracking-wider text-stone-400 block font-medium">
+              <span className="text-[10px] uppercase tracking-wider text-stone-400 block font-semibold">
                 Por Atender
               </span>
               <h4 className="text-xs font-medium text-stone-300 mt-0.5">Pedidos Pendientes</h4>
             </div>
             <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
-              <Clock size={18} />
+              <ShoppingCart size={18} />
             </div>
           </div>
-          <div className="text-2xl font-semibold text-amber-300 font-mono">
-            {stats.pedidos_pendientes}
-          </div>
+          <div className="text-2xl font-semibold text-amber-300 font-mono">{stats.pedidos_pendientes}</div>
           <div className="mt-3 pt-2.5 border-t border-white/[0.06] flex items-center justify-between text-xs text-stone-400">
-            <span className="text-amber-400 flex items-center gap-1">
+            <span className="text-amber-400 flex items-center gap-1 font-medium">
               <span>Gestionar pedidos</span>
               <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
             </span>
           </div>
         </div>
 
-        {/* Module 4: Alertas de Inventario */}
+        {/* Card 4: Alertas de Inventario */}
         <div
-          onClick={() => onNavigate('inventario')}
+          onClick={() => onNavigateTab('inventory')}
           className="p-5 rounded-2xl bg-[#0e0e12] border border-white/[0.08] hover:border-rose-500/30 transition-all shadow-lg cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-3">
             <div>
-              <span className="text-[10px] uppercase tracking-wider text-stone-400 block font-medium">
+              <span className="text-[10px] uppercase tracking-wider text-stone-400 block font-semibold">
                 Stock
               </span>
               <h4 className="text-xs font-medium text-stone-300 mt-0.5">Alertas de Inventario</h4>
@@ -263,14 +277,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="flex items-baseline gap-2 font-mono">
-            <span className="text-2xl font-semibold text-rose-400">
-              {stats.productos_agotados}
-            </span>
+            <span className="text-2xl font-semibold text-rose-400">{stats.productos_agotados}</span>
             <span className="text-xs text-rose-400/80">agotados</span>
             <span className="text-stone-600">•</span>
-            <span className="text-base font-medium text-amber-400">
-              {stats.productos_stock_bajo}
-            </span>
+            <span className="text-base font-medium text-amber-400">{stats.productos_stock_bajo}</span>
             <span className="text-[11px] text-amber-400/80">bajo stock</span>
           </div>
           <div className="mt-3 pt-2.5 border-t border-white/[0.06] flex items-center justify-between text-xs text-stone-400">
@@ -280,247 +290,198 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Charts & Analytics Row */}
+      {/* Financial Performance Chart and Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Sales by Day Chart (2 cols) */}
+        {/* Sales Performance Chart */}
         <div className="lg:col-span-2 p-6 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-lg flex flex-col justify-between">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-white/[0.06]">
-            <div>
-              <span className="text-[10px] uppercase tracking-wider text-[#c5a059] block mb-0.5 font-medium">
-                Rendimiento Financiero
-              </span>
-              <h3 className="text-base font-serif-luxury font-semibold text-white tracking-wide">
-                Ventas por Día
-              </h3>
-            </div>
-
-            {/* Period switcher */}
-            <div className="flex items-center bg-white/[0.03] p-1 rounded-xl border border-white/[0.08] text-xs">
-              <button
-                onClick={() => setPeriod(7)}
-                className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                  period === 7
-                    ? 'bg-[#c5a059] text-black font-semibold'
-                    : 'text-stone-400 hover:text-white'
-                }`}
-              >
-                7 Días
-              </button>
-              <button
-                onClick={() => setPeriod(30)}
-                className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                  period === 30
-                    ? 'bg-[#c5a059] text-black font-semibold'
-                    : 'text-stone-400 hover:text-white'
-                }`}
-              >
-                30 Días
-              </button>
-            </div>
-          </div>
-
-          {/* Clean Bars Chart */}
-          <div className="h-64 flex items-end gap-2 sm:gap-3 pt-6 pb-2 px-2 relative">
-            {chartData.length === 0 ? (
-              <div className="w-full h-full flex items-center justify-center text-xs text-stone-500">
-                No hay ventas registradas en este periodo
+          <div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-white/[0.06]">
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-[#c5a059] block mb-0.5 font-semibold">
+                  Rendimiento Financiero
+                </span>
+                <h3 className="text-base font-serif-luxury font-semibold text-white">
+                  Ingresos de Ventas ({daysFilter} días)
+                </h3>
               </div>
-            ) : (
-              chartData.map((d, idx) => {
-                const heightPercent = maxSaleValue > 0 ? Math.max(6, (d.total / maxSaleValue) * 100) : 6;
-                return (
-                  <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group relative z-10">
-                    {/* Hover tooltip */}
-                    <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-opacity bg-black border border-white/20 text-white text-[10px] py-1 px-2.5 rounded-md pointer-events-none whitespace-nowrap shadow-lg z-20 font-mono">
-                      {d.label}: {formatMoney(d.total)} ({d.orders} ped)
-                    </div>
+              <div className="flex items-center gap-1.5 bg-black/40 p-1 rounded-xl border border-white/10">
+                {[7, 14, 30].map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setDaysFilter(d)}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                      daysFilter === d
+                        ? 'bg-[#c5a059] text-black font-bold'
+                        : 'text-stone-400 hover:text-white'
+                    }`}
+                  >
+                    {d}d
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                    <div className="w-full flex items-end justify-center h-48">
-                      <div
-                        style={{ height: `${heightPercent}%` }}
-                        className={`w-full max-w-[28px] rounded-t transition-all duration-300 ${
-                          d.total > 0
-                            ? 'bg-gradient-to-t from-[#9a7837] to-[#c5a059] hover:brightness-110'
-                            : 'bg-white/[0.04]'
-                        }`}
-                      />
-                    </div>
-                    <span className="text-[10px] text-stone-400 mt-2 truncate w-full text-center">
-                      {d.label.split(' ')[0]}
+            {/* Bar Chart Visualization */}
+            <div className="h-44 flex items-end gap-2 sm:gap-4 pt-6">
+              {salesHistory.map((s, idx) => {
+                const heightPercent = maxDailySale > 0 ? Math.max(10, Math.round((s.total / maxDailySale) * 100)) : 10;
+                return (
+                  <div key={idx} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
+                    <span className="text-[10px] text-stone-400 font-mono opacity-0 group-hover:opacity-100 transition-opacity">
+                      ${s.total}
+                    </span>
+                    <div
+                      className={`w-full rounded-t-lg transition-all duration-300 ${
+                        s.total > 0
+                          ? 'bg-gradient-to-t from-[#c5a059]/40 to-[#c5a059] shadow-md shadow-[#c5a059]/20'
+                          : 'bg-white/5'
+                      }`}
+                      style={{ height: `${heightPercent}%` }}
+                    />
+                    <span className="text-[9px] text-stone-400 font-mono truncate w-full text-center">
+                      {s.label}
                     </span>
                   </div>
                 );
-              })
-            )}
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between text-xs text-stone-400 gap-2">
-            <span className="text-stone-500">
-              Datos registrados desde pedidos
-            </span>
-            <span className="text-[#c5a059] font-medium">
-              Total periodo: {formatMoney(chartData.reduce((acc, c) => acc + c.total, 0))}
-            </span>
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Top Products Card (1 col) */}
-        <div className="p-6 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-lg flex flex-col justify-between">
+        {/* Quick Shortcuts */}
+        <div className="p-6 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-lg flex flex-col justify-between space-y-4">
           <div>
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-[#c5a059] block mb-0.5 font-medium">
-                  Populares
-                </span>
-                <h3 className="text-base font-serif-luxury font-semibold text-white">
-                  Más Vendidos
-                </h3>
-              </div>
-              <button
-                onClick={() => onNavigate('productos')}
-                className="text-xs text-[#c5a059] hover:underline cursor-pointer"
-              >
-                Ver todos
-              </button>
-            </div>
+            <span className="text-[10px] uppercase tracking-wider text-[#c5a059] block mb-0.5 font-semibold">
+              Accesos Rápidos
+            </span>
+            <h3 className="text-base font-serif-luxury font-semibold text-white mb-4 pb-4 border-b border-white/[0.06]">
+              Operaciones Frecuentes
+            </h3>
 
             <div className="space-y-3">
-              {topProducts.length === 0 ? (
-                <div className="py-12 text-center text-xs text-stone-500">
-                  No hay ventas registradas aún
-                </div>
-              ) : (
-                topProducts.map((p, idx) => (
-                  <div key={p.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-white/15 transition-colors">
-                    <span className="w-6 h-6 rounded-full bg-white/[0.05] text-[10px] font-bold text-[#c5a059] flex items-center justify-center shrink-0">
-                      {idx + 1}
-                    </span>
-
-                    {p.imagen_url ? (
-                      <img
-                        src={p.imagen_url}
-                        alt={p.nombre}
-                        className="w-10 h-10 rounded-lg object-cover bg-black border border-white/10 shrink-0"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-lg bg-black border border-white/10 flex items-center justify-center text-stone-600 shrink-0">
-                        <Package size={16} />
-                      </div>
-                    )}
-
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-white truncate">
-                        {p.nombre}
-                      </p>
-                      <p className="text-[11px] text-stone-400">
-                        {p.cantidad} unidades
-                      </p>
-                    </div>
-
-                    <span className="text-xs font-semibold text-white font-mono shrink-0">
-                      {formatMoney(p.total_ventas)}
-                    </span>
+              <button
+                onClick={() => onNavigateTab('orders')}
+                className="w-full p-3.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.06] flex items-center justify-between text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                    <ShoppingCart size={15} />
                   </div>
-                ))
-              )}
-            </div>
-          </div>
+                  <div>
+                    <h5 className="text-xs font-semibold text-white">Revisar Pedidos</h5>
+                    <p className="text-[10px] text-stone-400 font-light">Comprobantes y envíos</p>
+                  </div>
+                </div>
+                <ArrowRight size={14} className="text-stone-500 group-hover:text-amber-400 group-hover:translate-x-1 transition-all" />
+              </button>
 
-          <div className="mt-4 pt-3 border-t border-white/[0.06] text-[11px] text-stone-500">
-            Calculado en base a órdenes confirmadas
+              <button
+                onClick={() => onNavigateTab('products')}
+                className="w-full p-3.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.06] flex items-center justify-between text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-[#c5a059]/10 border border-[#c5a059]/20 flex items-center justify-center text-[#c5a059]">
+                    <Package size={15} />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-semibold text-white">Catálogo de Productos</h5>
+                    <p className="text-[10px] text-stone-400 font-light">{products.length} productos en tienda</p>
+                  </div>
+                </div>
+                <ArrowRight size={14} className="text-stone-500 group-hover:text-[#c5a059] group-hover:translate-x-1 transition-all" />
+              </button>
+
+              <button
+                onClick={() => onNavigateTab('categories')}
+                className="w-full p-3.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.06] flex items-center justify-between text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                    <Calendar size={15} />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-semibold text-white">Categorías y Tallas</h5>
+                    <p className="text-[10px] text-stone-400 font-light">Ordenar y configurar opciones</p>
+                  </div>
+                </div>
+                <ArrowRight size={14} className="text-stone-500 group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Recent Orders Table */}
-      <div className="p-6 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-lg">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-white/[0.06]">
+      {/* Recent Orders List with Safe ID Stringification (prevents TypeError: o.id.slice) */}
+      <div className="p-6 rounded-2xl bg-[#0e0e12] border border-white/[0.08] shadow-lg space-y-4">
+        <div className="flex items-center justify-between pb-4 border-b border-white/[0.06]">
           <div>
-            <span className="text-[10px] uppercase tracking-wider text-[#c5a059] block mb-0.5 font-medium">
+            <span className="text-[10px] uppercase tracking-wider text-[#c5a059] block mb-0.5 font-semibold">
               Actividad Reciente
             </span>
-            <h3 className="text-base sm:text-lg font-serif-luxury font-semibold text-white">
-              Últimos Pedidos
+            <h3 className="text-base font-serif-luxury font-semibold text-white">
+              Últimos Pedidos Recibidos
             </h3>
           </div>
-
           <button
-            onClick={() => onNavigate('pedidos')}
-            className="text-xs text-[#c5a059] hover:text-white font-medium flex items-center gap-1 cursor-pointer"
+            onClick={() => onNavigateTab('orders')}
+            className="text-xs text-[#c5a059] hover:text-[#e4be6c] flex items-center gap-1 font-semibold cursor-pointer"
           >
             <span>Ver todos los pedidos</span>
-            <ChevronRight size={14} />
+            <ArrowRight size={12} />
           </button>
         </div>
 
-        {recentOrders.length === 0 ? (
-          <div className="py-12 text-center text-xs text-stone-500">
-            No hay pedidos registrados en la tienda todavía
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-white/[0.02] text-stone-400 uppercase text-[10px] font-medium border-b border-white/[0.06]">
-                <tr>
-                  <th className="py-3 px-4">Pedido</th>
-                  <th className="py-3 px-4">Fecha</th>
-                  <th className="py-3 px-4">Cliente</th>
-                  <th className="py-3 px-4">Método</th>
-                  <th className="py-3 px-4">Total</th>
-                  <th className="py-3 px-4">Estado</th>
-                  <th className="py-3 px-4 text-right">Acción</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.04]">
-                {recentOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="py-3.5 px-4 font-mono font-medium text-white">
-                      #{String(order.id || '').replace(/-/g, '').slice(0, 6).toUpperCase()}
-                    </td>
-                    <td className="py-3.5 px-4 text-stone-400 text-[11px]">
-                      {order.created_at
-                        ? new Date(order.created_at).toLocaleDateString('es-ES', {
-                            day: 'numeric',
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : '—'}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="font-medium text-white">
-                        {order.cliente?.nombre || 'Cliente sin registro'}
-                      </div>
-                      <div className="text-[11px] text-stone-400">
-                        {order.cliente?.telefono || order.direccion || '—'}
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 uppercase text-stone-300 text-[11px]">
-                      {order.metodo_pago}
-                    </td>
-                    <td className="py-3.5 px-4 font-semibold text-white font-mono">
-                      {formatMoney(order.total)}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      {getStatusBadge(order.estado)}
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <button
-                        onClick={() => {
-                          if (onSelectOrder) onSelectOrder(order);
-                          onNavigate('pedidos');
-                        }}
-                        className="text-xs text-[#c5a059] hover:underline cursor-pointer"
-                      >
-                        Ver Detalle
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <div className="divide-y divide-white/[0.04]">
+          {orders.slice(0, 5).map((o) => {
+            const safeId = String(o.id || '');
+            const displayId = o.numero_orden || (safeId.length > 8 ? safeId.slice(0, 8) : safeId);
+
+            return (
+              <div
+                key={safeId}
+                className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-white/[0.02] px-2 rounded-xl transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-stone-300 font-mono text-xs shrink-0">
+                    #{displayId}
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-semibold text-white">
+                      {o.cliente_nombre || o.cliente?.nombre || 'Cliente'}
+                    </h5>
+                    <p className="text-[11px] text-stone-400">
+                      {o.cliente_telefono || o.cliente?.telefono || 'Sin teléfono'} •{' '}
+                      {o.created_at ? new Date(o.created_at).toLocaleDateString('es-PA') : 'Fecha no registrada'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 self-end sm:self-center">
+                  <div className="text-right">
+                    <span className="text-sm font-bold text-white font-mono block">
+                      {formatUSD(Number(o.total) || 0)}
+                    </span>
+                    <span className="text-[10px] text-stone-500 uppercase">{o.metodo_pago || 'yappy'}</span>
+                  </div>
+                  <div>{renderStatusBadge(o.estado)}</div>
+                  <button
+                    onClick={() => onNavigateTab('orders')}
+                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-stone-400 hover:text-white transition-colors cursor-pointer"
+                    title="Ver detalles"
+                  >
+                    <Eye size={14} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          {orders.length === 0 && !isLoading && (
+            <p className="py-8 text-center text-xs text-stone-500">
+              No hay pedidos registrados en este momento.
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,14 +1,15 @@
 import React, { useState, useMemo } from 'react';
-import { Search, SlidersHorizontal, PackageOpen, RotateCcw } from 'lucide-react';
+import { Search, SlidersHorizontal, Package, RefreshCw } from 'lucide-react';
 import { Producto, Categoria } from '../../types/database';
 import { ProductCard } from './ProductCard';
-import { ProductDetailModal } from './ProductDetailModal';
 
 interface ProductGridProps {
   products: Producto[];
   categories: Categoria[];
   selectedCategoryId: string;
   onSelectCategory: (id: string) => void;
+  onQuickView: (product: Producto) => void;
+  isLoading?: boolean;
 }
 
 export const ProductGrid: React.FC<ProductGridProps> = ({
@@ -16,98 +17,102 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   categories,
   selectedCategoryId,
   onSelectCategory,
+  onQuickView,
+  isLoading = false,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'name'>('featured');
-  const [selectedProductForModal, setSelectedProductForModal] = useState<Producto | null>(null);
 
-  // Category map for quick lookup
-  const categoryMap = useMemo(() => {
+  const categoryNameMap = useMemo(() => {
     const map = new Map<string, string>();
-    categories.forEach((cat) => map.set(cat.id, cat.nombre));
+    categories.forEach((c) => map.set(c.id, c.nombre));
     return map;
   }, [categories]);
 
   const categoryOrderMap = useMemo(() => {
     const map = new Map<string, number>();
-    categories.forEach((cat, idx) => map.set(String(cat.id), idx));
+    categories.forEach((c, idx) => map.set(String(c.id), idx));
     return map;
   }, [categories]);
 
-  // Filter and sort products
   const filteredProducts = useMemo(() => {
     return products
-      .filter((product) => {
-        if (!product.activo) return false;
-
-        // Filter by category
-        if (selectedCategoryId !== 'all' && product.categoria_id !== selectedCategoryId) {
+      .filter((p) => {
+        if (!p.activo) return false;
+        if (selectedCategoryId !== 'all' && selectedCategoryId !== '' && p.categoria_id !== selectedCategoryId) {
           return false;
         }
-
-        // Filter by search query
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          const matchName = product.nombre.toLowerCase().includes(q);
-          const matchDesc = product.descripcion?.toLowerCase().includes(q) || false;
+        if (searchTerm.trim()) {
+          const q = searchTerm.toLowerCase();
+          const matchName = p.nombre.toLowerCase().includes(q);
+          const matchDesc = p.descripcion?.toLowerCase().includes(q) || false;
           if (!matchName && !matchDesc) return false;
         }
-
         return true;
       })
       .sort((a, b) => {
         if (sortBy === 'price-asc') return a.precio - b.precio;
         if (sortBy === 'price-desc') return b.precio - a.precio;
         if (sortBy === 'name') return a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' });
-        
-        // Orden destacado: Respeta el orden de categorías establecido y luego el nombre
-        const idxA = categoryOrderMap.get(String(a.categoria_id)) ?? 9999;
-        const idxB = categoryOrderMap.get(String(b.categoria_id)) ?? 9999;
-        if (idxA !== idxB) return idxA - idxB;
-        return a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' });
-      });
-  }, [products, selectedCategoryId, searchQuery, sortBy, categoryOrderMap]);
 
-  const activeCategoryTitle =
-    selectedCategoryId === 'all'
+        const orderA = categoryOrderMap.get(String(a.categoria_id)) ?? 9999;
+        const orderB = categoryOrderMap.get(String(b.categoria_id)) ?? 9999;
+        return orderA === orderB
+          ? a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
+          : orderA - orderB;
+      });
+  }, [products, selectedCategoryId, searchTerm, sortBy, categoryOrderMap]);
+
+  const currentCategoryTitle =
+    selectedCategoryId === 'all' || selectedCategoryId === ''
       ? 'Todas las Piezas'
-      : categoryMap.get(selectedCategoryId) || 'Catálogo';
+      : categoryNameMap.get(selectedCategoryId) || 'Catálogo';
+
+  if (isLoading) {
+    return (
+      <section id="catalogo" className="py-20 sm:py-28 bg-[#09090b] text-stone-100">
+        <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-6 sm:gap-8">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="animate-pulse bg-[#121215] aspect-[4/5] rounded-sm border border-white/5" />
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section id="catalogo" className="py-20 sm:py-28 bg-[#09090b] text-stone-100">
       <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-8 lg:px-12">
-        {/* Editorial Collection Header */}
+        {/* Header bar with controls */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12 pb-6 border-b border-white/[0.08]">
           <div className="space-y-1">
             <span className="text-[10px] uppercase tracking-[0.35em] text-[#c5a059] font-medium block">
               Catálogo Oficial
             </span>
             <h2 className="text-2xl sm:text-4xl font-serif-luxury font-light text-white tracking-tight">
-              {activeCategoryTitle}
+              {currentCategoryTitle}
             </h2>
             <p className="text-xs sm:text-sm text-stone-400 font-light">
               Mostrando {filteredProducts.length} de {products.length} piezas exclusivas
             </p>
           </div>
 
-          {/* Minimalist Search & Sort Controls */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             {/* Search Input */}
             <div className="relative min-w-[220px]">
-              <Search
-                size={14}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
-              />
+              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Buscar pieza..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-7 py-2 bg-stone-900/60 border border-white/10 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-white/30 transition-colors"
               />
-              {searchQuery && (
+              {searchTerm && (
                 <button
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => setSearchTerm('')}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-stone-400 hover:text-white"
                   aria-label="Limpiar búsqueda"
                 >
@@ -118,10 +123,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
 
             {/* Sort Select */}
             <div className="relative flex items-center">
-              <SlidersHorizontal
-                size={13}
-                className="absolute left-3.5 text-stone-400 pointer-events-none"
-              />
+              <SlidersHorizontal size={13} className="absolute left-3.5 text-stone-400 pointer-events-none" />
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
@@ -136,51 +138,41 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
           </div>
         </div>
 
-        {/* Product Cards Grid */}
+        {/* Products Grid */}
         {filteredProducts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-6 sm:gap-8">
-            {filteredProducts.map((product, idx) => (
+            {filteredProducts.map((p, idx) => (
               <ProductCard
-                key={product.id}
-                product={product}
-                categoryName={categoryMap.get(product.categoria_id)}
-                onQuickView={(p) => setSelectedProductForModal(p)}
-                priority={product.categoria_id === 'cat-gorras' || selectedCategoryId === 'cat-gorras' || idx < 4}
+                key={p.id}
+                product={p}
+                categoryName={p.categoria_id ? categoryNameMap.get(p.categoria_id) : undefined}
+                onQuickView={onQuickView}
+                priority={idx < 4}
               />
             ))}
           </div>
         ) : (
-          /* Clean Empty State */
           <div className="py-20 text-center max-w-sm mx-auto flex flex-col items-center">
             <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center text-stone-500 mb-4 bg-stone-900">
-              <PackageOpen size={22} className="stroke-[1.5]" />
+              <Package size={22} className="stroke-[1.5]" />
             </div>
-            <h3 className="text-base font-serif-luxury font-normal text-white mb-1">
-              No se encontraron piezas
-            </h3>
+            <h3 className="text-base font-serif-luxury font-normal text-white mb-1">No se encontraron piezas</h3>
             <p className="text-xs text-stone-400 mb-6 font-light">
-              No hay artículos que coincidan con la búsqueda &ldquo;{searchQuery}&rdquo;.
+              No hay artículos que coincidan con la búsqueda “{searchTerm}”.
             </p>
             <button
               onClick={() => {
-                setSearchQuery('');
+                setSearchTerm('');
                 onSelectCategory('all');
               }}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-stone-800 hover:bg-stone-700 text-white text-xs uppercase tracking-[0.16em] transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#c5a059] hover:bg-[#b5914a] text-black text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-md shadow-[#c5a059]/20"
             >
-              <RotateCcw size={13} />
-              <span>Ver Todo</span>
+              <RefreshCw size={13} />
+              <span>Ver Catálogo Completo</span>
             </button>
           </div>
         )}
       </div>
-
-      {/* Quick View Modal */}
-      <ProductDetailModal
-        product={selectedProductForModal}
-        categories={categories}
-        onClose={() => setSelectedProductForModal(null)}
-      />
     </section>
   );
 };

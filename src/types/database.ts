@@ -1,32 +1,16 @@
-/**
- * Supabase Database Schemas and Types
- * Exactly mirrors existing database tables:
- * - categorias
- * - productos
- * - inventario
- * - pedidos
- * - detalle_pedidos
- * - ventas
- * - gastos
- * - perfiles
- * - clientes
- */
-
 export interface Categoria {
   id: string;
   nombre: string;
   descripcion: string | null;
-  imagen_url?: string | null;
+  imagen_url: string | null;
   activa: boolean;
-  orden?: number;
   created_at?: string;
-  // Campos calculados para admin
   total_productos?: number;
 }
 
 export interface Producto {
   id: string;
-  categoria_id: string;
+  categoria_id: string | null;
   nombre: string;
   descripcion: string | null;
   precio: number;
@@ -37,7 +21,6 @@ export interface Producto {
   activo: boolean;
   created_at?: string;
   updated_at?: string;
-  // Relación opcional para joins
   categoria?: Categoria;
 }
 
@@ -45,6 +28,7 @@ export interface CartItem {
   product: Producto;
   quantity: number;
   subtotal: number;
+  selectedSize?: string;
 }
 
 export interface Inventario {
@@ -60,7 +44,7 @@ export type MetodoPago = 'tarjeta' | 'yappy' | 'transferencia' | 'efectivo';
 export type TipoEntrega = 'delivery' | 'retiro';
 export type CourierOption = 'Uno Express' | 'Ferguson' | 'Servientrega';
 
-export type EstadoPedido = 
+export type EstadoPedido =
   | 'pendiente'
   | 'confirmado'
   | 'preparando'
@@ -68,108 +52,71 @@ export type EstadoPedido =
   | 'entregado'
   | 'cancelado';
 
-export interface Pedido {
+export interface Cliente {
   id: string;
-  cliente_id: string | null;
-  direccion: string;
-  subtotal: number;
-  total: number;
-  estado: EstadoPedido;
-  metodo_pago: MetodoPago;
-  notas: string | null;
-  tipo_entrega?: TipoEntrega;
-  courier?: CourierOption;
-  comprobante_pago?: string | null;
-  factura_oficial?: string | null;
+  nombre: string;
+  telefono: string;
+  email: string | null;
+  direccion: string | null;
+  total_pedidos?: number;
+  total_gastado?: number;
   created_at?: string;
-  updated_at?: string;
-  // Relaciones
-  cliente?: Cliente;
-  detalles?: DetallePedido[];
 }
 
-export interface DetallePedido {
-  id: string;
-  pedido_id: string;
+export interface PedidoItem {
+  id?: string;
+  pedido_id?: string;
   producto_id: string;
   cantidad: number;
   precio_unitario: number;
   subtotal: number;
-  created_at?: string;
   producto?: Producto;
+  selectedSize?: string;
 }
 
-export interface Cliente {
+export interface Pedido {
   id: string;
-  nombre: string;
-  email: string;
-  telefono: string;
-  direccion: string | null;
-  created_at?: string;
-  // Campos calculados
-  pedidos_count?: number;
-  total_gastado?: number;
-  ultimo_pedido?: string;
-  pedidos?: Pedido[];
-}
-
-export interface Venta {
-  id: string;
-  pedido_id: string;
+  numero_orden?: string;
+  cliente_id?: string | null;
+  cliente_nombre?: string | null;
+  cliente_telefono?: string | null;
+  cliente_email?: string | null;
   total: number;
-  fecha?: string;
+  subtotal?: number;
+  descuento?: number;
+  envio?: number;
+  metodo_pago: MetodoPago;
+  tipo_entrega: TipoEntrega;
+  courier?: string | null;
+  estado: EstadoPedido;
+  notas?: string | null;
+  comprobante_pago?: string | null;
   created_at?: string;
-  pedido?: Pedido;
+  cliente?: Cliente;
+  items?: PedidoItem[];
 }
 
-export interface Gasto {
-  id: string;
-  descripcion: string;
-  monto: number;
-  categoria: string;
-  fecha?: string;
-  created_at?: string;
-}
-
-export interface Perfil {
-  id: string;
-  nombre: string | null;
-  telefono?: string | null;
-  rol: 'admin' | 'administrador' | 'cajero' | 'cliente';
-  activo: boolean;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface StoreConfig {
+export interface ConfiguracionTienda {
+  id?: number;
   nombre_tienda: string;
   descripcion: string;
   logo_url: string;
-  hero_video_url: string;
+  hero_video_url?: string;
   hero_poster_url?: string;
   catalog_video_url?: string;
   telefono: string;
   whatsapp: string;
   email: string;
   direccion: string;
-  instagram: string;
+  instagram?: string;
   tiktok?: string;
-  facebook: string;
-  twitter: string;
+  facebook?: string;
+  twitter?: string;
   yappy_numero?: string;
   banco_datos?: string;
   pasarela_tarjeta?: string;
   link_pago_tarjeta?: string;
   badge_garantia_titulo?: string;
   badge_garantia_subtitulo?: string;
-}
-
-export interface DashboardStats {
-  ventas_hoy: number;
-  ventas_mes: number;
-  pedidos_hoy: number;
-  pedidos_pendientes: number;
-  total_productos: number;
-  productos_agotados: number;
-  productos_stock_bajo: number;
+  updated_at?: string;
 }

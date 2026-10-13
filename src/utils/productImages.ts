@@ -1,101 +1,111 @@
 import { Producto } from '../types/database';
 
 /**
- * Checks whether a given media URL is a video file or video stream.
- * Supports direct files (.mp4, .webm, .mov, .m4v, .ogv, .ogg), data:video, and video host links.
+ * Returns all real image and video URLs for a product.
+ * Handles single URLs, arrays, stringified JSON arrays like '["https://..."]',
+ * and stripped quotes. Returns an empty array if no real images exist.
  */
-export function isVideoMedia(url?: string | null): boolean {
-  if (!url || typeof url !== 'string') return false;
-  const clean = url.trim().toLowerCase().split('?')[0];
+export function getProductImages(
+  product?: Partial<Producto> | { imagen_url?: string | null; imagenes?: any } | null
+): string[] {
+  if (!product) return [];
+  const list: string[] = [];
 
+  const addUrl = (u: any) => {
+    if (!u) return;
+    if (typeof u === 'string') {
+      let trimmed = u.trim();
+      if (!trimmed) return;
+
+      // Handle stringified JSON array in database (e.g. '["https://..."]')
+      if (
+        (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+        (trimmed.startsWith('"[') && trimmed.endsWith(']"'))
+      ) {
+        try {
+          if (trimmed.startsWith('"[') && trimmed.endsWith(']"')) {
+            trimmed = JSON.parse(trimmed);
+          }
+          const parsed = typeof trimmed === 'string' ? JSON.parse(trimmed) : trimmed;
+          if (Array.isArray(parsed)) {
+            parsed.forEach(addUrl);
+            return;
+          }
+        } catch {
+          // If JSON parse fails, attempt regex extraction of URLs
+          const matches = trimmed.match(/https?:\/\/[^\s"',\]]+/g);
+          if (matches && matches.length > 0) {
+            matches.forEach(addUrl);
+            return;
+          }
+        }
+      }
+
+      // Remove surrounding quotes or backslashes
+      const clean = trimmed
+        .replace(/^["'\\]+|["'\\]+$/g, '')
+        .replace(/\\"/g, '"')
+        .trim();
+
+      if (clean && !list.includes(clean)) {
+        list.push(clean);
+      }
+    } else if (Array.isArray(u)) {
+      u.forEach(addUrl);
+    }
+  };
+
+  addUrl(product.imagen_url);
+  addUrl(product.imagenes);
+
+  return list;
+}
+
+/**
+ * Returns the primary (first) image URL for a product, or a fallback.
+ */
+export function getPrimaryProductImage(
+  product?: any,
+  fallback: string = '/images/logo/logotipo.jpeg'
+): string {
+  if (!product) return fallback;
+  const imgs = getProductImages(product);
+  return imgs.length > 0 ? imgs[0] : fallback;
+}
+
+/**
+ * Checks whether the product has at least one real image assigned.
+ */
+export function hasProductRealImage(product?: any): boolean {
+  return getProductImages(product).length > 0;
+}
+
+export function isVideoUrl(url?: string | null): boolean {
+  return isVideoMedia(url);
+}
+
+export function isVideoMedia(url?: string | null): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
   return (
-    clean.endsWith('.mp4') ||
-    clean.endsWith('.webm') ||
-    clean.endsWith('.mov') ||
-    clean.endsWith('.m4v') ||
-    clean.endsWith('.ogv') ||
-    clean.endsWith('.ogg') ||
-    clean.startsWith('data:video/') ||
-    url.includes('youtube.com') ||
-    url.includes('youtu.be') ||
-    url.includes('vimeo.com')
+    lower.endsWith('.mp4') ||
+    lower.endsWith('.webm') ||
+    lower.endsWith('.mov') ||
+    lower.includes('youtube.com') ||
+    lower.includes('youtu.be') ||
+    lower.includes('vimeo.com')
   );
 }
 
-/**
- * Returns embed URL for YouTube/Vimeo if applicable, or null if direct video file.
- */
 export function getVideoEmbedUrl(url: string): string | null {
   if (!url) return null;
   if (url.includes('youtube.com/watch?v=')) {
-    const id = url.split('v=')[1]?.split('&')[0];
-    return `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&loop=1&playsinline=1`;
+    const id = url.split('watch?v=')[1]?.split('&')[0];
+    return id ? `https://www.youtube.com/embed/${id}` : null;
   }
   if (url.includes('youtu.be/')) {
     const id = url.split('youtu.be/')[1]?.split('?')[0];
-    return `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&loop=1&playsinline=1`;
-  }
-  if (url.includes('vimeo.com/')) {
-    const id = url.split('vimeo.com/')[1]?.split('?')[0];
-    return `https://player.vimeo.com/video/${id}?autoplay=1&muted=1&loop=1`;
+    return id ? `https://www.youtube.com/embed/${id}` : null;
   }
   return null;
-}
-
-export interface MediaItem {
-  url: string;
-  isVideo: boolean;
-}
-
-/**
- * Extracts all valid media items (photos and videos) from a product.
- */
-export function getProductMedia(product?: Producto | null): MediaItem[] {
-  const urls = getProductImages(product);
-  return urls.map((url) => ({
-    url,
-    isVideo: isVideoMedia(url),
-  }));
-}
-
-/**
- * Extracts all valid media URLs (images and videos) from a product.
- * Handles single image_url, JSON arrays in image_url, and separated strings.
- */
-export function getProductImages(product?: Producto | null): string[] {
-  if (!product) return [];
-
-  // 1. Direct imagenes array
-  if (Array.isArray(product.imagenes) && product.imagenes.length > 0) {
-    const valid = product.imagenes.filter((url) => typeof url === 'string' && url.trim().length > 0);
-    if (valid.length > 0) return valid;
-  }
-
-  // 2. Parse from imagen_url if present
-  if (product.imagen_url && typeof product.imagen_url === 'string') {
-    const trimmed = product.imagen_url.trim();
-
-    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const valid = parsed.filter((url) => typeof url === 'string' && url.trim().length > 0);
-          if (valid.length > 0) return valid;
-        }
-      } catch {
-        // Not valid JSON
-      }
-    }
-
-    if (trimmed.includes('|||')) {
-      const split = trimmed.split('|||').map((s) => s.trim()).filter(Boolean);
-      if (split.length > 0) return split;
-    }
-
-    if (trimmed.length > 0) {
-      return [trimmed];
-    }
-  }
-
-  return [];
 }

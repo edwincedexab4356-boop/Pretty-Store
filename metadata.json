@@ -1,6 +1,6 @@
 {
   "name": "pretty store ",
-  "description": "Tienda online profesional de moda y accesorios de lujo con catálogo interactivo, carrito dinámico en tiempo real y arquitectura preparada para Supabase.",
+  "description": "Pretty-Store | Tu estilo, todo en un solo lugar. Descubre nuestra colección exclusiva de gorras legendarias, moda urbana y accesorios de lujo con envíos a todo Panamá.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
