@@ -34,6 +34,7 @@ export const EditorialSection: React.FC<EditorialSectionProps> = ({ onSelectCate
                 }}
                 className="w-full h-full object-cover object-center grayscale-[15%] group-hover:scale-103 transition-transform duration-700 ease-out"
                 loading="lazy"
+                decoding="async"
               />
               <div className="absolute inset-0 bg-black/20" />
             </div>
@@ -92,6 +93,7 @@ export const EditorialSection: React.FC<EditorialSectionProps> = ({ onSelectCate
                 }}
                 className="w-full h-full object-cover object-center grayscale-[15%] group-hover:scale-103 transition-transform duration-700 ease-out"
                 loading="lazy"
+                decoding="async"
               />
               <div className="absolute inset-0 bg-black/20" />
             </div>

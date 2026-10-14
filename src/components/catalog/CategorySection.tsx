@@ -32,7 +32,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
 
   useEffect(() => {
     checkScroll();
-    window.addEventListener('resize', checkScroll);
+    window.addEventListener('resize', checkScroll, { passive: true });
     return () => window.removeEventListener('resize', checkScroll);
   }, [categories]);
 

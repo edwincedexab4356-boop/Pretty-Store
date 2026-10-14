@@ -14,6 +14,7 @@ import {
   encodeProductOptions,
   saveLocalProductOptions,
 } from '../utils/productOptions';
+import { invalidateCatalogCache } from './catalogService';
 
 /* ==================== SUBIDA DE IMÁGENES A SUPABASE STORAGE ==================== */
 export async function uploadProductImageToStorage(file: File): Promise<string> {
@@ -98,6 +99,7 @@ export async function createAdminCategory(category: Partial<Categoria>): Promise
     .single();
 
   if (error) throw error;
+  invalidateCatalogCache();
   return data;
 }
 
@@ -114,18 +116,21 @@ export async function updateAdminCategory(id: string, category: Partial<Categori
     .single();
 
   if (error) throw error;
+  invalidateCatalogCache();
   return data;
 }
 
 export async function deleteAdminCategory(id: string): Promise<boolean> {
   const { error } = await supabase.from('categorias').delete().eq('id', id);
   if (error) throw error;
+  invalidateCatalogCache();
   return true;
 }
 
 export async function toggleCategoryActive(id: string, activa: boolean): Promise<boolean> {
   const { error } = await supabase.from('categorias').update({ activa }).eq('id', id);
   if (error) throw error;
+  invalidateCatalogCache();
   return true;
 }
 
@@ -176,6 +181,7 @@ export async function createAdminProduct(product: Partial<Producto>): Promise<Pr
     .single();
 
   if (error) throw error;
+  invalidateCatalogCache();
 
   if (data?.id && product.opciones) {
     saveLocalProductOptions(data.id, product.opciones);
@@ -210,6 +216,7 @@ export async function updateAdminProduct(id: string, product: Partial<Producto>)
     .single();
 
   if (error) throw error;
+  invalidateCatalogCache();
 
   if (id && product.opciones) {
     saveLocalProductOptions(id, product.opciones);
@@ -226,6 +233,7 @@ export async function updateAdminProduct(id: string, product: Partial<Producto>)
 export async function deleteAdminProduct(id: string): Promise<boolean> {
   const { error } = await supabase.from('productos').delete().eq('id', id);
   if (error) throw error;
+  invalidateCatalogCache();
   return true;
 }
 

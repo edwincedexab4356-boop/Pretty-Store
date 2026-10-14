@@ -16,6 +16,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   categoryName,
   onQuickView,
+  priority = false,
 }) => {
   const { addItem, items } = useCart();
   const [isAdding, setIsAdding] = useState(false);
@@ -104,7 +105,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   return (
     <article
       onClick={() => onQuickView && onQuickView(product)}
-      className="group flex flex-col bg-[#0e0e11] border border-white/[0.08] hover:border-[#c5a059]/40 hover:shadow-2xl hover:shadow-[#c5a059]/10 transition-all duration-300 hover:-translate-y-1.5 cursor-pointer overflow-hidden rounded-2xl select-none"
+      className="group flex flex-col bg-[#0e0e11] border border-white/[0.08] hover:border-[#c5a059]/40 hover:shadow-2xl hover:shadow-[#c5a059]/10 transition-all duration-300 hover:-translate-y-1.5 cursor-pointer overflow-hidden rounded-2xl select-none product-card-contain"
     >
       {/* Media Canvas */}
       <div
@@ -121,6 +122,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               loop
               muted
               playsInline
+              preload="metadata"
               className="h-full w-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
             />
           ) : (
@@ -130,7 +132,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               alt={product.nombre}
               onError={() => setImageError(true)}
               className="h-full w-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
-              loading="lazy"
+              loading={priority ? 'eager' : 'lazy'}
+              decoding="async"
+              fetchPriority={priority ? 'high' : 'low'}
             />
           )
         ) : (
@@ -140,6 +144,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 src="/images/logo/logotipo.jpeg"
                 alt="Pretty Store"
                 className="w-full h-full object-cover rounded-full opacity-85"
+                loading="lazy"
+                decoding="async"
                 onError={(e) => {
                   (e.target as HTMLElement).style.display = 'none';
                 }}
@@ -152,16 +158,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
         {/* Video Badge */}
         {isVideo && (
-          <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-black/80 backdrop-blur-md text-[10px] text-white flex items-center gap-1 border border-white/15 z-10 shadow">
+          <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-black/90 text-[10px] text-white flex items-center gap-1 border border-white/15 z-10 shadow">
             <Play size={10} className="fill-amber-400 text-amber-400" />
             <span className="tracking-wider uppercase text-[9px] font-medium">Video</span>
           </span>
         )}
 
-        {/* Low Stock Urgent Badge */}
+        {/* Low Stock Urgent Badge - high performance styling */}
         {!isOutOfStock && product.stock <= 5 && (
           <span
-            className={`absolute ${isVideo ? 'top-10' : 'top-2.5'} right-2.5 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 text-white font-black text-[9px] sm:text-[11px] tracking-wider flex items-center gap-1 shadow-2xl shadow-red-600/70 border-2 border-yellow-300 z-10 animate-bounce`}
+            className={`absolute ${isVideo ? 'top-10' : 'top-2.5'} right-2.5 px-2 sm:px-2.5 py-0.5 rounded-full bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 text-white font-black text-[9px] sm:text-[10px] tracking-wider flex items-center gap-1 shadow-lg shadow-black/80 border border-yellow-300/80 z-10`}
           >
             <span className="text-xs">🔥</span>
             <span>¡QUEDAN {product.stock}!</span>
@@ -170,8 +176,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
         {/* Promo Badge */}
         {promo && (
-          <span className="absolute top-2.5 left-2.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-black/85 backdrop-blur-md text-[9px] sm:text-[10px] text-amber-300 flex items-center gap-1 border border-[#c5a059]/50 z-10 shadow-lg font-medium tracking-wide">
-            <Sparkles size={11} className="text-[#c5a059] animate-pulse" />
+          <span className="absolute top-2.5 left-2.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-black/90 text-[9px] sm:text-[10px] text-amber-300 flex items-center gap-1 border border-[#c5a059]/50 z-10 shadow-lg font-medium tracking-wide">
+            <Sparkles size={11} className="text-[#c5a059]" />
             <span>{promo.shortBadge || '2 por $55'}</span>
           </span>
         )}

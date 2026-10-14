@@ -110,6 +110,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   src={currentImage}
                   alt={product.nombre}
                   className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                  decoding="async"
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center p-8 text-center">
@@ -118,6 +119,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                       src="/images/logo/logotipo.jpeg"
                       alt="Pretty Store"
                       className="w-full h-full object-cover rounded-full opacity-85"
+                      decoding="async"
                     />
                   </div>
                   <span className="text-xs uppercase tracking-[0.25em] text-[#c5a059] font-medium">Pretty Store</span>
@@ -136,7 +138,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                       currentImgIndex === idx ? 'border-[#c5a059] scale-105 shadow-md shadow-[#c5a059]/30' : 'border-white/10 opacity-60 hover:opacity-100'
                     }`}
                   >
-                    <img src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" />
+                    <img src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" decoding="async" loading="lazy" />
                   </button>
                 ))}
               </div>

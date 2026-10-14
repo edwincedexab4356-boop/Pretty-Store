@@ -19,10 +19,30 @@ export const Hero: React.FC<HeroProps> = ({ videoUrl = '/videos/hero.mp4', onExp
   }, [videoUrl]);
 
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.muted = true;
-      videoRef.current.play().catch(() => {});
-    }
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.muted = true;
+
+    // Use IntersectionObserver to pause playback when out of viewport
+    // drastically saving GPU/CPU memory on mobile and desktop
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            video.play().catch(() => {});
+          } else {
+            video.pause();
+          }
+        });
+      },
+      { threshold: 0.05 }
+    );
+
+    observer.observe(video);
+    return () => {
+      observer.disconnect();
+    };
   }, [currentUrl]);
 
   return (
@@ -36,10 +56,11 @@ export const Hero: React.FC<HeroProps> = ({ videoUrl = '/videos/hero.mp4', onExp
           loop
           muted
           playsInline
+          preload="metadata"
           onError={() => {
             setCurrentUrl(currentUrl === '/videos/hero.mp4' ? DEFAULT_FALLBACK_VIDEO : '/videos/hero.mp4');
           }}
-          className="absolute inset-0 w-full h-full object-cover object-center"
+          className="absolute inset-0 w-full h-full object-cover object-center will-change-transform"
         />
       </div>
 

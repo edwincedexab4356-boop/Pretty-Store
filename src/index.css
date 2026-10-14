@@ -167,3 +167,14 @@
 * {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Optimization: content-visibility allows the browser to skip layout and paint work for off-screen cards */
+.product-card-contain {
+  content-visibility: auto;
+  contain-intrinsic-size: 380px;
+}
+
+/* Optimize image rendering */
+img, video {
+  transform: translateZ(0);
+}
