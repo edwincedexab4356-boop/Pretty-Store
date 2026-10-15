@@ -4,7 +4,6 @@ import { CartProvider, useCart } from './context/CartContext';
 import { AdminAuthProvider, useAdminAuth } from './context/AdminAuthContext';
 import { Header } from './components/common/Header';
 import { Hero } from './components/hero/Hero';
-import { EditorialSection } from './components/editorial/EditorialSection';
 import { CategorySection } from './components/catalog/CategorySection';
 import { ProductGrid } from './components/catalog/ProductGrid';
 import { BenefitsBar } from './components/common/BenefitsBar';
@@ -195,19 +194,6 @@ function MainAppContent() {
           }}
         />
       </div>
-
-      {/* Editorial Section */}
-      <EditorialSection
-        onSelectCategory={(id) => {
-          if (id) setSelectedCategoryId(id);
-          const el = document.getElementById('catalogo');
-          if (el) el.scrollIntoView({ behavior: 'smooth' });
-        }}
-        onExploreClick={() => {
-          const el = document.getElementById('catalogo');
-          if (el) el.scrollIntoView({ behavior: 'smooth' });
-        }}
-      />
 
       {/* Collections / Category Showcase Bar */}
       <CategorySection

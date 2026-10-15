@@ -66,7 +66,7 @@ export function getProductImages(
  */
 export function getPrimaryProductImage(
   product?: any,
-  fallback: string = '/images/logo/logotipo.jpeg'
+  fallback: string = '/images/logo/logotipo-thumb.webp'
 ): string {
   if (!product) return fallback;
   const imgs = getProductImages(product);

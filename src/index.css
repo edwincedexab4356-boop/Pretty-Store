@@ -163,9 +163,13 @@
   }
 }
 
-/* Smooth hardware accelerated transitions */
+/* Smooth hardware accelerated transitions & eliminate 300ms mobile tap delay */
 * {
   -webkit-tap-highlight-color: transparent;
+}
+
+button, a, input, select, textarea, [role="button"] {
+  touch-action: manipulation;
 }
 
 /* Optimization: content-visibility allows the browser to skip layout and paint work for off-screen cards */
@@ -174,7 +178,7 @@
   contain-intrinsic-size: 380px;
 }
 
-/* Optimize image rendering */
+/* Optimize image and media rendering */
 img, video {
   transform: translateZ(0);
 }

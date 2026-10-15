@@ -52,6 +52,7 @@ export const Hero: React.FC<HeroProps> = ({ videoUrl = '/videos/hero.mp4', onExp
         <video
           ref={videoRef}
           src={currentUrl}
+          poster="/images/banners/hero-poster.jpg"
           autoPlay
           loop
           muted

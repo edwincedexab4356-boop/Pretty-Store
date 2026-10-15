@@ -19,6 +19,7 @@ import {
   Camera,
   Phone,
   HelpCircle,
+  ExternalLink,
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useStoreConfig } from '../../context/StoreConfigContext';
@@ -99,6 +100,7 @@ export const CheckoutDemoModal: React.FC<CheckoutModalProps> = ({ onClose }) => 
   const [isProcessingVoucher, setIsProcessingVoucher] = useState(false);
   const [copiedYappy, setCopiedYappy] = useState(false);
   const [copiedBank, setCopiedBank] = useState(false);
+  const [copiedCardLink, setCopiedCardLink] = useState(false);
   const voucherInputRef = useRef<HTMLInputElement | null>(null);
 
   // Confirmed Order
@@ -342,10 +344,18 @@ export const CheckoutDemoModal: React.FC<CheckoutModalProps> = ({ onClose }) => 
     setTimeout(() => setCopiedYappy(false), 2000);
   };
 
+  const CARD_PAYMENT_URL = 'https://checkout.paguelofacil.com/W_F9464GL';
+
   const handleCopyBank = () => {
     navigator.clipboard.writeText('04-72-98-594685-0');
     setCopiedBank(true);
     setTimeout(() => setCopiedBank(false), 2000);
+  };
+
+  const handleCopyCardLink = () => {
+    navigator.clipboard.writeText(CARD_PAYMENT_URL);
+    setCopiedCardLink(true);
+    setTimeout(() => setCopiedCardLink(false), 2000);
   };
 
   // WhatsApp Link Builder
@@ -370,8 +380,10 @@ export const CheckoutDemoModal: React.FC<CheckoutModalProps> = ({ onClose }) => 
 
     let voucherSection = '';
     const voucherUrl = orderDraft.comprobantePago || voucherDataUrl || '';
-    if (voucherUrl && voucherUrl.startsWith('http')) {
+    if (voucherUrl && (voucherUrl.startsWith('http://') || voucherUrl.startsWith('https://'))) {
       voucherSection = `📸 *FOTO DEL COMPROBANTE DE PAGO:*\n${voucherUrl}\n\n`;
+    } else if (voucherUrl) {
+      voucherSection = `📸 *COMPROBANTE DE PAGO ADJUNTO:*\n*(Adjunto la captura del comprobante directamente a este chat)* 👆\n\n`;
     }
 
     const message = `${voucherSection}🛍️ *PEDIDO OFICIAL (${orderNum}) - PRETTY STORE*
@@ -470,66 +482,22 @@ _Enviado desde Pretty Store Oficial_`;
             onSubmit={handleContinueToReview}
             className="overflow-y-auto overscroll-contain touch-scroll p-4 sm:p-6 lg:p-7 space-y-6 text-left"
           >
-            {/* 1. ¿CÓMO DESEAS RECIBIR TU COMPRA? */}
+            {/* 1. MÉTODO DE ENVÍO (A TODO PANAMÁ) */}
             <div className="space-y-3.5">
               <label className="text-xs uppercase tracking-[0.16em] text-white font-bold flex items-center gap-1.5">
                 <Truck size={15} className="text-[#fbbf24]" />
-                <span>1. ¿Cómo deseas recibir tu compra? *</span>
+                <span>1. Método de Envío (A todo Panamá) *</span>
               </label>
 
-              <div className="grid grid-cols-2 gap-3">
-                {/* Retirar en el Local */}
-                <button
-                  type="button"
-                  onClick={() => setDeliveryType('retiro')}
-                  className={`p-3.5 sm:p-4 rounded-xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                    deliveryType === 'retiro'
-                      ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-1 ring-[#fbbf24]'
-                      : 'border-white/10 bg-black/40 text-stone-400 hover:text-white hover:border-white/20'
-                  }`}
-                >
-                  <div className="w-9 h-9 rounded-lg bg-black/60 flex items-center justify-center shrink-0 border border-white/10 text-stone-300">
-                    <Store size={18} />
-                  </div>
-                  <div>
-                    <span className="font-bold text-xs sm:text-sm text-white block">Retirar en el Local</span>
-                    <span className="text-[10px] sm:text-[11px] text-stone-400 block">Gratis ($0.00)</span>
-                  </div>
-                </button>
-
-                {/* Envío express */}
-                <button
-                  type="button"
-                  onClick={() => setDeliveryType('delivery')}
-                  className={`p-3.5 sm:p-4 rounded-xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                    deliveryType === 'delivery'
-                      ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-1 ring-[#fbbf24]'
-                      : 'border-white/10 bg-black/40 text-stone-400 hover:text-white hover:border-white/20'
-                  }`}
-                >
-                  <div className="w-9 h-9 rounded-lg bg-[#fbbf24]/15 flex items-center justify-center shrink-0 border border-[#fbbf24]/30 text-[#fbbf24]">
-                    <Truck size={18} />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="font-bold text-xs sm:text-sm text-white block">Envío express</span>
-                    <span className="text-[10px] sm:text-[11px] text-stone-400 truncate block">
-                      Servientrega / Ferguson / UnoExpress
-                    </span>
-                  </div>
-                </button>
-              </div>
-
-              {/* SELECCIONA TU ENVÍO SECTION */}
-              {deliveryType === 'delivery' && (
-                <div className="p-4 sm:p-5 rounded-2xl bg-black/60 border border-white/10 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-white uppercase tracking-wider">
-                      SELECCIONA TU ENVÍO *
-                    </span>
-                    <span className="text-[10px] text-stone-400 italic">
-                      * El envío se suma automáticamente al total
-                    </span>
-                  </div>
+              <div className="p-4 sm:p-5 rounded-2xl bg-black/60 border border-white/10 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-white uppercase tracking-wider">
+                    SELECCIONA TU EMPRESA DE ENVÍO *
+                  </span>
+                  <span className="text-[10px] text-stone-400 italic">
+                    * El costo de envío se suma automáticamente al total
+                  </span>
+                </div>
 
                   {/* 3 Couriers in a row */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -777,7 +745,6 @@ _Enviado desde Pretty Store Oficial_`;
                     </p>
                   </div>
                 </div>
-              )}
             </div>
 
             {/* 2. DATOS DE CONTACTO DEL CLIENTE * */}
@@ -885,13 +852,9 @@ _Enviado desde Pretty Store Oficial_`;
                 </div>
               )}
               <div className="flex justify-between text-stone-300">
-                <span>
-                  {deliveryType === 'retiro'
-                    ? 'Retiro en tienda física:'
-                    : `Costo estimado de envío (${courier}):`}
-                </span>
+                <span>Costo estimado de envío ({courier}):</span>
                 <span className="font-mono text-[#fbbf24] font-bold">
-                  {deliveryType === 'retiro' ? 'Gratis ($0.00)' : `+$${shippingCost.toFixed(2)} USD`}
+                  +${shippingCost.toFixed(2)} USD
                 </span>
               </div>
               <div className="pt-2 border-t border-white/10 flex justify-between items-center text-sm font-bold">
@@ -985,14 +948,10 @@ _Enviado desde Pretty Store Oficial_`;
                     <span>ENTREGA Y DESTINO</span>
                   </span>
                   <strong className="text-white text-sm block font-semibold">
-                    {orderDraft.tipoEntrega === 'retiro'
-                      ? 'Retiro en Tienda Física (Costa del Este)'
-                      : `Envío Express vía ${orderDraft.courier}`}
+                    Envío Express vía {orderDraft.courier || 'Courier'}
                   </strong>
                   <span className="text-stone-300 text-[11px] leading-relaxed block">
-                    {orderDraft.tipoEntrega === 'retiro'
-                      ? 'Local oficial Pretty Store · Panamá'
-                      : `Sucursal de envío (${orderDraft.courier}): ${orderDraft.sucursalOdomicilio} (${orderDraft.provincia})`}
+                    Sucursal de envío ({orderDraft.courier}): {orderDraft.sucursalOdomicilio} ({orderDraft.provincia})
                   </span>
                 </div>
               </div>
@@ -1058,15 +1017,9 @@ _Enviado desde Pretty Store Oficial_`;
                   </div>
                 )}
                 <div className="flex justify-between text-stone-300">
-                  <span>
-                    {orderDraft.tipoEntrega === 'retiro'
-                      ? 'Retiro en tienda física:'
-                      : `Costo estimado de envío (${orderDraft.courier}):`}
-                  </span>
+                  <span>Costo estimado de envío ({orderDraft.courier}):</span>
                   <span className="font-mono text-[#fbbf24] font-bold">
-                    {orderDraft.shipping > 0
-                      ? `+$${orderDraft.shipping.toFixed(2)} USD`
-                      : 'Gratis ($0.00)'}
+                    +${orderDraft.shipping.toFixed(2)} USD
                   </span>
                 </div>
                 <div className="pt-2 border-t border-white/10 flex justify-between items-center text-sm font-bold">
@@ -1245,12 +1198,34 @@ _Enviado desde Pretty Store Oficial_`;
                     </button>
                   </div>
 
-                  <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-stone-300 space-y-1.5">
-                    <span className="font-bold text-white block">¿Cómo hacer la transferencia?</span>
-                    <ol className="list-decimal list-inside space-y-1 text-[11px] text-stone-300 pl-1 leading-relaxed">
-                      <li>Toca el botón amarillo <strong className="text-[#fbbf24]">"COPIAR CUENTA"</strong>.</li>
-                      <li>Entra a la banca en línea de tu banco y transfiere a la cuenta de Banco General.</li>
-                      <li>Guarda la foto o captura del comprobante al terminar.</li>
+                  {/* Instrucciones claras y amigables para personas mayores */}
+                  <div className="p-4 rounded-xl bg-white/[0.04] border border-[#fbbf24]/30 text-xs text-stone-200 space-y-2.5">
+                    <div className="flex items-center gap-2 text-white font-bold text-sm">
+                      <span className="w-6 h-6 rounded-full bg-[#fbbf24] text-black font-black text-xs flex items-center justify-center">?</span>
+                      <span>Guía Fácil para Transferencia Bancaria (Paso a Paso):</span>
+                    </div>
+                    <ol className="list-decimal list-inside space-y-2 text-xs text-stone-300 pl-1 leading-relaxed">
+                      <li>
+                        Toca el botón amarillo <strong className="text-[#fbbf24]">"COPIAR CUENTA"</strong> para guardar el número automáticamente.
+                      </li>
+                      <li>
+                        Abre la aplicación de tu banco o entra a la página web de tu banco en tu teléfono o computadora (también puedes hacerlo en ventanilla bancaria).
+                      </li>
+                      <li>
+                        Elige la opción <strong>Transferir</strong> hacia <strong>Banco General (Cuenta de Ahorros)</strong>.
+                      </li>
+                      <li>
+                        Pega o escribe el número de cuenta: <strong>04-72-98-594685-0</strong> a nombre de <strong>JESUS ALEJANDRO CARDONA ESCOBAR</strong>.
+                      </li>
+                      <li>
+                        Coloca el monto exacto: <strong className="text-[#fbbf24]">${orderDraft.total.toFixed(2)} USD</strong> y envía la transferencia.
+                      </li>
+                      <li>
+                        Toma una <strong>foto o captura de pantalla</strong> del comprobante de transferencia exitosa.
+                      </li>
+                      <li>
+                        Vuelve a esta pantalla y toca el botón del <strong>PASO 2</strong> (abajo) para subir tu comprobante. ¡Y tu pedido quedará registrado!
+                      </li>
                     </ol>
                   </div>
                 </div>
@@ -1258,13 +1233,76 @@ _Enviado desde Pretty Store Oficial_`;
 
               {/* Tarjeta Details */}
               {orderDraft.metodoPago === 'tarjeta' && (
-                <div className="p-4 rounded-xl bg-black/90 border border-[#fbbf24]/40 space-y-2">
-                  <span className="text-xs text-stone-300 uppercase tracking-wider block font-bold">
-                    PAGO EN LÍNEA CON TARJETA DE DÉBITO O CRÉDITO:
-                  </span>
-                  <p className="text-xs text-stone-300 leading-relaxed">
-                    Procesador oficial habilitado para Visa, Mastercard y Clave. Adjunta tu captura o comprobante una vez efectuado el pago.
-                  </p>
+                <div className="space-y-4">
+                  <div className="p-5 rounded-2xl bg-black/90 border-2 border-[#fbbf24]/50 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-inner">
+                    <div className="space-y-2">
+                      <span className="text-xs text-stone-300 uppercase tracking-wider block font-bold">
+                        ENLACE SEGURO PARA PAGO CON TARJETA:
+                      </span>
+                      <span className="text-xs sm:text-sm font-mono text-emerald-400 block break-all font-semibold bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/30">
+                        {CARD_PAYMENT_URL}
+                      </span>
+                      <div className="space-y-0.5 text-xs text-stone-200">
+                        <p>
+                          Acepta tarjetas de débito y crédito <strong className="text-white">(Visa, Mastercard y Clave)</strong>
+                        </p>
+                        <p className="text-[#fbbf24] font-semibold text-xs pt-1">
+                          Monto total a pagar: <strong className="text-sm underline">${orderDraft.total.toFixed(2)} USD</strong> (incluye envío)
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0">
+                      <a
+                        href={CARD_PAYMENT_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-6 py-4 rounded-xl bg-[#fbbf24] hover:bg-[#f59e0b] text-black text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xl shadow-[#fbbf24]/25 min-h-[52px] active:scale-[0.98] text-center"
+                      >
+                        <ExternalLink size={18} />
+                        <span>ABRIR ENLACE DE PAGO</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={handleCopyCardLink}
+                        className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-stone-200 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                      >
+                        {copiedCardLink ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+                        <span>{copiedCardLink ? '¡Enlace copiado!' : 'Copiar enlace'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Instrucciones claras y amigables para personas mayores */}
+                  <div className="p-4 rounded-xl bg-white/[0.04] border border-[#fbbf24]/30 text-xs text-stone-200 space-y-2.5">
+                    <div className="flex items-center gap-2 text-white font-bold text-sm">
+                      <span className="w-6 h-6 rounded-full bg-[#fbbf24] text-black font-black text-xs flex items-center justify-center">?</span>
+                      <span>Guía Fácil para Pagar con Tarjeta (Paso a Paso):</span>
+                    </div>
+                    <ol className="list-decimal list-inside space-y-2 text-xs text-stone-300 pl-1 leading-relaxed">
+                      <li>
+                        Toca el botón amarillo <strong className="text-[#fbbf24]">"ABRIR ENLACE DE PAGO"</strong>. Se abrirá una página segura de pago.
+                      </li>
+                      <li>
+                        Escribe tu nombre tal como está escrito en tu tarjeta de débito o crédito.
+                      </li>
+                      <li>
+                        Coloca los <strong>16 números</strong> que ves en el frente de tu tarjeta.
+                      </li>
+                      <li>
+                        Coloca la <strong>fecha de vencimiento</strong> (mes y año) y el <strong>código de seguridad</strong> (los 3 números que están al reverso de la tarjeta).
+                      </li>
+                      <li>
+                        Presiona el botón de pagar por los <strong>${orderDraft.total.toFixed(2)} USD</strong>.
+                      </li>
+                      <li>
+                        Cuando la pantalla te indique que el pago fue aprobado, toma una <strong>foto o captura de pantalla</strong> del comprobante.
+                      </li>
+                      <li>
+                        Regresa a esta ventana y toca el botón del <strong>PASO 2</strong> (abajo) para subir tu comprobante. ¡Y tu orden quedará confirmada al instante!
+                      </li>
+                    </ol>
+                  </div>
                 </div>
               )}
             </div>
@@ -1521,9 +1559,7 @@ _Enviado desde Pretty Store Oficial_`;
                     MODALIDAD DE ENTREGA:
                   </span>
                   <span className="text-stone-200 font-medium block">
-                    {orderDraft.tipoEntrega === 'retiro'
-                      ? 'Retiro en el Local / Tienda física'
-                      : `Envío express (${orderDraft.courier}) en ${orderDraft.provincia} - ${orderDraft.sucursalOdomicilio}`}
+                    Envío express ({orderDraft.courier}) en {orderDraft.provincia} - {orderDraft.sucursalOdomicilio}
                   </span>
                 </div>
               </div>

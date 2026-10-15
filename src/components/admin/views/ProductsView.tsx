@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Plus,
   Search,
@@ -40,6 +40,7 @@ export const ProductsView: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [sortBy, setSortBy] = useState<'newest' | 'name' | 'priceAsc' | 'priceDesc'>('newest');
 
   // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -50,7 +51,7 @@ export const ProductsView: React.FC = () => {
   const [formName, setFormName] = useState('');
   const [formCategory, setFormCategory] = useState('');
   const [formPrice, setFormPrice] = useState('25.00');
-  const [formCost, setFormCost] = useState('12.00');
+  const [formCost, setFormCost] = useState('0.00');
   const [formStock, setFormStock] = useState('10');
   const [formDescription, setFormDescription] = useState('');
   const [formImageUrl, setFormImageUrl] = useState('');
@@ -84,7 +85,7 @@ export const ProductsView: React.FC = () => {
     setFormName('');
     setFormCategory(categories[0]?.id || '');
     setFormPrice('25.00');
-    setFormCost('12.00');
+    setFormCost('0.00');
     setFormStock('10');
     setFormDescription('');
     setFormImageUrl('');
@@ -190,16 +191,27 @@ export const ProductsView: React.FC = () => {
         activo: formActive,
       };
 
+      let savedProd: Producto | null = null;
       if (editingProduct) {
-        await updateAdminProduct(editingProduct.id, payload);
+        savedProd = await updateAdminProduct(editingProduct.id, payload);
+        if (savedProd) {
+          setProducts((prev) => prev.map((p) => (p.id === editingProduct.id ? savedProd! : p)));
+        }
       } else {
-        await createAdminProduct(payload);
+        savedProd = await createAdminProduct(payload);
+        if (savedProd) {
+          setProducts((prev) => [savedProd!, ...prev.filter((p) => p.id !== savedProd!.id)]);
+        }
       }
 
       setIsModalOpen(false);
+      if (!editingProduct) {
+        setCategoryFilter('');
+        setSearchTerm('');
+      }
       await loadData();
     } catch (err: any) {
-      alert('Error al guardar el producto en Supabase: ' + err?.message);
+      alert('Error al guardar el producto: ' + (err?.message || 'Error'));
     } finally {
       setIsSubmitting(false);
     }
@@ -211,18 +223,32 @@ export const ProductsView: React.FC = () => {
     setProducts((prev) => prev.filter((item) => item.id !== p.id));
   };
 
-  const filteredProducts = products.filter((p) => {
-    const matchesSearch = p.nombre.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCat = categoryFilter ? p.categoria_id === categoryFilter : true;
-    return matchesSearch && matchesCat;
-  });
+  const filteredProducts = useMemo(() => {
+    const list = products.filter((p) => {
+      const matchesSearch = p.nombre.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCat = categoryFilter ? p.categoria_id === categoryFilter : true;
+      return matchesSearch && matchesCat;
+    });
+
+    return list.sort((a, b) => {
+      if (sortBy === 'newest') {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return dateB - dateA;
+      }
+      if (sortBy === 'name') return a.nombre.localeCompare(b.nombre);
+      if (sortBy === 'priceAsc') return a.precio - b.precio;
+      if (sortBy === 'priceDesc') return b.precio - a.precio;
+      return 0;
+    });
+  }, [products, searchTerm, categoryFilter, sortBy]);
 
   return (
     <div className="space-y-6">
       {/* Top Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-72">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-60 min-w-[180px]">
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
             <input
               type="text"
@@ -244,6 +270,18 @@ export const ProductsView: React.FC = () => {
                 {c.nombre}
               </option>
             ))}
+          </select>
+
+          <select
+            value={sortBy}
+            onChange={(e: any) => setSortBy(e.target.value)}
+            className="px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-xs text-stone-300 focus:outline-none focus:border-[#c5a059]"
+            title="Ordenar catálogo"
+          >
+            <option value="newest">Más recientes primero</option>
+            <option value="name">Nombre (A - Z)</option>
+            <option value="priceAsc">Precio: Menor a Mayor</option>
+            <option value="priceDesc">Precio: Mayor a Menor</option>
           </select>
         </div>
 
@@ -583,33 +621,25 @@ export const ProductsView: React.FC = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-stone-300 font-semibold mb-1">Precio ($) *</label>
                   <input
                     type="number"
                     step="0.01"
                     required
+                    placeholder="0.00"
                     value={formPrice}
                     onChange={(e) => setFormPrice(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/15 text-white focus:outline-none focus:border-[#c5a059] font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-stone-300 font-semibold mb-1">Costo ($)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formCost}
-                    onChange={(e) => setFormCost(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/15 text-white focus:outline-none focus:border-[#c5a059] font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-stone-300 font-semibold mb-1">Stock *</label>
+                  <label className="block text-stone-300 font-semibold mb-1">Stock Disponible *</label>
                   <input
                     type="number"
                     required
+                    placeholder="10"
                     value={formStock}
                     onChange={(e) => setFormStock(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/15 text-white focus:outline-none focus:border-[#c5a059] font-mono"

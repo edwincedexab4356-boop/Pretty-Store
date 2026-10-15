@@ -12,7 +12,7 @@ interface ProductCardProps {
   priority?: boolean;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({
+const ProductCardComponent: React.FC<ProductCardProps> = ({
   product,
   categoryName,
   onQuickView,
@@ -141,8 +141,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <div className="flex flex-col items-center justify-center text-center p-4 sm:p-6 bg-[#121215] w-full h-full select-none">
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border border-white/10 p-0.5 flex items-center justify-center mb-2.5 bg-black/60 overflow-hidden shadow-inner group-hover:scale-105 transition-transform">
               <img
-                src="/images/logo/logotipo.jpeg"
+                src="/images/logo/logotipo-thumb.webp"
                 alt="Pretty Store"
+                width={56}
+                height={56}
                 className="w-full h-full object-cover rounded-full opacity-85"
                 loading="lazy"
                 decoding="async"
@@ -326,3 +328,5 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     </article>
   );
 };
+
+export const ProductCard = React.memo(ProductCardComponent);

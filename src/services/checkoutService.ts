@@ -41,43 +41,92 @@ export async function uploadVoucherToSupabaseStorage(
     const cleanNum = orderNumber.replace(/[^a-zA-Z0-9_-]/g, '_');
     const fileName = `pago_${cleanNum}_${Date.now()}.jpg`;
 
-    let fileBody: Blob | File;
+    let base64String = '';
+    let fileBody: Blob | File | null = null;
+
     if (typeof rawFileOrBase64 === 'string') {
-      if (rawFileOrBase64.startsWith('http')) {
+      if (rawFileOrBase64.startsWith('http://') || rawFileOrBase64.startsWith('https://')) {
         return rawFileOrBase64;
       }
-      const res = await fetch(rawFileOrBase64);
-      fileBody = await res.blob();
+      base64String = rawFileOrBase64;
+      try {
+        const res = await fetch(rawFileOrBase64);
+        fileBody = await res.blob();
+      } catch {
+        // continue
+      }
     } else {
       fileBody = rawFileOrBase64;
+      // Convert File to base64 for /api/upload-voucher
+      base64String = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(rawFileOrBase64);
+      });
     }
 
-    const candidateBuckets = ['comprobantes', 'product-images'];
+    let publicUrlFromServer: string | null = null;
 
-    for (const bucket of candidateBuckets) {
+    // 1. Upload to local express server endpoint for instant public URL
+    if (base64String && typeof window !== 'undefined') {
       try {
-        const { data, error } = await supabase.storage
-          .from(bucket)
-          .upload(fileName, fileBody, {
-            contentType: 'image/jpeg',
-            upsert: true,
-          });
-
-        if (!error && data) {
-          const { data: pubData } = supabase.storage.from(bucket).getPublicUrl(fileName);
-          if (pubData?.publicUrl) {
-            return pubData.publicUrl;
+        const clientOrigin = window.location.origin;
+        const response = await fetch('/api/upload-voucher', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image: base64String,
+            orderNumber: cleanNum,
+            clientOrigin,
+          }),
+        });
+        if (response.ok) {
+          const resJson = await response.json();
+          if (resJson.url) {
+            publicUrlFromServer = resJson.url;
           }
         }
-      } catch {
-        // Try next bucket
+      } catch (e) {
+        console.warn('Local voucher upload fallback failed:', e);
       }
     }
 
-    return typeof rawFileOrBase64 === 'string' ? rawFileOrBase64 : null;
+    // 2. Also try uploading to Supabase Storage candidate buckets
+    if (fileBody) {
+      const candidateBuckets = ['comprobantes', 'product-images'];
+      for (const bucket of candidateBuckets) {
+        try {
+          const { data, error } = await supabase.storage
+            .from(bucket)
+            .upload(fileName, fileBody, {
+              contentType: 'image/jpeg',
+              upsert: true,
+            });
+
+          if (!error && data) {
+            const { data: pubData } = supabase.storage.from(bucket).getPublicUrl(fileName);
+            if (pubData?.publicUrl) {
+              return pubData.publicUrl;
+            }
+          }
+        } catch {
+          // Try next bucket
+        }
+      }
+    }
+
+    // Return the server's public URL if Supabase storage bucket not created yet
+    if (publicUrlFromServer) {
+      return publicUrlFromServer;
+    }
+
+    return typeof rawFileOrBase64 === 'string' && rawFileOrBase64.startsWith('http')
+      ? rawFileOrBase64
+      : null;
   } catch (err) {
     console.warn('Error uploading voucher image to storage:', err);
-    return typeof rawFileOrBase64 === 'string' ? rawFileOrBase64 : null;
+    return null;
   }
 }
 
@@ -89,7 +138,7 @@ export async function createRealOrder(payload: CheckoutPayload): Promise<Checkou
   const orderNumber = `ORD-${timestamp}`;
 
   try {
-    // 1. Subir comprobante si existe
+    // 1. Subir comprobante y obtener link público
     let publicVoucherUrl: string | null = null;
     if (payload.voucherRawFile) {
       publicVoucherUrl = await uploadVoucherToSupabaseStorage(payload.voucherRawFile, orderNumber);
@@ -128,7 +177,7 @@ export async function createRealOrder(payload: CheckoutPayload): Promise<Checkou
       // Ignore client table errors to not block checkout
     }
 
-    // 3. Insertar Pedido
+    // 3. Preparar resumen de productos
     const itemsSummary = payload.items.map((it) => {
       const unitPrice = it.selectedOption?.precio ?? it.product.precio;
       return {
@@ -143,34 +192,66 @@ export async function createRealOrder(payload: CheckoutPayload): Promise<Checkou
       };
     });
 
-    const orderInsertPayload: any = {
+    const detailedNotes = `Cliente: ${payload.nombre} - Tel: ${payload.telefono}${
+      payload.direccion ? ` - Dir: ${payload.direccion}` : ''
+    }${payload.promoTitle ? ` [Promo: ${payload.promoTitle}]` : ''} - Envio: $${payload.shipping.toFixed(2)} - Descuento: $${payload.discount.toFixed(2)} [ITEMS_JSON]:${JSON.stringify(itemsSummary)}`;
+
+    // Safe base payload that matches exact Supabase table schema
+    const safePayload: any = {
       cliente_id: clienteId,
+      cliente_nombre: payload.nombre.trim(),
+      cliente_telefono: payload.telefono.trim(),
+      cliente_email: payload.email?.trim() || null,
+      direccion: payload.direccion?.trim() || '',
       total: payload.total,
       subtotal: payload.subtotal,
-      descuento: payload.discount,
-      envio: payload.shipping,
       metodo_pago: payload.metodoPago,
       tipo_entrega: payload.tipoEntrega,
       courier: payload.courier || null,
       estado: 'confirmado',
-      notas: `Cliente: ${payload.nombre} - Tel: ${payload.telefono}${payload.direccion ? ` - Dir: ${payload.direccion}` : ''}${payload.promoTitle ? ` [Promo: ${payload.promoTitle}]` : ''} [ITEMS_JSON]:${JSON.stringify(itemsSummary)}`,
-      comprobante_pago: effectiveVoucher,
+      notas: detailedNotes,
+      comprobante_pago: publicVoucherUrl || effectiveVoucher,
     };
 
     let resolvedOrderId = orderNumber;
+    let createdOrder: any = null;
 
+    // Intentar inserción con columnas opcionales (descuento, envio)
     try {
-      const { data: createdOrder, error: orderError } = await supabase
-        .from('pedidos')
-        .insert(orderInsertPayload)
-        .select('*')
-        .single();
+      const fullPayload = {
+        ...safePayload,
+        descuento: payload.discount,
+        envio: payload.shipping,
+      };
 
-      if (!orderError && createdOrder) {
-        resolvedOrderId = createdOrder.id;
+      const res = await supabase.from('pedidos').insert(fullPayload).select('*').single();
+      if (!res.error && res.data) {
+        createdOrder = res.data;
+      } else {
+        // Si falló por falta de columnas como descuento/envio, reintentar con el payload seguro garantizado
+        console.warn('Insert with full columns failed, retrying with safePayload:', res.error?.message);
+        const retryRes = await supabase.from('pedidos').insert(safePayload).select('*').single();
+        if (!retryRes.error && retryRes.data) {
+          createdOrder = retryRes.data;
+        } else {
+          console.error('Fatal retry insert error:', retryRes.error);
+        }
       }
     } catch (err) {
-      console.warn('Direct order insert fallback:', err);
+      console.warn('Direct order insert error, attempting safe payload:', err);
+      try {
+        const retryRes = await supabase.from('pedidos').insert(safePayload).select('*').single();
+        if (!retryRes.error && retryRes.data) {
+          createdOrder = retryRes.data;
+        }
+      } catch (e) {
+        console.error('Final fallback insert failed:', e);
+      }
+    }
+
+    if (createdOrder?.id) {
+      resolvedOrderId = String(createdOrder.id);
+      console.log('Order successfully created in Supabase with ID:', createdOrder.id);
     }
 
     // 4. Guardar copia de seguridad del recibo en IndexedDB y localStorage
@@ -211,6 +292,37 @@ export async function createRealOrder(payload: CheckoutPayload): Promise<Checkou
     if (effectiveVoucher) {
       saveVoucherImageToDb(String(resolvedOrderId), effectiveVoucher);
       saveVoucherImageToDb(orderNumber, effectiveVoucher);
+    }
+
+    // 5. Sincronizar copia del pedido en el servidor para disponibilidad en todos los dispositivos
+    try {
+      if (typeof window !== 'undefined') {
+        fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: String(resolvedOrderId),
+            numero_orden: orderNumber,
+            total: payload.total,
+            subtotal: payload.subtotal,
+            descuento: payload.discount,
+            envio: payload.shipping,
+            metodo_pago: payload.metodoPago,
+            tipo_entrega: payload.tipoEntrega,
+            courier: payload.courier,
+            estado: 'confirmado',
+            comprobante_pago: effectiveVoucher,
+            notas: safePayload.notas,
+            cliente_nombre: payload.nombre.trim(),
+            cliente_telefono: payload.telefono.trim(),
+            cliente_email: payload.email?.trim() || null,
+            direccion: payload.direccion?.trim() || '',
+            created_at: new Date().toISOString(),
+          }),
+        }).catch((e) => console.warn('Server orders sync silent error:', e));
+      }
+    } catch {
+      // ignore
     }
 
     return {

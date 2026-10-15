@@ -1,6 +1,7 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
@@ -16,6 +17,156 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+  const uploadsDir = path.resolve(__dirname, 'public', 'uploads', 'vouchers');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+
+  // Serve uploads statically with open CORS and cache
+  app.use('/uploads', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    next();
+  }, express.static(path.resolve(__dirname, 'public', 'uploads')));
+
+  const dataDir = path.resolve(__dirname, 'data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  const ordersFilePath = path.join(dataDir, 'orders.json');
+  const productsFilePath = path.join(dataDir, 'products.json');
+
+  const getStoredOrders = (): any[] => {
+    try {
+      if (fs.existsSync(ordersFilePath)) {
+        return JSON.parse(fs.readFileSync(ordersFilePath, 'utf-8'));
+      }
+    } catch (e) {
+      console.warn('Error reading orders.json:', e);
+    }
+    return [];
+  };
+
+  const saveStoredOrders = (orders: any[]) => {
+    try {
+      fs.writeFileSync(ordersFilePath, JSON.stringify(orders, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('Error writing orders.json:', e);
+    }
+  };
+
+  const getStoredProducts = (): any[] => {
+    try {
+      if (fs.existsSync(productsFilePath)) {
+        return JSON.parse(fs.readFileSync(productsFilePath, 'utf-8'));
+      }
+    } catch (e) {
+      console.warn('Error reading products.json:', e);
+    }
+    return [];
+  };
+
+  const saveStoredProducts = (products: any[]) => {
+    try {
+      fs.writeFileSync(productsFilePath, JSON.stringify(products, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('Error writing products.json:', e);
+    }
+  };
+
+  // API endpoint for uploading payment vouchers
+  app.post('/api/upload-voucher', (req, res) => {
+    try {
+      const { image, orderNumber, clientOrigin } = req.body;
+      if (!image || typeof image !== 'string') {
+        return res.status(400).json({ error: 'No image provided' });
+      }
+
+      if (image.startsWith('http://') || image.startsWith('https://')) {
+        return res.json({ url: image });
+      }
+
+      const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (!matches || matches.length !== 3) {
+        return res.status(400).json({ error: 'Invalid image format' });
+      }
+
+      const mimeType = matches[1];
+      const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+      const buffer = Buffer.from(matches[2], 'base64');
+      const safeOrderNum = (orderNumber || 'pago').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filename = `comprobante_${safeOrderNum}_${Date.now()}.${ext}`;
+      const filePath = path.join(uploadsDir, filename);
+
+      fs.writeFileSync(filePath, buffer);
+
+      let publicUrl = '';
+      if (clientOrigin && (clientOrigin.startsWith('http://') || clientOrigin.startsWith('https://'))) {
+        publicUrl = `${clientOrigin.replace(/\/+$/, '')}/uploads/vouchers/${filename}`;
+      } else {
+        const proto = req.headers['x-forwarded-proto'] || req.protocol;
+        const host = req.get('host');
+        publicUrl = `${proto}://${host}/uploads/vouchers/${filename}`;
+      }
+
+      return res.json({ url: publicUrl, filename });
+    } catch (err: any) {
+      console.error('Error in /api/upload-voucher:', err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Cross-device orders sync backup
+  app.get('/api/orders', (_req, res) => {
+    res.json(getStoredOrders());
+  });
+
+  app.post('/api/orders', (req, res) => {
+    try {
+      const newOrder = req.body;
+      if (!newOrder || !newOrder.id) {
+        return res.status(400).json({ error: 'Invalid order data' });
+      }
+      const orders = getStoredOrders();
+      const existingIdx = orders.findIndex((o) => String(o.id) === String(newOrder.id));
+      if (existingIdx >= 0) {
+        orders[existingIdx] = { ...orders[existingIdx], ...newOrder, updated_at: new Date().toISOString() };
+      } else {
+        orders.unshift({ ...newOrder, created_at: newOrder.created_at || new Date().toISOString() });
+      }
+      saveStoredOrders(orders);
+      return res.json({ success: true, order: newOrder });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Cross-device products sync backup
+  app.get('/api/products', (_req, res) => {
+    res.json(getStoredProducts());
+  });
+
+  app.post('/api/products', (req, res) => {
+    try {
+      const product = req.body;
+      if (!product || !product.nombre) {
+        return res.status(400).json({ error: 'Product name required' });
+      }
+      const products = getStoredProducts();
+      const id = product.id || `prod_${Date.now()}`;
+      const prodWithId = { ...product, id };
+      const idx = products.findIndex((p) => String(p.id) === String(id));
+      if (idx >= 0) {
+        products[idx] = prodWithId;
+      } else {
+        products.unshift(prodWithId);
+      }
+      saveStoredProducts(products);
+      return res.json({ success: true, product: prodWithId });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
 
   if (!isProd) {
     const vite = await createViteServer({
