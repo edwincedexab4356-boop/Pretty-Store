@@ -91,8 +91,21 @@ async function startServer() {
         return res.status(400).json({ error: 'Invalid image format' });
       }
 
-      const mimeType = matches[1];
-      const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+      const mimeType = matches[1].toLowerCase();
+      let ext = 'jpg';
+      if (mimeType.includes('pdf')) {
+        ext = 'pdf';
+      } else if (mimeType.includes('png')) {
+        ext = 'png';
+      } else if (mimeType.includes('webp')) {
+        ext = 'webp';
+      } else if (mimeType.includes('gif')) {
+        ext = 'gif';
+      } else if (mimeType.includes('svg')) {
+        ext = 'svg';
+      } else {
+        ext = 'jpg';
+      }
       const buffer = Buffer.from(matches[2], 'base64');
       const safeOrderNum = (orderNumber || 'pago').replace(/[^a-zA-Z0-9_-]/g, '_');
       const filename = `comprobante_${safeOrderNum}_${Date.now()}.${ext}`;

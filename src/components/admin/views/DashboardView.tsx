@@ -65,14 +65,15 @@ export const DashboardView: React.FC<{ onNavigateTab: (tab: AdminTab) => void }>
         oList.forEach((o) => {
           const createdAt = o.created_at || '';
           const total = Number(o.total) || 0;
-          if (createdAt >= startOfDay && o.estado !== 'cancelado') {
+          const isAprobado = o.estado !== 'pendiente' && o.estado !== 'cancelado';
+          if (createdAt >= startOfDay && isAprobado) {
             vHoy += total;
             pHoy += 1;
           }
-          if (createdAt >= startOfMonth && o.estado !== 'cancelado') {
+          if (createdAt >= startOfMonth && isAprobado) {
             vMes += total;
           }
-          if (o.estado === 'pendiente' || o.estado === 'confirmado' || o.estado === 'preparando') {
+          if (o.estado === 'pendiente') {
             pPend += 1;
           }
         });
@@ -103,7 +104,7 @@ export const DashboardView: React.FC<{ onNavigateTab: (tab: AdminTab) => void }>
           const dayLabel = d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' });
 
           const dayTotal = oList
-            .filter((ord) => ord.created_at && ord.created_at.startsWith(dateStr) && ord.estado !== 'cancelado')
+            .filter((ord) => ord.created_at && ord.created_at.startsWith(dateStr) && ord.estado !== 'pendiente' && ord.estado !== 'cancelado')
             .reduce((sum, ord) => sum + (Number(ord.total) || 0), 0);
 
           history.push({ date: dateStr, label: dayLabel, total: dayTotal });

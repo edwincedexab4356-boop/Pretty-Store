@@ -101,6 +101,8 @@ export const CheckoutDemoModal: React.FC<CheckoutModalProps> = ({ onClose }) => 
   const [copiedYappy, setCopiedYappy] = useState(false);
   const [copiedBank, setCopiedBank] = useState(false);
   const [copiedCardLink, setCopiedCardLink] = useState(false);
+  const [uploadedVoucherPublicUrl, setUploadedVoucherPublicUrl] = useState<string | null>(null);
+  const [copiedVoucherImage, setCopiedVoucherImage] = useState(false);
   const voucherInputRef = useRef<HTMLInputElement | null>(null);
 
   // Confirmed Order
@@ -273,21 +275,74 @@ export const CheckoutDemoModal: React.FC<CheckoutModalProps> = ({ onClose }) => 
     }
 
     setIsProcessingVoucher(true);
+    let finalBase64 = '';
     try {
-      const compressed = await compressImageFile(file, 1200, 0.82);
+      finalBase64 = await compressImageFile(file, 1200, 0.82);
       setVoucherFile(file);
-      setVoucherDataUrl(compressed);
+      setVoucherDataUrl(finalBase64);
       setVoucherFileName(file.name);
     } catch (err) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setVoucherFile(file);
-        setVoucherDataUrl(reader.result as string);
-        setVoucherFileName(file.name);
-      };
-      reader.readAsDataURL(file);
+      finalBase64 = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(file);
+      });
+      setVoucherFile(file);
+      setVoucherDataUrl(finalBase64);
+      setVoucherFileName(file.name);
     } finally {
       setIsProcessingVoucher(false);
+    }
+
+    // Auto upload to server to get immediate absolute link for WhatsApp and all devices
+    if (finalBase64 && typeof window !== 'undefined') {
+      try {
+        const clientOrigin = window.location.origin;
+        const uploadRes = await fetch('/api/upload-voucher', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image: finalBase64,
+            orderNumber: orderDraft?.orderNumber || `PAGO_${Date.now()}`,
+            clientOrigin,
+          }),
+        });
+        if (uploadRes.ok) {
+          const resData = await uploadRes.json();
+          if (resData.url) {
+            setUploadedVoucherPublicUrl(resData.url);
+          }
+        }
+      } catch (e) {
+        console.warn('Pre-upload voucher warning:', e);
+      }
+    }
+  };
+
+  // Helper to copy voucher image to clipboard for easy WhatsApp pasting
+  const handleCopyVoucherImage = async () => {
+    if (!voucherDataUrl) return;
+    try {
+      const res = await fetch(voucherDataUrl);
+      const blob = await res.blob();
+      if (navigator.clipboard && (window as any).ClipboardItem) {
+        await navigator.clipboard.write([
+          new (window as any).ClipboardItem({ [blob.type || 'image/png']: blob }),
+        ]);
+        setCopiedVoucherImage(true);
+        setTimeout(() => setCopiedVoucherImage(false), 2500);
+      } else {
+        const link = uploadedVoucherPublicUrl || voucherDataUrl;
+        await navigator.clipboard.writeText(link);
+        setCopiedVoucherImage(true);
+        setTimeout(() => setCopiedVoucherImage(false), 2500);
+      }
+    } catch {
+      const link = uploadedVoucherPublicUrl || voucherDataUrl;
+      if (link) await navigator.clipboard.writeText(link);
+      setCopiedVoucherImage(true);
+      setTimeout(() => setCopiedVoucherImage(false), 2500);
     }
   };
 
@@ -320,11 +375,13 @@ export const CheckoutDemoModal: React.FC<CheckoutModalProps> = ({ onClose }) => 
         voucherRawFile: voucherFile,
       });
 
+      const effectiveVoucher = result.publicVoucherUrl || uploadedVoucherPublicUrl || voucherDataUrl;
+
       setOrderDraft({
         ...activeDraft,
         orderId: result.orderId,
         orderNumber: result.orderNumber,
-        comprobantePago: result.publicVoucherUrl || voucherDataUrl,
+        comprobantePago: effectiveVoucher,
       });
 
       clearCart();
@@ -379,10 +436,18 @@ export const CheckoutDemoModal: React.FC<CheckoutModalProps> = ({ onClose }) => 
       .join('\n');
 
     let voucherSection = '';
-    const voucherUrl = orderDraft.comprobantePago || voucherDataUrl || '';
-    if (voucherUrl && (voucherUrl.startsWith('http://') || voucherUrl.startsWith('https://'))) {
-      voucherSection = `📸 *FOTO DEL COMPROBANTE DE PAGO:*\n${voucherUrl}\n\n`;
-    } else if (voucherUrl) {
+    const voucherCandidate = orderDraft.comprobantePago || uploadedVoucherPublicUrl || voucherDataUrl || '';
+    let fullVoucherLink = '';
+    if (voucherCandidate.startsWith('http://') || voucherCandidate.startsWith('https://')) {
+      fullVoucherLink = voucherCandidate;
+    } else if (voucherCandidate.startsWith('/')) {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      fullVoucherLink = `${origin}${voucherCandidate}`;
+    }
+
+    if (fullVoucherLink) {
+      voucherSection = `📸 *FOTO / LINK DEL COMPROBANTE DE PAGO:*\n${fullVoucherLink}\n\n`;
+    } else if (voucherCandidate) {
       voucherSection = `📸 *COMPROBANTE DE PAGO ADJUNTO:*\n*(Adjunto la captura del comprobante directamente a este chat)* 👆\n\n`;
     }
 
@@ -400,7 +465,7 @@ export const CheckoutDemoModal: React.FC<CheckoutModalProps> = ({ onClose }) => 
 ${itemsSummary}
 
 *Subtotal:* $${orderDraft.subtotal.toFixed(2)} USD
-${orderDraft.discount > 0 ? `*Descuento Promocional:* -$${orderDraft.discount.toFixed(2)} USD\n` : ''}*Envío:* ${orderDraft.shipping > 0 ? `$${orderDraft.shipping.toFixed(2)} USD (${orderDraft.courier})` : 'Gratis (Retiro en tienda)'}
+${orderDraft.discount > 0 ? `*Descuento Promocional:* -$${orderDraft.discount.toFixed(2)} USD\n` : ''}*Envío:* ${orderDraft.shipping > 0 ? `$${orderDraft.shipping.toFixed(2)} USD (${orderDraft.courier})` : 'Retiro en sucursal'}
 *Total Oficial Pagado:* $${orderDraft.total.toFixed(2)} USD
 
 _Enviado desde Pretty Store Oficial_`;
@@ -408,12 +473,127 @@ _Enviado desde Pretty Store Oficial_`;
     return `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
   };
 
-  const handleOpenWhatsApp = () => {
-    const url = getWhatsAppLink();
+  const handleOpenWhatsApp = async () => {
+    if (!orderDraft) return;
+
+    let effectivePublicUrl = uploadedVoucherPublicUrl || '';
+    if (!effectivePublicUrl && voucherDataUrl) {
+      try {
+        const clientOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+        const uploadRes = await fetch('/api/upload-voucher', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image: voucherDataUrl,
+            orderNumber: orderDraft.orderNumber || `PAGO_${Date.now()}`,
+            clientOrigin,
+          }),
+        });
+        if (uploadRes.ok) {
+          const resData = await uploadRes.json();
+          if (resData.url) {
+            effectivePublicUrl = resData.url;
+            setUploadedVoucherPublicUrl(resData.url);
+          }
+        }
+      } catch (err) {
+        console.warn('On-demand voucher upload warning:', err);
+      }
+    }
+
+    const phone = '50762150251';
+    const orderNum = orderDraft.orderNumber || '#PEDIDO';
+    const paymentStr =
+      orderDraft.metodoPago === 'yappy'
+        ? 'Yappy (6215-0251)'
+        : orderDraft.metodoPago === 'transferencia'
+        ? 'Transferencia Bancaria (Banco General)'
+        : 'Tarjeta de Débito o Crédito';
+
+    const itemsSummary = items
+      .map((it) => {
+        const optText = it.selectedOption?.nombre ? ` [Opción: ${it.selectedOption.nombre}]` : (it.selectedSize ? ` [Talla: ${it.selectedSize}]` : '');
+        const unitPrice = typeof it.selectedOption?.precio === 'number' ? it.selectedOption.precio : it.product.precio;
+        return `  • ${it.product.nombre}${optText} (Cant: ${it.quantity}x a $${unitPrice.toFixed(2)})`;
+      })
+      .join('\n');
+
+    let fullVoucherLink = '';
+    const voucherCandidate = effectivePublicUrl || orderDraft.comprobantePago || voucherDataUrl || '';
+    if (voucherCandidate.startsWith('http://') || voucherCandidate.startsWith('https://')) {
+      fullVoucherLink = voucherCandidate;
+    } else if (voucherCandidate.startsWith('/')) {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      fullVoucherLink = `${origin}${voucherCandidate}`;
+    }
+
+    const voucherHeader = fullVoucherLink ? `📸 *FOTO DEL COMPROBANTE DE PAGO:*\n${fullVoucherLink}\n\n` : '';
+
+    const message = `${voucherHeader}🛍️ *PEDIDO OFICIAL (${orderNum}) - PRETTY STORE*
+🧾 *DATOS DEL PAGO:*
+• *Estado:* Pago realizado y verificado por el cliente
+• *Método:* ${paymentStr}
+• *Monto Cancelado:* $${orderDraft.total.toFixed(2)} USD
+
+📋 *LO QUE PEDÍ (DETALLE DEL PEDIDO):*
+*Cliente:* ${orderDraft.nombre}
+*Teléfono:* ${orderDraft.telefono}
+*Modalidad:* ${orderDraft.direccion}
+*Productos Solicitados:*
+${itemsSummary}
+
+*Subtotal:* $${orderDraft.subtotal.toFixed(2)} USD
+${orderDraft.discount > 0 ? `*Descuento Promocional:* -$${orderDraft.discount.toFixed(2)} USD\n` : ''}*Envío:* ${orderDraft.shipping > 0 ? `$${orderDraft.shipping.toFixed(2)} USD (${orderDraft.courier})` : 'Retiro en sucursal'}
+*Total Oficial Pagado:* $${orderDraft.total.toFixed(2)} USD
+
+_Enviado desde Pretty Store Oficial_`;
+
+    // 1. Intentar enviar imagen + texto juntos en un solo mensaje mediante Web Share API
+    try {
+      let fileToShare = voucherFile;
+      if (!fileToShare && voucherCandidate && voucherCandidate.startsWith('data:')) {
+        const res = await fetch(voucherCandidate);
+        const blob = await res.blob();
+        fileToShare = new File([blob], voucherFileName || `comprobante_${orderDraft.orderNumber}.jpg`, {
+          type: blob.type || 'image/jpeg',
+        });
+      }
+
+      if (fileToShare && navigator.canShare && navigator.canShare({ files: [fileToShare] })) {
+        await navigator.share({
+          files: [fileToShare],
+          text: message,
+          title: `Pedido ${orderDraft.orderNumber} - Pretty Store`,
+        });
+        return;
+      }
+    } catch (shareErr: any) {
+      if (shareErr.name === 'AbortError') {
+        return;
+      }
+      console.warn('Native share not supported or cancelled:', shareErr);
+    }
+
+    // 2. Copiar imagen al portapapeles automáticamente en caso de estar en desktop
+    try {
+      if (voucherDataUrl && navigator.clipboard && (window as any).ClipboardItem) {
+        const res = await fetch(voucherDataUrl);
+        const blob = await res.blob();
+        await navigator.clipboard.write([
+          new (window as any).ClipboardItem({ [blob.type || 'image/jpeg']: blob }),
+        ]);
+        setCopiedVoucherImage(true);
+      }
+    } catch {
+      // ignore
+    }
+
+    // 3. Fallback a WhatsApp link con enlace directo de la imagen incluido
+    const waUrl = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
     if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-      window.location.href = url;
+      window.location.href = waUrl;
     } else {
-      window.open(url, '_blank', 'noopener,noreferrer');
+      window.open(waUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -482,269 +662,369 @@ _Enviado desde Pretty Store Oficial_`;
             onSubmit={handleContinueToReview}
             className="overflow-y-auto overscroll-contain touch-scroll p-4 sm:p-6 lg:p-7 space-y-6 text-left"
           >
-            {/* 1. MÉTODO DE ENVÍO (A TODO PANAMÁ) */}
+            {/* 1. MÉTODO DE ENTREGA Y ENVÍO (A TODO PANAMÁ) */}
             <div className="space-y-3.5">
               <label className="text-xs uppercase tracking-[0.16em] text-white font-bold flex items-center gap-1.5">
                 <Truck size={15} className="text-[#fbbf24]" />
-                <span>1. Método de Envío (A todo Panamá) *</span>
+                <span>1. Modalidad de Entrega (Retiro o Envío a Panamá) *</span>
               </label>
 
               <div className="p-4 sm:p-5 rounded-2xl bg-black/60 border border-white/10 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-white uppercase tracking-wider">
-                    SELECCIONA TU EMPRESA DE ENVÍO *
+                {/* 2 OPCIONES PRINCIPALES ANTES DEL MÉTODO DE ENVÍO */}
+                <div className="space-y-2">
+                  <span className="text-[11px] font-bold text-white uppercase tracking-wider block">
+                    SELECCIONA CÓMO DESEAS RECIBIR TU PEDIDO: *
                   </span>
-                  <span className="text-[10px] text-stone-400 italic">
-                    * El costo de envío se suma automáticamente al total
-                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Opción 1: Retiro en Sucursal */}
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryType('retiro')}
+                      className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        deliveryType === 'retiro'
+                          ? 'border-[#fbbf24] bg-[#fbbf24]/20 ring-2 ring-[#fbbf24] shadow-lg shadow-[#fbbf24]/10'
+                          : 'border-white/10 bg-stone-900/60 hover:border-white/25 hover:bg-stone-900'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                            deliveryType === 'retiro' ? 'bg-[#fbbf24] text-black font-bold' : 'bg-white/10 text-stone-300'
+                          }`}
+                        >
+                          <Store size={20} />
+                        </div>
+                        <div>
+                          <span className="font-extrabold text-xs sm:text-sm text-white block">
+                            1. Retiro en Sucursal
+                          </span>
+                          <span className="text-[11px] text-stone-400 block mt-0.5">
+                            Tienda física Pretty Store (Panamá)
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-[11px] font-medium text-stone-400 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10">
+                          En Tienda
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Opción 2: Envío */}
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryType('delivery')}
+                      className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        deliveryType === 'delivery'
+                          ? 'border-[#fbbf24] bg-[#fbbf24]/20 ring-2 ring-[#fbbf24] shadow-lg shadow-[#fbbf24]/10'
+                          : 'border-white/10 bg-stone-900/60 hover:border-white/25 hover:bg-stone-900'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                            deliveryType === 'delivery' ? 'bg-[#fbbf24] text-black font-bold' : 'bg-white/10 text-stone-300'
+                          }`}
+                        >
+                          <Truck size={20} />
+                        </div>
+                        <div>
+                          <span className="font-extrabold text-xs sm:text-sm text-white block">
+                            2. Envío a Domicilio / Sucursal
+                          </span>
+                          <span className="text-[11px] text-stone-400 block mt-0.5">
+                            Servientrega, Ferguson o Uno Express
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-[11px] font-mono font-bold text-[#fbbf24]">
+                          Desde $3.25
+                        </span>
+                      </div>
+                    </button>
+                  </div>
                 </div>
 
-                  {/* 3 Couriers in a row */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    {/* Servientrega */}
-                    <button
-                      type="button"
-                      onClick={() => handleSelectCourier('Servientrega')}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                        courier === 'Servientrega'
-                          ? 'border-[#fbbf24] bg-[#fbbf24]/20 ring-1 ring-[#fbbf24]'
-                          : 'border-white/10 bg-stone-900/60 hover:border-white/25'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-extrabold text-xs text-white">1. Servientrega</span>
-                        {courier === 'Servientrega' && (
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24]" />
-                        )}
-                      </div>
-                      <span className="text-[11px] text-emerald-400 font-mono block mt-1 font-semibold">
-                        Desde $3.25 (Sucursal / Casa)
-                      </span>
-                    </button>
-
-                    {/* Ferguson */}
-                    <button
-                      type="button"
-                      onClick={() => handleSelectCourier('Ferguson')}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                        courier === 'Ferguson'
-                          ? 'border-[#fbbf24] bg-[#fbbf24]/20 ring-1 ring-[#fbbf24]'
-                          : 'border-white/10 bg-stone-900/60 hover:border-white/25'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-extrabold text-xs text-white">2. Ferguson</span>
-                        {courier === 'Ferguson' && (
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24]" />
-                        )}
-                      </div>
-                      <span className="text-[11px] text-[#fbbf24] font-mono block mt-1 font-semibold">
-                        Desde $5.00 aprox.
-                      </span>
-                    </button>
-
-                    {/* UnoExpress */}
-                    <button
-                      type="button"
-                      onClick={() => handleSelectCourier('Uno Express')}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                        courier === 'Uno Express'
-                          ? 'border-[#fbbf24] bg-[#fbbf24]/20 ring-1 ring-[#fbbf24]'
-                          : 'border-white/10 bg-stone-900/60 hover:border-white/25'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-extrabold text-xs text-white">3. UnoExpress</span>
-                        {courier === 'Uno Express' && (
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24]" />
-                        )}
-                      </div>
-                      <span className="text-[11px] text-[#fbbf24] font-mono block mt-1 font-semibold">
-                        Desde $6.50 aprox.
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* If Servientrega: Sucursal vs Casa choice */}
-                  {courier === 'Servientrega' && (
-                    <div className="grid grid-cols-2 gap-2.5 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setServientregaMode('sucursal')}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all flex flex-col items-center justify-center gap-1 ${
-                          servientregaMode === 'sucursal'
-                            ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
-                            : 'border-white/10 bg-stone-900 text-stone-400 hover:text-white'
-                        }`}
-                      >
-                        <span className="font-bold">Envío a la Sucursal</span>
-                        <span className="text-[10px] font-mono text-emerald-400 font-bold">
-                          1° Tarifa (desde $3.25 / $3.86)
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setServientregaMode('domicilio')}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all flex flex-col items-center justify-center gap-1 ${
-                          servientregaMode === 'domicilio'
-                            ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
-                            : 'border-white/10 bg-stone-900 text-stone-400 hover:text-white'
-                        }`}
-                      >
-                        <span className="font-bold">Envío a la Casa</span>
-                        <span className="text-[10px] font-mono text-amber-300 font-bold">
-                          2° Tarifa (desde $5.61 / $5.79)
-                        </span>
-                      </button>
+                {/* Si elige Retiro en Sucursal */}
+                {deliveryType === 'retiro' && (
+                  <div className="p-4 rounded-xl bg-[#c5a059]/10 border border-[#c5a059]/30 space-y-2 animate-fadeIn">
+                    <div className="flex items-center gap-2 text-[#fbbf24]">
+                      <Store size={17} />
+                      <strong className="text-xs uppercase tracking-wider">
+                        Información de Retiro en Tienda Física:
+                      </strong>
                     </div>
-                  )}
-
-                  {/* Provincia de destino: */}
-                  <div className="space-y-2 pt-1">
-                    <label className="text-[11px] text-stone-300 font-medium block">
-                      Provincia de destino:
-                    </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {PROVINCIAS.map((prov) => {
-                        const isSelected = selectedProvince === prov.id;
-                        return (
-                          <button
-                            key={prov.id}
-                            type="button"
-                            onClick={() => handleSelectProvince(prov.id)}
-                            className={`p-2.5 rounded-xl border text-left text-xs font-medium transition-all active:scale-[0.98] cursor-pointer ${
-                              isSelected
-                                ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white font-bold ring-1 ring-[#fbbf24]'
-                                : 'border-white/10 bg-black/40 text-stone-400 hover:text-white hover:border-white/20'
-                            }`}
-                          >
-                            <span>{prov.name}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Sucursales List OR Exact Address */}
-                  {courier === 'Servientrega' && servientregaMode === 'domicilio' ? (
-                    <div className="space-y-1.5 pt-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[11px] text-stone-300 font-medium block">
-                          Dirección exacta de entrega a domicilio: *
-                        </label>
-                        <span className="text-xs text-amber-300 font-mono font-bold">
-                          Envío Casa: {servientregaRateStr}
-                        </span>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Barriada, calle, número de casa/apto en Panamá..."
-                        value={homeAddress}
-                        onChange={(e) => setHomeAddress(e.target.value)}
-                        className="w-full px-3.5 py-3 bg-black/60 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-[#fbbf24]"
-                      />
-                      {formErrors.direccion && (
-                        <p className="text-[11px] text-rose-400 font-mono">{formErrors.direccion}</p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-2 pt-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[11px] text-stone-300 font-medium">
-                          Sucursal de {courier} en {selectedProvince}:
-                        </label>
-                        <span className="text-xs text-[#fbbf24] font-mono font-bold">
-                          Envío Sucursal: {effectiveRateStr}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto overscroll-contain pr-1">
-                        {courier === 'Servientrega' &&
-                          servientregaBranches.map((b) => {
-                            const isSelected = selectedBranch === b.branch;
-                            return (
-                              <button
-                                key={b.branch}
-                                type="button"
-                                onClick={() => setSelectedBranch(b.branch)}
-                                className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
-                                  isSelected
-                                    ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
-                                    : 'border-white/10 bg-black/50 text-stone-300 hover:border-white/25'
-                                }`}
-                              >
-                                <span className="font-medium truncate">{b.branch}</span>
-                                <div className="text-right shrink-0">
-                                  <span className="text-[11px] font-mono text-emerald-400 font-bold block">
-                                    {b.branchRate}
-                                  </span>
-                                  <span className="text-[9px] text-stone-400 block">
-                                    Casa: {b.homeRate}
-                                  </span>
-                                </div>
-                              </button>
-                            );
-                          })}
-
-                        {courier === 'Ferguson' &&
-                          fergusonBranches.map((b) => {
-                            const isSelected = selectedBranch === b.branch;
-                            return (
-                              <button
-                                key={b.branch}
-                                type="button"
-                                onClick={() => setSelectedBranch(b.branch)}
-                                className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
-                                  isSelected
-                                    ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
-                                    : 'border-white/10 bg-black/50 text-stone-300 hover:border-white/25'
-                                }`}
-                              >
-                                <span className="font-medium truncate">{b.branch}</span>
-                                <span className="text-xs font-mono text-[#fbbf24] shrink-0 font-bold">
-                                  {b.rate}
-                                </span>
-                              </button>
-                            );
-                          })}
-
-                        {courier === 'Uno Express' &&
-                          unoexpressBranches.map((b) => {
-                            const isSelected = selectedBranch === b.branch;
-                            return (
-                              <button
-                                key={b.branch}
-                                type="button"
-                                onClick={() => setSelectedBranch(b.branch)}
-                                className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
-                                  isSelected
-                                    ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
-                                    : 'border-white/10 bg-black/50 text-stone-300 hover:border-white/25'
-                                }`}
-                              >
-                                <span className="font-medium truncate">{b.branch}</span>
-                                <span className="text-xs font-mono text-[#fbbf24] shrink-0 font-bold">
-                                  {b.rate}
-                                </span>
-                              </button>
-                            );
-                          })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Warning banner */}
-                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2">
-                    <span className="text-amber-400 shrink-0 text-sm">⚠️</span>
-                    <p className="text-[11px] leading-relaxed">
-                      <strong>Aviso de Envío:</strong> Los ${shippingCost.toFixed(2)} USD corresponden a un
-                      monto estimado de envío y se suman al total al pagar. El costo final lo determina la empresa
-                      transportadora. Si existe alguna diferencia, te notificaremos por WhatsApp el monto
-                      pendiente antes de realizar el envío.
+                    <p className="text-xs text-stone-300 leading-relaxed font-light">
+                      • <strong>Lugar de retiro:</strong> Boutique Pretty Store Oficial, Ciudad de Panamá.
+                      <br />
+                      • <strong>Horario de retiro:</strong> Lunes a Sábado de 10:00 a.m. a 7:00 p.m.
+                      <br />
+                      • Una vez confirmado tu pedido, te escribiremos por WhatsApp cuando tu paquete esté listo para retirar con tu comprobante.
                     </p>
                   </div>
-                </div>
+                )}
+
+                {/* Si elige Envío: se despliega la selección de Courier, Provincia y Sucursal/Casa */}
+                {deliveryType === 'delivery' && (
+                  <div className="space-y-4 pt-1 border-t border-white/10 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-white uppercase tracking-wider">
+                        SELECCIONA TU EMPRESA DE ENVÍO *
+                      </span>
+                      <span className="text-[10px] text-stone-400 italic">
+                        * El costo de envío se suma automáticamente al total
+                      </span>
+                    </div>
+
+                    {/* 3 Couriers in a row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      {/* Servientrega */}
+                      <button
+                        type="button"
+                        onClick={() => handleSelectCourier('Servientrega')}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                          courier === 'Servientrega'
+                            ? 'border-[#fbbf24] bg-[#fbbf24]/20 ring-1 ring-[#fbbf24]'
+                            : 'border-white/10 bg-stone-900/60 hover:border-white/25'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-xs text-white">1. Servientrega</span>
+                          {courier === 'Servientrega' && (
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24]" />
+                          )}
+                        </div>
+                        <span className="text-[11px] text-emerald-400 font-mono block mt-1 font-semibold">
+                          Desde $3.25 (Sucursal / Casa)
+                        </span>
+                      </button>
+
+                      {/* Ferguson */}
+                      <button
+                        type="button"
+                        onClick={() => handleSelectCourier('Ferguson')}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                          courier === 'Ferguson'
+                            ? 'border-[#fbbf24] bg-[#fbbf24]/20 ring-1 ring-[#fbbf24]'
+                            : 'border-white/10 bg-stone-900/60 hover:border-white/25'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-xs text-white">2. Ferguson</span>
+                          {courier === 'Ferguson' && (
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24]" />
+                          )}
+                        </div>
+                        <span className="text-[11px] text-[#fbbf24] font-mono block mt-1 font-semibold">
+                          Desde $5.00 aprox.
+                        </span>
+                      </button>
+
+                      {/* UnoExpress */}
+                      <button
+                        type="button"
+                        onClick={() => handleSelectCourier('Uno Express')}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                          courier === 'Uno Express'
+                            ? 'border-[#fbbf24] bg-[#fbbf24]/20 ring-1 ring-[#fbbf24]'
+                            : 'border-white/10 bg-stone-900/60 hover:border-white/25'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-xs text-white">3. UnoExpress</span>
+                          {courier === 'Uno Express' && (
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#fbbf24]" />
+                          )}
+                        </div>
+                        <span className="text-[11px] text-[#fbbf24] font-mono block mt-1 font-semibold">
+                          Desde $6.50 aprox.
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* If Servientrega: Sucursal vs Casa choice */}
+                    {courier === 'Servientrega' && (
+                      <div className="grid grid-cols-2 gap-2.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setServientregaMode('sucursal')}
+                          className={`p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all flex flex-col items-center justify-center gap-1 ${
+                            servientregaMode === 'sucursal'
+                              ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
+                              : 'border-white/10 bg-stone-900 text-stone-400 hover:text-white'
+                          }`}
+                        >
+                          <span className="font-bold">Envío a la Sucursal</span>
+                          <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                            1° Tarifa (desde $3.25 / $3.86)
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setServientregaMode('domicilio')}
+                          className={`p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all flex flex-col items-center justify-center gap-1 ${
+                            servientregaMode === 'domicilio'
+                              ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
+                              : 'border-white/10 bg-stone-900 text-stone-400 hover:text-white'
+                          }`}
+                        >
+                          <span className="font-bold">Envío a la Casa</span>
+                          <span className="text-[10px] font-mono text-amber-300 font-bold">
+                            2° Tarifa (desde $5.61 / $5.79)
+                          </span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Provincia de destino: */}
+                    <div className="space-y-2 pt-1">
+                      <label className="text-[11px] text-stone-300 font-medium block">
+                        Provincia de destino:
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {PROVINCIAS.map((prov) => {
+                          const isSelected = selectedProvince === prov.id;
+                          return (
+                            <button
+                              key={prov.id}
+                              type="button"
+                              onClick={() => handleSelectProvince(prov.id)}
+                              className={`p-2.5 rounded-xl border text-left text-xs font-medium transition-all active:scale-[0.98] cursor-pointer ${
+                                isSelected
+                                  ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white font-bold ring-1 ring-[#fbbf24]'
+                                  : 'border-white/10 bg-black/40 text-stone-400 hover:text-white hover:border-white/20'
+                              }`}
+                            >
+                              <span>{prov.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Sucursales List OR Exact Address */}
+                    {courier === 'Servientrega' && servientregaMode === 'domicilio' ? (
+                      <div className="space-y-1.5 pt-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] text-stone-300 font-medium block">
+                            Dirección exacta de entrega a domicilio: *
+                          </label>
+                          <span className="text-xs text-amber-300 font-mono font-bold">
+                            Envío Casa: {servientregaRateStr}
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Barriada, calle, número de casa/apto en Panamá..."
+                          value={homeAddress}
+                          onChange={(e) => setHomeAddress(e.target.value)}
+                          className="w-full px-3.5 py-3 bg-black/60 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-[#fbbf24]"
+                        />
+                        {formErrors.direccion && (
+                          <p className="text-[11px] text-rose-400 font-mono">{formErrors.direccion}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-2 pt-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] text-stone-300 font-medium">
+                            Sucursal de {courier} en {selectedProvince}:
+                          </label>
+                          <span className="text-xs text-[#fbbf24] font-mono font-bold">
+                            Envío Sucursal: {effectiveRateStr}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto overscroll-contain pr-1">
+                          {courier === 'Servientrega' &&
+                            servientregaBranches.map((b) => {
+                              const isSelected = selectedBranch === b.branch;
+                              return (
+                                <button
+                                  key={b.branch}
+                                  type="button"
+                                  onClick={() => setSelectedBranch(b.branch)}
+                                  className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
+                                    isSelected
+                                      ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
+                                      : 'border-white/10 bg-black/50 text-stone-300 hover:border-white/25'
+                                  }`}
+                                >
+                                  <span className="font-medium truncate">{b.branch}</span>
+                                  <div className="text-right shrink-0">
+                                    <span className="text-[11px] font-mono text-emerald-400 font-bold block">
+                                      {b.branchRate}
+                                    </span>
+                                    <span className="text-[9px] text-stone-400 block">
+                                      Casa: {b.homeRate}
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+
+                          {courier === 'Ferguson' &&
+                            fergusonBranches.map((b) => {
+                              const isSelected = selectedBranch === b.branch;
+                              return (
+                                <button
+                                  key={b.branch}
+                                  type="button"
+                                  onClick={() => setSelectedBranch(b.branch)}
+                                  className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
+                                    isSelected
+                                      ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
+                                      : 'border-white/10 bg-black/50 text-stone-300 hover:border-white/25'
+                                  }`}
+                                >
+                                  <span className="font-medium truncate">{b.branch}</span>
+                                  <span className="text-xs font-mono text-[#fbbf24] shrink-0 font-bold">
+                                    {b.rate}
+                                  </span>
+                                </button>
+                              );
+                            })}
+
+                          {courier === 'Uno Express' &&
+                            unoexpressBranches.map((b) => {
+                              const isSelected = selectedBranch === b.branch;
+                              return (
+                                <button
+                                  key={b.branch}
+                                  type="button"
+                                  onClick={() => setSelectedBranch(b.branch)}
+                                  className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
+                                    isSelected
+                                      ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
+                                      : 'border-white/10 bg-black/50 text-stone-300 hover:border-white/25'
+                                  }`}
+                                >
+                                  <span className="font-medium truncate">{b.branch}</span>
+                                  <span className="text-xs font-mono text-[#fbbf24] shrink-0 font-bold">
+                                    {b.rate}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Warning banner */}
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2">
+                      <span className="text-amber-400 shrink-0 text-sm">⚠️</span>
+                      <p className="text-[11px] leading-relaxed">
+                        <strong>Aviso de Envío:</strong> Los ${shippingCost.toFixed(2)} USD corresponden a un
+                        monto estimado de envío y se suman al total al pagar. El costo final lo determina la empresa
+                        transportadora. Si existe alguna diferencia, te notificaremos por WhatsApp el monto
+                        pendiente antes de realizar el envío.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* 2. DATOS DE CONTACTO DEL CLIENTE * */}
@@ -1613,11 +1893,11 @@ _Enviado desde Pretty Store Oficial_`;
                   </div>
                 )}
                 <div className="flex justify-between text-stone-300">
-                  <span>Envío express ({orderDraft.courier || 'Retiro'}):</span>
+                  <span>Modalidad ({orderDraft.courier || 'Retiro en sucursal'}):</span>
                   <span className="font-mono text-[#fbbf24] font-bold">
                     {orderDraft.shipping > 0
                       ? `+$${orderDraft.shipping.toFixed(2)} USD`
-                      : 'Gratis ($0.00)'}
+                      : 'Retiro en sucursal'}
                   </span>
                 </div>
                 <div className="pt-2 border-t border-white/10 flex justify-between items-center text-sm font-bold">
@@ -1687,30 +1967,50 @@ _Enviado desde Pretty Store Oficial_`;
                 className="w-full py-4 px-6 rounded-2xl bg-[#10b981] hover:bg-[#059669] text-black font-black uppercase tracking-wider text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-2xl shadow-emerald-500/40 active:scale-[0.99]"
               >
                 <MessageCircle size={20} className="fill-black text-black" />
-                <span>ENVIAR FOTO Y PEDIDO A WHATSAPP</span>
+                <span>ENVIAR FOTO Y PEDIDO A WHATSAPP (TODO EN 1 MENSAJE)</span>
               </button>
 
               {voucherDataUrl && (
-                <a
-                  href={voucherDataUrl}
-                  download={voucherFileName || `comprobante_${orderDraft.orderNumber}.jpg`}
-                  className="w-full py-3 px-4 rounded-xl bg-stone-900 border border-white/10 hover:bg-stone-800 text-stone-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                >
-                  <Download size={14} />
-                  <span>Descargar Foto del Comprobante</span>
-                </a>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleCopyVoucherImage}
+                    className="py-3 px-4 rounded-xl bg-stone-900 border border-white/15 hover:bg-stone-800 text-stone-200 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    {copiedVoucherImage ? (
+                      <>
+                        <Check size={15} className="text-emerald-400 stroke-[3]" />
+                        <span className="text-emerald-400 font-bold">¡Foto copiada! (Pégala en WhatsApp)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={15} className="text-[#fbbf24]" />
+                        <span>Copiar Foto para Pegar en WhatsApp</span>
+                      </>
+                    )}
+                  </button>
+
+                  <a
+                    href={voucherDataUrl}
+                    download={voucherFileName || `comprobante_${orderDraft.orderNumber}.jpg`}
+                    className="py-3 px-4 rounded-xl bg-stone-900 border border-white/15 hover:bg-stone-800 text-stone-200 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Download size={15} className="text-emerald-400" />
+                    <span>Descargar Foto del Comprobante</span>
+                  </a>
+                </div>
               )}
 
               {/* WhatsApp explanation box */}
-              <div className="p-3.5 rounded-xl bg-black/60 border border-white/10 text-left space-y-1">
+              <div className="p-3.5 rounded-xl bg-black/60 border border-white/10 text-left space-y-1.5">
                 <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
-                  <CheckCircle2 size={13} />
-                  <span>Redirección directa a WhatsApp oficial</span>
+                  <CheckCircle2 size={14} />
+                  <span>¿Cómo se envía el comprobante por WhatsApp?</span>
                 </span>
-                <p className="text-[11px] text-stone-400 leading-relaxed font-light">
-                  • Al presionar el botón se te redirige de inmediato a WhatsApp con la foto del
-                  comprobante arriba y el detalle de tu pedido abajo, listo para enviar directamente al
-                  asesor de Pretty Store.
+                <p className="text-[11px] text-stone-300 leading-relaxed font-light">
+                  1. Al tocar <strong>"ENVIAR FOTO Y PEDIDO A WHATSAPP"</strong>, el mensaje incluye arriba el enlace directo y seguro de tu foto de comprobante y todo el detalle de lo que compraste.
+                  <br />
+                  2. Si además deseas que la foto aparezca como imagen adjunta dentro del chat, toca el botón <strong>"Copiar Foto"</strong> y luego dale a <strong>"Pegar"</strong> dentro de WhatsApp, o adjúntala desde tu galería con el botón de clip (📎).
                 </p>
               </div>
 

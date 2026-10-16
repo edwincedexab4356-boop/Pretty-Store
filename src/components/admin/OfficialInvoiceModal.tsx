@@ -1,19 +1,96 @@
 import React, { useState } from 'react';
-import { X, Printer, Download, Check, ShieldCheck, Eye, ExternalLink } from 'lucide-react';
+import { X, Printer, Download, Check, ShieldCheck, Eye, ExternalLink, Upload, AlertCircle, RefreshCw } from 'lucide-react';
 import { Pedido } from '../../types/database';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 import { getPrimaryProductImage } from '../../utils/productImages';
+import { supabase } from '../../lib/supabase';
 
 interface OfficialInvoiceModalProps {
   order: Pedido | null;
   onClose: () => void;
+  initialTab?: 'factura' | 'comprobante';
 }
 
-export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({ order, onClose }) => {
+export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({ order, onClose, initialTab = 'factura' }) => {
   const { config } = useStoreConfig();
-  const [activeTab, setActiveTab] = useState<'factura' | 'comprobante'>('factura');
+  const [activeTab, setActiveTab] = useState<'factura' | 'comprobante'>(initialTab);
+  const [imgError, setImgError] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Fallback voucher resolution
+  let initialVoucherUrl = order?.comprobante_pago || null;
+  if (!initialVoucherUrl && order?.notas) {
+    const match = order.notas.match(/https?:\/\/[^\s"',]+\.(jpg|jpeg|png|webp|pdf)/i) || order.notas.match(/\/uploads\/[^\s"',]+/i);
+    if (match) {
+      initialVoucherUrl = match[0];
+    }
+  }
+  if (initialVoucherUrl && typeof initialVoucherUrl === 'string' && initialVoucherUrl.startsWith('/') && typeof window !== 'undefined') {
+    initialVoucherUrl = `${window.location.origin}${initialVoucherUrl}`;
+  }
+
+  const [currentVoucher, setCurrentVoucher] = useState<string | null>(initialVoucherUrl);
 
   if (!order) return null;
+
+  const handleManualUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const reader = new FileReader();
+      const base64: string = await new Promise((resolve) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(file);
+      });
+
+      if (!base64) throw new Error('No se pudo leer el archivo.');
+
+      const clientOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+      const orderNum = order.numero_orden || String(order.id);
+      const res = await fetch('/api/upload-voucher', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: base64,
+          orderNumber: orderNum,
+          clientOrigin,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const newUrl = data.url;
+        setCurrentVoucher(newUrl);
+        setImgError(false);
+        // Persistir en Supabase
+        try {
+          await supabase.from('pedidos').update({ comprobante_pago: newUrl }).eq('id', String(order.id));
+        } catch {
+          // ignore
+        }
+        // Persistir en el servidor
+        try {
+          await fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...order, comprobante_pago: newUrl }),
+          });
+        } catch {
+          // ignore
+        }
+      } else {
+        alert('Error al subir el comprobante.');
+      }
+    } catch (err: any) {
+      alert('Error al procesar archivo: ' + (err?.message || 'Error'));
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -24,7 +101,9 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({ orde
   const clientAddress = order.cliente?.direccion || '—';
   const orderNumber = order.numero_orden || String(order.id || '').slice(0, 8);
   const items = order.items || [];
-  const voucherUrl = order.comprobante_pago;
+  
+  const voucherUrl = currentVoucher;
+  const isPdf = typeof voucherUrl === 'string' && (voucherUrl.toLowerCase().endsWith('.pdf') || voucherUrl.includes('application/pdf'));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-fadeIn print:p-0 print:bg-white print:fixed">
@@ -228,38 +307,132 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({ orde
               Captura del Comprobante de Pago
             </h4>
             <p className="text-xs text-stone-400 font-light">
-              Coteja el abono de <strong className="text-white">${order.total.toFixed(2)} USD</strong> con la cuenta de destino.
+              Coteja el abono de <strong className="text-white">${order.total.toFixed(2)} USD</strong> con la cuenta de destino oficial de Pretty Store.
             </p>
 
             {voucherUrl ? (
-              <div className="max-w-md mx-auto space-y-3">
-                <div className="rounded-2xl overflow-hidden border border-white/15 bg-black/80 p-2 shadow-2xl">
-                  <img
-                    src={voucherUrl}
-                    alt="Comprobante de Pago"
-                    className="w-full h-auto max-h-[60vh] object-contain rounded-xl mx-auto"
-                  />
-                </div>
-                {voucherUrl.startsWith('http') && (
+              <div className="max-w-xl mx-auto space-y-3">
+                {isPdf ? (
+                  <div className="rounded-2xl overflow-hidden border border-white/15 bg-black/80 p-2 shadow-2xl">
+                    <iframe
+                      src={voucherUrl}
+                      title="Comprobante PDF"
+                      className="w-full h-[500px] rounded-xl border-none"
+                    />
+                  </div>
+                ) : imgError ? (
+                  <div className="p-6 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-2 text-center">
+                    <p className="font-semibold">⚠️ No se pudo previsualizar la imagen miniatura directamente.</p>
+                    <p className="text-[11px] text-stone-300">
+                      El archivo puede estar en formato de alta resolución o enlace externo. Puedes abrirlo directamente o descargarlo:
+                    </p>
+                    <div className="flex items-center justify-center gap-2 pt-2">
+                      <a
+                        href={voucherUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-4 py-2 rounded-xl bg-[#c5a059] text-black font-bold text-xs inline-flex items-center gap-1.5"
+                      >
+                        <ExternalLink size={14} />
+                        <span>Abrir enlace del comprobante</span>
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl overflow-hidden border border-white/15 bg-black/80 p-2 shadow-2xl">
+                    <img
+                      src={voucherUrl}
+                      alt="Comprobante de Pago"
+                      onError={() => setImgError(true)}
+                      className="w-full h-auto max-h-[60vh] object-contain rounded-xl mx-auto"
+                    />
+                  </div>
+                )}
+
+                {/* Voucher Action Buttons */}
+                <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
+                  {voucherUrl.startsWith('http') && (
+                    <a
+                      href={voucherUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold cursor-pointer transition-colors"
+                    >
+                      <ExternalLink size={14} />
+                      <span>Abrir en Pestaña Completa</span>
+                    </a>
+                  )}
+
                   <a
                     href={voucherUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold cursor-pointer"
+                    download={`comprobante_${orderNumber}.jpg`}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-semibold border border-emerald-500/30 cursor-pointer transition-colors"
                   >
-                    <ExternalLink size={14} />
-                    <span>Abrir Foto en Pestaña Completa</span>
+                    <Download size={14} />
+                    <span>Descargar Archivo</span>
                   </a>
-                )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (voucherUrl) {
+                        navigator.clipboard.writeText(voucherUrl);
+                        setCopiedLink(true);
+                        setTimeout(() => setCopiedLink(false), 2000);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-stone-300 hover:text-white text-xs font-semibold border border-white/10 cursor-pointer transition-colors"
+                  >
+                    {copiedLink ? <Check size={14} className="text-emerald-400" /> : <Eye size={14} />}
+                    <span>{copiedLink ? '¡Enlace Copiado!' : 'Copiar Enlace'}</span>
+                  </button>
+
+                  <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-stone-300 hover:text-white text-xs font-semibold border border-white/10 cursor-pointer transition-colors">
+                    <Upload size={14} className="text-[#fbbf24]" />
+                    <span>{isUploading ? 'Subiendo...' : 'Actualizar Foto'}</span>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="hidden"
+                      disabled={isUploading}
+                      onChange={handleManualUpload}
+                    />
+                  </label>
+                </div>
+
+                <p className="text-[10px] text-stone-400 pt-1">
+                  💡 Soporta imágenes JPG, PNG, WEBP y recibos PDF de Banco General o Yappy.
+                </p>
               </div>
             ) : (
-              <div className="p-8 rounded-2xl bg-black/40 border border-white/10 max-w-md mx-auto space-y-2">
-                <span className="text-stone-400 text-xs block">
-                  No se encontró captura de comprobante adjunta para este pedido.
-                </span>
-                <span className="text-[11px] text-stone-500 block">
-                  (Posiblemente realizado de forma presencial o vía confirmación directa en WhatsApp)
-                </span>
+              <div className="p-8 rounded-2xl bg-black/40 border border-white/10 max-w-md mx-auto space-y-4 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-stone-400">
+                  <AlertCircle size={24} />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-white text-xs font-bold block">
+                    No se encontró captura de comprobante registrada
+                  </span>
+                  <p className="text-[11px] text-stone-400 font-light">
+                    Si el cliente te envió el comprobante por WhatsApp o correo, puedes adjuntarlo directamente a esta orden:
+                  </p>
+                </div>
+
+                <label className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#c5a059] hover:bg-[#b08d4b] text-black font-extrabold text-xs cursor-pointer shadow-lg transition-transform active:scale-95 mx-auto">
+                  <Upload size={16} />
+                  <span>{isUploading ? 'Subiendo archivo...' : 'Adjuntar Comprobante de Pago'}</span>
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    disabled={isUploading}
+                    onChange={handleManualUpload}
+                  />
+                </label>
+
+                <div className="text-[10px] text-stone-400 border-t border-white/5 pt-3">
+                  Formatos válidos: Capturas de pantalla (JPG, PNG, WEBP), fotos de cámara y recibos oficiales PDF.
+                </div>
               </div>
             )}
           </div>

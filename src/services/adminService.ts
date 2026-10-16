@@ -394,10 +394,20 @@ export async function getAdminOrders(): Promise<Pedido[]> {
       for (const o of dbOrders) {
         const orderKey = String(o.id);
         const localRec = getOrderReceiptById(orderKey) || getOrderReceiptById(o.numero_orden || '');
-        let voucher = o.comprobante_pago || localRec?.comprobanteUrl || null;
+        const matchingServerOrder = serverOrders.find(
+          (so) => String(so.id) === orderKey || so.numero_orden === o.numero_orden
+        );
+        let voucher = o.comprobante_pago || matchingServerOrder?.comprobante_pago || localRec?.comprobanteUrl || null;
 
         if (!voucher) {
           voucher = await getVoucherImageFromDb(orderKey);
+        }
+        if (!voucher && o.numero_orden) {
+          voucher = await getVoucherImageFromDb(o.numero_orden);
+        }
+
+        if (voucher && typeof voucher === 'string' && voucher.startsWith('/') && typeof window !== 'undefined') {
+          voucher = `${window.location.origin}${voucher}`;
         }
 
         // Extraer items guardados en notas si no están en localReceipt
@@ -515,7 +525,7 @@ export async function getAdminOrders(): Promise<Pedido[]> {
           metodo_pago: rec.metodoPago as any,
           tipo_entrega: rec.tipoEntrega as any,
           courier: rec.courier,
-          estado: 'confirmado',
+          estado: (rec as any).estado || 'pendiente',
           notas: rec.notas,
           comprobante_pago: voucher,
           created_at: rec.createdAt,
@@ -572,14 +582,28 @@ export async function getAdminOrders(): Promise<Pedido[]> {
 }
 
 export async function updateOrderStatus(orderId: string | number, estado: EstadoPedido): Promise<boolean> {
+  const cleanId = String(orderId);
   try {
-    const cleanId = String(orderId);
     const { error } = await supabase.from('pedidos').update({ estado }).eq('id', cleanId);
     if (error) console.warn('Supabase update status error:', error);
-    return true;
-  } catch {
-    return true;
+  } catch (err) {
+    console.warn('Update order status error:', err);
   }
+
+  // Cross-device server sync
+  try {
+    if (typeof window !== 'undefined') {
+      fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: cleanId, estado }),
+      }).catch(() => {});
+    }
+  } catch {
+    // ignore
+  }
+
+  return true;
 }
 
 export async function deleteAdminOrder(orderId: string | number): Promise<boolean> {
@@ -671,9 +695,10 @@ export async function getAdminSales(): Promise<VentaRecord[]> {
     // Obtener pedidos para construir el historial de ventas completo
     const orders = await getAdminOrders();
 
-    // Filtrar pedidos que no estén cancelados
+    // Filtrar solo pedidos aprobados / confirmados por el administrador
+    // (NO 'pendiente' y NO 'cancelado')
     const salesList: VentaRecord[] = orders
-      .filter((o) => o.estado !== 'cancelado')
+      .filter((o) => o.estado !== 'pendiente' && o.estado !== 'cancelado')
       .map((o) => {
         const saleId = String(o.id);
         const orderNum = o.numero_orden || (saleId.length > 8 ? saleId.slice(0, 8) : saleId);

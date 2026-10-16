@@ -5,6 +5,7 @@ import {
   Eye,
   Trash2,
   CheckCircle2,
+  Check,
   Clock,
   Truck,
   Package,
@@ -29,6 +30,7 @@ export const OrdersView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedOrder, setSelectedOrder] = useState<Pedido | null>(null);
+  const [invoiceModalTab, setInvoiceModalTab] = useState<'factura' | 'comprobante'>('factura');
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
@@ -202,7 +204,10 @@ export const OrdersView: React.FC = () => {
               ) : (
                 filteredOrders.map((order) => {
                   const orderNum = order.numero_orden || String(order.id || '').slice(0, 8);
-                  const hasCapture = Boolean(order.comprobante_pago);
+                  const hasCapture = Boolean(
+                    order.comprobante_pago ||
+                    (order.notas && (order.notas.includes('http') || order.notas.includes('/uploads/')))
+                  );
                   const items = order.items || [];
                   const isExpanded = expandedOrderId === order.id;
 
@@ -269,36 +274,111 @@ export const OrdersView: React.FC = () => {
                         <td className="py-3 px-4 text-center whitespace-nowrap">
                           {hasCapture ? (
                             <button
-                              onClick={() => setSelectedOrder(order)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-semibold hover:bg-emerald-500/20 transition-colors cursor-pointer"
+                              onClick={() => {
+                                setInvoiceModalTab('comprobante');
+                                setSelectedOrder(order);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 hover:text-white text-[11px] font-bold hover:bg-emerald-500/30 transition-all cursor-pointer shadow-sm active:scale-95"
+                              title="Ver foto del comprobante de pago"
                             >
-                              <ImageIcon size={12} />
+                              <ImageIcon size={13} className="text-emerald-400" />
                               <span>Ver Foto</span>
                             </button>
                           ) : (
-                            <span className="text-stone-600 text-[11px]">Sin captura</span>
+                            <button
+                              onClick={() => {
+                                setInvoiceModalTab('comprobante');
+                                setSelectedOrder(order);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/5 hover:bg-white/10 text-stone-400 hover:text-white text-[10px] border border-white/10 transition-all cursor-pointer"
+                              title="Adjuntar o verificar comprobante"
+                            >
+                              <span>+ Adjuntar</span>
+                            </button>
                           )}
                         </td>
 
                         <td className="py-3 px-4">
-                          <select
-                            value={order.estado}
-                            onChange={(e) => handleStatusChange(order.id, e.target.value as EstadoPedido)}
-                            className="px-2.5 py-1 rounded-lg bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#c5a059]"
-                          >
-                            <option value="pendiente">Pendiente</option>
-                            <option value="confirmado">Confirmado</option>
-                            <option value="preparando">Preparando</option>
-                            <option value="enviado">Enviado</option>
-                            <option value="entregado">Entregado</option>
-                            <option value="cancelado">Cancelado</option>
-                          </select>
+                          {order.estado === 'pendiente' ? (
+                            <div className="flex flex-col gap-1.5 min-w-[140px]">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 w-fit animate-pulse">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                <span>Por Aceptar</span>
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleStatusChange(order.id, 'confirmado')}
+                                  className="px-2 py-1 rounded-md bg-emerald-500 hover:bg-emerald-600 text-black text-[10px] font-black tracking-wider cursor-pointer shadow flex items-center gap-1 active:scale-95"
+                                  title="Aceptar este pedido y contabilizarlo como venta oficial"
+                                >
+                                  <Check size={12} className="stroke-[3]" />
+                                  <span>ACEPTAR</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStatusChange(order.id, 'cancelado')}
+                                  className="px-1.5 py-1 rounded-md bg-stone-850 hover:bg-rose-950/80 text-stone-400 hover:text-rose-300 text-[10px] cursor-pointer border border-white/10"
+                                  title="Rechazar pedido"
+                                >
+                                  Rechazar
+                                </button>
+                              </div>
+                            </div>
+                          ) : order.estado === 'confirmado' ? (
+                            <div className="flex flex-col gap-1 min-w-[130px]">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 w-fit">
+                                <Check size={11} className="stroke-[2.5]" />
+                                <span>Venta Aceptada</span>
+                              </span>
+                              <select
+                                value={order.estado}
+                                onChange={(e) => handleStatusChange(order.id, e.target.value as EstadoPedido)}
+                                className="px-2 py-0.5 rounded-md bg-black/60 border border-white/10 text-[10px] text-stone-300 focus:outline-none focus:border-[#c5a059]"
+                              >
+                                <option value="confirmado">Confirmado</option>
+                                <option value="preparando">Preparando</option>
+                                <option value="enviado">Enviado</option>
+                                <option value="entregado">Entregado</option>
+                                <option value="cancelado">Cancelar</option>
+                              </select>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-1 min-w-[130px]">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold w-fit ${
+                                order.estado === 'entregado'
+                                  ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                                  : order.estado === 'enviado'
+                                  ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                                  : order.estado === 'preparando'
+                                  ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                                  : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                              }`}>
+                                <span className="capitalize">{order.estado}</span>
+                              </span>
+                              <select
+                                value={order.estado}
+                                onChange={(e) => handleStatusChange(order.id, e.target.value as EstadoPedido)}
+                                className="px-2 py-0.5 rounded-md bg-black/60 border border-white/10 text-[10px] text-stone-300 focus:outline-none focus:border-[#c5a059]"
+                              >
+                                <option value="pendiente">Pendiente</option>
+                                <option value="confirmado">Confirmado</option>
+                                <option value="preparando">Preparando</option>
+                                <option value="enviado">Enviado</option>
+                                <option value="entregado">Entregado</option>
+                                <option value="cancelado">Cancelado</option>
+                              </select>
+                            </div>
+                          )}
                         </td>
 
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button
-                              onClick={() => setSelectedOrder(order)}
+                              onClick={() => {
+                                setInvoiceModalTab('factura');
+                                setSelectedOrder(order);
+                              }}
                               className="p-1.5 rounded-lg bg-[#c5a059]/15 hover:bg-[#c5a059]/30 text-[#c5a059] transition-colors cursor-pointer"
                               title="Ver Factura Completa"
                             >
@@ -372,7 +452,11 @@ export const OrdersView: React.FC = () => {
 
       {/* Invoice & Voucher Modal */}
       {selectedOrder && (
-        <OfficialInvoiceModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />
+        <OfficialInvoiceModal
+          order={selectedOrder}
+          initialTab={invoiceModalTab}
+          onClose={() => setSelectedOrder(null)}
+        />
       )}
     </div>
   );

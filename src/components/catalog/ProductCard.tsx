@@ -270,42 +270,50 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
           </div>
         )}
 
-        {/* Price & Add to Cart button */}
-        <div className="pt-2.5 sm:pt-3 border-t border-white/[0.07] flex items-center justify-between gap-2 sm:gap-3">
-          <div className="flex flex-col min-w-0">
-            <span className="text-[8px] sm:text-[9px] uppercase tracking-[0.2em] text-stone-400 font-light">
-              {hasPriceRange ? 'Desde' : 'Precio'}
-            </span>
-            <div className="flex items-baseline gap-1 sm:gap-1.5">
-              <span className="text-base sm:text-lg font-mono tabular-nums font-medium text-white">
-                ${minPrice.toFixed(2)}
+        {/* Dedicated Price & Action Block - Unobstructed, high contrast */}
+        <div className="pt-3 border-t border-white/[0.08] flex flex-col gap-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col min-w-0">
+              <span className="text-[9px] uppercase tracking-[0.2em] text-[#c5a059] font-semibold">
+                {hasPriceRange ? 'Precio desde' : 'Precio Oficial'}
               </span>
-              {promo && (
-                <span className="text-[9px] sm:text-[10px] text-amber-300 font-mono font-medium truncate">
-                  {promo.shortBadge ? `(${promo.shortBadge})` : '(2x $55)'}
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="text-lg sm:text-xl font-bold font-mono tabular-nums text-white tracking-tight">
+                  ${minPrice.toFixed(2)}
                 </span>
-              )}
+                {hasPriceRange && (
+                  <span className="text-xs text-stone-400 font-mono">
+                    - ${maxPrice.toFixed(2)}
+                  </span>
+                )}
+              </div>
             </div>
+
+            {promo && (
+              <span className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-lg bg-amber-400/15 text-amber-300 font-semibold border border-amber-400/30 shrink-0">
+                {promo.shortBadge || '2 por $55'}
+              </span>
+            )}
           </div>
 
           <button
             onClick={handleAddToCart}
             disabled={isOutOfStock || isMaxInCart}
-            className={`inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 text-[10px] sm:text-[11px] uppercase tracking-[0.16em] font-medium transition-all duration-200 cursor-pointer rounded-xl active:scale-95 ${
+            className={`w-full py-2.5 px-3 text-[11px] sm:text-xs uppercase tracking-[0.16em] font-bold transition-all duration-200 cursor-pointer rounded-xl flex items-center justify-center gap-2 active:scale-95 ${
               isOutOfStock
                 ? 'bg-stone-900 text-stone-500 border border-white/5 cursor-not-allowed'
                 : isMaxInCart
                 ? 'bg-stone-900 text-stone-400 border border-white/10 cursor-not-allowed'
                 : isAdding
-                ? 'bg-[#c5a059] text-stone-950 font-semibold shadow-lg shadow-[#c5a059]/30 scale-105'
+                ? 'bg-[#c5a059] text-stone-950 font-black shadow-lg shadow-[#c5a059]/30 scale-102'
                 : 'bg-white hover:bg-stone-200 text-stone-950 hover:shadow-md hover:shadow-white/10'
             }`}
             aria-label={`Añadir ${product.nombre} al carrito`}
           >
             {isAdding ? (
               <>
-                <Check size={14} className="stroke-[2.5]" />
-                <span className="hidden sm:inline">Añadido</span>
+                <Check size={15} className="stroke-[2.5]" />
+                <span>Añadido al Carrito</span>
               </>
             ) : isOutOfStock ? (
               <span>Agotado</span>
@@ -313,13 +321,13 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
               <span>En Carrito</span>
             ) : hasOptions ? (
               <>
-                <Sparkles size={13} className="text-[#c5a059]" />
-                <span>Opciones</span>
+                <Sparkles size={14} className="text-[#c5a059]" />
+                <span>Elegir Opciones</span>
               </>
             ) : (
               <>
-                <ShoppingCart size={13} className="stroke-[2]" />
-                <span>Añadir</span>
+                <ShoppingCart size={14} className="stroke-[2]" />
+                <span>Añadir al Carrito</span>
               </>
             )}
           </button>
