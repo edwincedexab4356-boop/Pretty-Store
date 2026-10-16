@@ -14,7 +14,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { VentaRecord, getAdminSales, deleteAdminSale } from '../../../services/adminService';
+import { VentaRecord, getAdminSales, deleteAdminSale, deleteAllAdminSales } from '../../../services/adminService';
 import { Pedido } from '../../../types/database';
 import { OfficialInvoiceModal } from '../OfficialInvoiceModal';
 import { getPrimaryProductImage } from '../../../utils/productImages';
@@ -22,6 +22,7 @@ import { getPrimaryProductImage } from '../../../utils/productImages';
 export const SalesView: React.FC = () => {
   const [sales, setSales] = useState<VentaRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [methodFilter, setMethodFilter] = useState('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -59,6 +60,34 @@ export const SalesView: React.FC = () => {
       alert('Error al eliminar venta: ' + (err?.message || 'Error'));
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleDeleteAllSales = async () => {
+    if (sales.length === 0) return;
+    const confirm1 = window.confirm(
+      `⚠️ ¿Estás seguro de que deseas eliminar TODAS las ${sales.length} ventas registradas?\n\nEsta acción eliminará el historial de ventas y los pedidos asociados de Supabase.`
+    );
+    if (!confirm1) return;
+    const confirm2 = window.confirm(
+      `¡Confirmación final!\n\n¿Deseas reiniciar y vaciar la lista completa de ventas definitivamente?`
+    );
+    if (!confirm2) return;
+
+    setIsDeletingAll(true);
+    try {
+      const ok = await deleteAllAdminSales();
+      if (ok) {
+        setSales([]);
+        alert('Se han eliminado todas las ventas exitosamente.');
+      } else {
+        alert('Ocurrió un error al intentar eliminar las ventas.');
+      }
+    } catch (err: any) {
+      alert('Error: ' + (err?.message || 'Error desconocido'));
+    } finally {
+      setIsDeletingAll(false);
+      await loadData();
     }
   };
 
@@ -103,18 +132,29 @@ export const SalesView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h3 className="font-serif-luxury font-bold text-white text-base">
           Registro de Ventas & Facturación
         </h3>
-        <button
-          onClick={loadData}
-          disabled={isLoading}
-          className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-stone-300 border border-white/10 transition-colors cursor-pointer"
-          title="Actualizar ventas"
-        >
-          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-        </button>
+        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+          <button
+            onClick={handleDeleteAllSales}
+            disabled={isLoading || isDeletingAll || sales.length === 0}
+            className="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-2 transition-all duration-200 cursor-pointer disabled:opacity-40 active:scale-95 hover:scale-102"
+            title="Eliminar todas las ventas"
+          >
+            <Trash2 size={13} className={isDeletingAll ? 'animate-spin' : ''} />
+            <span>Eliminar Todas las Ventas</span>
+          </button>
+          <button
+            onClick={loadData}
+            disabled={isLoading}
+            className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 active:bg-white/15 text-stone-300 border border-white/10 transition-all duration-200 cursor-pointer active:scale-90 hover:scale-105"
+            title="Actualizar ventas"
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
 
       {/* Metric Cards */}

@@ -13,6 +13,7 @@ import {
 import { Pedido, Producto } from '../../../types/database';
 import { getAdminOrders, getAdminProducts } from '../../../services/adminService';
 import { AdminTab } from '../AdminSidebar';
+import { SupabaseStorageWidget } from '../SupabaseStorageWidget';
 
 interface DashboardStats {
   ventas_hoy: number;
@@ -290,6 +291,9 @@ export const DashboardView: React.FC<{ onNavigateTab: (tab: AdminTab) => void }>
           </div>
         </div>
       </div>
+
+      {/* Supabase Storage & Database Capacity Monitor */}
+      <SupabaseStorageWidget />
 
       {/* Financial Performance Chart and Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

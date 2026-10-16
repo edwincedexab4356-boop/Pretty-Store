@@ -627,7 +627,16 @@ export async function deleteAdminOrder(orderId: string | number): Promise<boolea
     const { error } = await supabase.from('pedidos').delete().eq('id', cleanId);
     if (error) console.warn('Supabase delete order warning:', error);
 
-    // 3. Eliminar de copias locales
+    // 3. Eliminar de la copia del servidor
+    try {
+      if (typeof window !== 'undefined') {
+        await fetch(`/api/orders/${cleanId}`, { method: 'DELETE' });
+      }
+    } catch {
+      // ignore
+    }
+
+    // 4. Eliminar de copias locales
     deleteOrderReceipt(cleanId);
     return true;
   } catch (err) {
@@ -639,12 +648,17 @@ export async function deleteAdminOrder(orderId: string | number): Promise<boolea
 
 export async function deleteAllAdminOrders(): Promise<boolean> {
   try {
-    // 1. Eliminar ventas asociadas
+    // 1. Eliminar ventas asociadas primero
     try {
-      await supabase.from('ventas').delete().gte('id', 0);
+      const { data: allV } = await supabase.from('ventas').select('id');
+      if (allV && allV.length > 0) {
+        const ids = allV.map((v) => v.id);
+        await supabase.from('ventas').delete().in('id', ids);
+      }
+      await supabase.from('ventas').delete().not('id', 'is', null);
     } catch {}
 
-    // 2. Obtener y eliminar todos los pedidos en Supabase
+    // 2. Obtener y eliminar todos los pedidos en Supabase de forma segura
     try {
       const { data: allP } = await supabase.from('pedidos').select('id');
       if (allP && allP.length > 0) {
@@ -652,16 +666,30 @@ export async function deleteAllAdminOrders(): Promise<boolean> {
           await supabase.from('pedidos').delete().eq('id', p.id);
         }
       }
-      await supabase.from('pedidos').delete().gte('id', 0);
+      await supabase.from('pedidos').delete().not('id', 'is', null);
     } catch (e) {
       console.warn('Error clearing pedidos table:', e);
     }
 
-    // 3. Limpiar almacenamiento local de pedidos
+    // 3. Limpiar del servidor express (/api/orders)
+    try {
+      if (typeof window !== 'undefined') {
+        await fetch('/api/orders', { method: 'DELETE' });
+      }
+    } catch (e) {
+      console.warn('Error clearing server orders:', e);
+    }
+
+    // 4. Limpiar almacenamiento local de pedidos e IndexedDB
     clearAllSavedOrderReceipts();
     return true;
   } catch (err) {
     console.warn('Error in deleteAllAdminOrders:', err);
+    try {
+      if (typeof window !== 'undefined') {
+        await fetch('/api/orders', { method: 'DELETE' });
+      }
+    } catch {}
     clearAllSavedOrderReceipts();
     return true;
   }
@@ -754,13 +782,65 @@ export async function deleteAdminSale(saleId: string | number, pedidoId?: string
       // ignore
     }
 
-    // 3. Eliminar de recibos locales
+    // 3. Eliminar de servidor express
+    try {
+      if (typeof window !== 'undefined') {
+        await fetch(`/api/orders/${targetOrderId}`, { method: 'DELETE' });
+      }
+    } catch {
+      // ignore
+    }
+
+    // 4. Eliminar de recibos locales
     deleteOrderReceipt(targetOrderId);
     deleteOrderReceipt(targetSaleId);
     return true;
   } catch (err) {
     console.warn('Error deleting admin sale:', err);
     deleteOrderReceipt(targetSaleId);
+    return true;
+  }
+}
+
+export async function deleteAllAdminSales(): Promise<boolean> {
+  try {
+    // 1. Eliminar todos los registros de la tabla ventas en Supabase
+    try {
+      const { data: allV } = await supabase.from('ventas').select('id');
+      if (allV && allV.length > 0) {
+        await supabase.from('ventas').delete().in('id', allV.map((v) => v.id));
+      }
+      await supabase.from('ventas').delete().not('id', 'is', null);
+    } catch {}
+
+    // 2. Las ventas registradas provienen de pedidos confirmados/entregados.
+    // Eliminar pedidos confirmados en Supabase:
+    try {
+      const { data: allP } = await supabase.from('pedidos').select('id, estado');
+      if (allP && allP.length > 0) {
+        const confirmed = allP.filter((o) => o.estado !== 'pendiente');
+        if (confirmed.length > 0) {
+          const cIds = confirmed.map((c) => c.id);
+          await supabase.from('pedidos').delete().in('id', cIds);
+        }
+      }
+    } catch (e) {
+      console.warn('Error clearing confirmed orders for sales:', e);
+    }
+
+    // 3. Limpiar pedidos del servidor express
+    try {
+      if (typeof window !== 'undefined') {
+        await fetch('/api/orders', { method: 'DELETE' });
+      }
+    } catch {}
+
+    // 4. Limpiar copias locales
+    clearAllSavedOrderReceipts();
+    return true;
+  } catch (err) {
+    console.warn('Error in deleteAllAdminSales:', err);
+    clearAllSavedOrderReceipts();
     return true;
   }
 }
@@ -805,12 +885,12 @@ export async function deleteAdminClient(clientId: string | number): Promise<bool
   const isNum = !isNaN(Number(cleanId));
   const numericId = isNum ? Number(cleanId) : null;
   try {
-    // 1. Eliminar pedidos del cliente para evitar violación de clave foránea (pedidos_cliente_id_fkey)
+    // 1. Desvincular cliente_id en pedidos para evitar restricción de clave foránea
     try {
       if (numericId !== null) {
-        await supabase.from('pedidos').delete().eq('cliente_id', numericId);
+        await supabase.from('pedidos').update({ cliente_id: null }).eq('cliente_id', numericId);
       }
-      await supabase.from('pedidos').delete().eq('cliente_id', cleanId);
+      await supabase.from('pedidos').update({ cliente_id: null }).eq('cliente_id', cleanId);
     } catch {
       // ignore
     }
@@ -838,30 +918,120 @@ export async function deleteAdminClient(clientId: string | number): Promise<bool
 
 export async function deleteAllAdminClients(): Promise<boolean> {
   try {
-    // 1. Eliminar ventas y pedidos primero para evitar restricciones de clave foránea
+    // 1. Desvincular cliente_id en pedidos primero para evitar violación de FK
     try {
-      await supabase.from('ventas').delete().gte('id', 0);
-    } catch {}
-    try {
-      await supabase.from('pedidos').delete().gte('id', 0);
+      await supabase.from('pedidos').update({ cliente_id: null }).not('id', 'is', null);
     } catch {}
 
-    // 2. Eliminar todos los clientes en Supabase
-    const { data: allC } = await supabase.from('clientes').select('id');
-    if (allC && allC.length > 0) {
-      for (const c of allC) {
-        await supabase.from('clientes').delete().eq('id', c.id);
+    // 2. Eliminar todos los clientes en Supabase de forma segura
+    try {
+      const { data: allC } = await supabase.from('clientes').select('id');
+      if (allC && allC.length > 0) {
+        for (const c of allC) {
+          await supabase.from('clientes').delete().eq('id', c.id);
+        }
+        const ids = allC.map((c) => c.id);
+        await supabase.from('clientes').delete().in('id', ids);
       }
+      await supabase.from('clientes').delete().not('id', 'is', null);
+    } catch (e) {
+      console.warn('Error deleting clients table in Supabase:', e);
     }
-    await supabase.from('clientes').delete().gte('id', 0);
 
-    // 3. Limpiar almacenamiento local
-    clearAllSavedOrderReceipts();
     return true;
   } catch (err) {
     console.warn('Error in deleteAllAdminClients:', err);
     return false;
   }
+}
+
+/* ==================== CAPACIDAD Y ESPACIO SUPABASE ==================== */
+export interface SupabaseCapacityStats {
+  storage: {
+    usedMb: number;
+    freeMb: number;
+    totalMb: number;
+    percent: number;
+    filesCount: number;
+  };
+  database: {
+    usedMb: number;
+    freeMb: number;
+    totalMb: number;
+    percent: number;
+    totalRows: number;
+    ordersCount: number;
+    productsCount: number;
+    clientsCount: number;
+  };
+}
+
+export async function getSupabaseCapacityStats(): Promise<SupabaseCapacityStats> {
+  let stats: SupabaseCapacityStats = {
+    storage: {
+      usedMb: 0.1,
+      freeMb: 999.9,
+      totalMb: 1000,
+      percent: 0.01,
+      filesCount: 0,
+    },
+    database: {
+      usedMb: 1.2,
+      freeMb: 498.8,
+      totalMb: 500,
+      percent: 0.24,
+      totalRows: 0,
+      ordersCount: 0,
+      productsCount: 0,
+      clientsCount: 0,
+    },
+  };
+
+  try {
+    if (typeof window !== 'undefined') {
+      const res = await fetch('/api/storage-stats');
+      if (res.ok) {
+        const data = await res.json();
+        stats = {
+          ...stats,
+          ...data,
+        };
+      }
+    }
+  } catch {}
+
+  // Contar registros reales de Supabase
+  try {
+    const [{ count: pCount }, { count: prCount }, { count: cCount }] = await Promise.all([
+      supabase.from('pedidos').select('*', { count: 'exact', head: true }),
+      supabase.from('productos').select('*', { count: 'exact', head: true }),
+      supabase.from('clientes').select('*', { count: 'exact', head: true }),
+    ]);
+
+    const ordersCount = pCount ?? stats.database.ordersCount;
+    const productsCount = prCount ?? stats.database.productsCount;
+    const clientsCount = cCount ?? stats.database.clientsCount;
+    const totalRows = ordersCount + productsCount + clientsCount;
+
+    // Supabase DB storage: 500MB free tier. Estimación precisa de MB ocupados
+    const estDbMb = Math.max(1.0, Number(((totalRows * 2.5) / 1024 + 1.2).toFixed(2)));
+    const dbLimitMb = 500;
+    const dbFreeMb = Math.max(0, Number((dbLimitMb - estDbMb).toFixed(2)));
+    const dbPercent = Number(((estDbMb / dbLimitMb) * 100).toFixed(2));
+
+    stats.database = {
+      usedMb: estDbMb,
+      freeMb: dbFreeMb,
+      totalMb: dbLimitMb,
+      percent: dbPercent,
+      totalRows,
+      ordersCount,
+      productsCount,
+      clientsCount,
+    };
+  } catch {}
+
+  return stats;
 }
 
 /* ==================== INVENTARIO ==================== */

@@ -154,6 +154,83 @@ async function startServer() {
     }
   });
 
+  app.delete('/api/orders', (_req, res) => {
+    try {
+      saveStoredOrders([]);
+      return res.json({ success: true, count: 0 });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete('/api/orders/:id', (req, res) => {
+    try {
+      const { id } = req.params;
+      const orders = getStoredOrders();
+      const filtered = orders.filter((o) => String(o.id) !== String(id) && o.numero_orden !== id);
+      saveStoredOrders(filtered);
+      return res.json({ success: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Storage and DB capacity endpoint
+  app.get('/api/storage-stats', (_req, res) => {
+    try {
+      let totalVouchersBytes = 0;
+      let totalVouchersCount = 0;
+      if (fs.existsSync(uploadsDir)) {
+        const files = fs.readdirSync(uploadsDir);
+        totalVouchersCount = files.length;
+        files.forEach((f) => {
+          try {
+            const stat = fs.statSync(path.join(uploadsDir, f));
+            totalVouchersBytes += stat.size;
+          } catch {}
+        });
+      }
+
+      const orders = getStoredOrders();
+      const products = getStoredProducts();
+
+      // Supabase Free Tier Limits:
+      // Database: 500 MB (524,288 KB)
+      // Storage: 1 GB (1,048,576 KB)
+      const storageUsedMb = totalVouchersBytes / (1024 * 1024);
+      const storageLimitMb = 1000;
+      const storageFreeMb = Math.max(0, storageLimitMb - storageUsedMb);
+      const storagePercent = (storageUsedMb / storageLimitMb) * 100;
+
+      // Estimated DB size based on records
+      const estimatedDbBytes = (orders.length * 4096) + (products.length * 2048) + 1048576; // base 1MB schema
+      const dbUsedMb = estimatedDbBytes / (1024 * 1024);
+      const dbLimitMb = 500;
+      const dbFreeMb = Math.max(0, dbLimitMb - dbUsedMb);
+      const dbPercent = (dbUsedMb / dbLimitMb) * 100;
+
+      return res.json({
+        storage: {
+          usedMb: Number(storageUsedMb.toFixed(2)),
+          freeMb: Number(storageFreeMb.toFixed(2)),
+          totalMb: storageLimitMb,
+          percent: Number(storagePercent.toFixed(2)),
+          filesCount: totalVouchersCount,
+        },
+        database: {
+          usedMb: Number(dbUsedMb.toFixed(2)),
+          freeMb: Number(dbFreeMb.toFixed(2)),
+          totalMb: dbLimitMb,
+          percent: Number(dbPercent.toFixed(2)),
+          ordersCount: orders.length,
+          productsCount: products.length,
+        },
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   // Cross-device products sync backup
   app.get('/api/products', (_req, res) => {
     res.json(getStoredProducts());

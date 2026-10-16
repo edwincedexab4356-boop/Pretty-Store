@@ -548,33 +548,7 @@ ${orderDraft.discount > 0 ? `*Descuento Promocional:* -$${orderDraft.discount.to
 
 _Enviado desde Pretty Store Oficial_`;
 
-    // 1. Intentar enviar imagen + texto juntos en un solo mensaje mediante Web Share API
-    try {
-      let fileToShare = voucherFile;
-      if (!fileToShare && voucherCandidate && voucherCandidate.startsWith('data:')) {
-        const res = await fetch(voucherCandidate);
-        const blob = await res.blob();
-        fileToShare = new File([blob], voucherFileName || `comprobante_${orderDraft.orderNumber}.jpg`, {
-          type: blob.type || 'image/jpeg',
-        });
-      }
-
-      if (fileToShare && navigator.canShare && navigator.canShare({ files: [fileToShare] })) {
-        await navigator.share({
-          files: [fileToShare],
-          text: message,
-          title: `Pedido ${orderDraft.orderNumber} - Pretty Store`,
-        });
-        return;
-      }
-    } catch (shareErr: any) {
-      if (shareErr.name === 'AbortError') {
-        return;
-      }
-      console.warn('Native share not supported or cancelled:', shareErr);
-    }
-
-    // 2. Copiar imagen al portapapeles automáticamente en caso de estar en desktop
+    // 1. Copiar imagen al portapapeles silenciosamente (para soporte directo en WhatsApp Web)
     try {
       if (voucherDataUrl && navigator.clipboard && (window as any).ClipboardItem) {
         const res = await fetch(voucherDataUrl);
@@ -588,7 +562,7 @@ _Enviado desde Pretty Store Oficial_`;
       // ignore
     }
 
-    // 3. Fallback a WhatsApp link con enlace directo de la imagen incluido
+    // 2. Redireccionar directamente a WhatsApp de una vez sin abrir ventana de compartir
     const waUrl = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
     if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
       window.location.href = waUrl;
