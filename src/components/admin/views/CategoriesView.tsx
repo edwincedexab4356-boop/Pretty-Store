@@ -10,7 +10,6 @@ import {
   Eye,
   EyeOff,
   Package,
-  Ruler,
   AlertCircle,
   ArrowUp,
   ArrowDown,
@@ -25,13 +24,7 @@ import {
   saveAdminCategoriesOrder,
 } from '../../../services/adminService';
 import { Categoria } from '../../../types/database';
-import {
-  SIZE_PRESETS,
-  resolveSizeOptions,
-  saveCategorySizeConfig,
-  embedSizeConfigInDescription,
-  getCleanDescription,
-} from '../../../utils/categorySizesStorage';
+import { getCleanDescription } from '../../../utils/categorySizesStorage';
 import { ConfirmDeleteModal } from '../ConfirmDeleteModal';
 
 export const CategoriesView: React.FC = () => {
@@ -58,12 +51,6 @@ export const CategoriesView: React.FC = () => {
   const [formDescription, setFormDescription] = useState('');
   const [formActive, setFormActive] = useState(true);
 
-  // Apartado de Tamaños / Tallas
-  const [sizeEnabled, setSizeEnabled] = useState(false);
-  const [sizeLabel, setSizeLabel] = useState('Tamaño');
-  const [sizeOptions, setSizeOptions] = useState<string[]>(['Pequeño', 'Grande']);
-  const [newOptionInput, setNewOptionInput] = useState('');
-
   const loadData = async () => {
     setIsLoading(true);
     try {
@@ -83,10 +70,6 @@ export const CategoriesView: React.FC = () => {
     setFormName('');
     setFormDescription('');
     setFormActive(true);
-    setSizeEnabled(false);
-    setSizeLabel('Tamaño');
-    setSizeOptions(['Pequeño', 'Grande']);
-    setNewOptionInput('');
     setModalError(null);
     setIsModalOpen(true);
   };
@@ -96,12 +79,6 @@ export const CategoriesView: React.FC = () => {
     setFormName(cat.nombre);
     setFormDescription(getCleanDescription(cat.descripcion || ''));
     setFormActive(cat.activa);
-
-    const existing = resolveSizeOptions(cat.id, cat.nombre, '', cat.descripcion || '');
-    setSizeEnabled(existing.enabled);
-    setSizeLabel(existing.label || 'Tamaño');
-    setSizeOptions(existing.options.length > 0 ? existing.options : ['Pequeño', 'Grande']);
-    setNewOptionInput('');
     setModalError(null);
     setIsModalOpen(true);
   };
@@ -117,42 +94,24 @@ export const CategoriesView: React.FC = () => {
     setModalError(null);
 
     try {
-      // 1. Incrustar metadatos de tallas en la descripción para persistencia en base de datos
-      const finalDesc = embedSizeConfigInDescription(formDescription, {
-        categoryId: editingCategory ? editingCategory.id : '',
-        enabled: sizeEnabled,
-        label: sizeLabel,
-        options: sizeOptions,
-      });
-
-      let targetId = editingCategory?.id;
+      const cleanDesc = formDescription.trim();
 
       if (editingCategory) {
         await updateAdminCategory(editingCategory.id, {
           nombre: formName.trim(),
-          descripcion: finalDesc,
+          descripcion: cleanDesc,
           activa: formActive,
         });
       } else {
-        const created = await createAdminCategory({
+        await createAdminCategory({
           nombre: formName.trim(),
-          descripcion: finalDesc,
+          descripcion: cleanDesc,
           activa: formActive,
-        });
-        if (created) targetId = created.id;
-      }
-
-      // 2. Guardar en almacenamiento de tallas local para respuesta instantánea
-      if (targetId) {
-        saveCategorySizeConfig({
-          categoryId: targetId,
-          enabled: sizeEnabled,
-          label: sizeLabel,
-          options: sizeOptions,
         });
       }
 
       setIsModalOpen(false);
+      showToast(editingCategory ? 'Categoría actualizada exitosamente.' : 'Categoría creada exitosamente.');
       await loadData();
     } catch (err: any) {
       setModalError(err?.message || 'Error al guardar la categoría.');
@@ -290,7 +249,7 @@ export const CategoriesView: React.FC = () => {
               <tr className="border-b border-white/10 text-[10px] uppercase tracking-wider text-stone-400 bg-black/40">
                 <th className="py-3 px-4 w-32">Orden</th>
                 <th className="py-3 px-4">Nombre de Categoría</th>
-                <th className="py-3 px-4">Apartado de Tallas / Opciones</th>
+                <th className="py-3 px-4">Descripción</th>
                 <th className="py-3 px-4 text-center">Productos</th>
                 <th className="py-3 px-4">Estado</th>
                 <th className="py-3 px-4 text-right">Acciones</th>
@@ -311,7 +270,6 @@ export const CategoriesView: React.FC = () => {
                 </tr>
               ) : (
                 filteredCategories.map((cat) => {
-                  const sizeInfo = resolveSizeOptions(cat.id, cat.nombre, '', cat.descripcion || '');
                   const catIndex = categories.findIndex((c) => c.id === cat.id);
 
                   return (
@@ -346,31 +304,8 @@ export const CategoriesView: React.FC = () => {
                         <span>{cat.nombre}</span>
                       </td>
 
-                      <td className="py-3.5 px-4">
-                        {sizeInfo.enabled && sizeInfo.options.length > 0 ? (
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] uppercase tracking-wider text-[#c5a059] font-bold">
-                              📏 {sizeInfo.label}:
-                            </span>
-                            {sizeInfo.options.slice(0, 3).map((opt, i) => (
-                              <span
-                                key={i}
-                                className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[11px] text-stone-300 font-mono"
-                              >
-                                {opt}
-                              </span>
-                            ))}
-                            {sizeInfo.options.length > 3 && (
-                              <span className="text-[10px] text-stone-500">
-                                +{sizeInfo.options.length - 3} más
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-stone-500 text-[11px] italic">
-                            Sin tallas configuradas (Estándar)
-                          </span>
-                        )}
+                      <td className="py-3.5 px-4 text-stone-400 font-light text-xs max-w-xs truncate">
+                        {getCleanDescription(cat.descripcion || '') || '—'}
                       </td>
 
                       <td className="py-3.5 px-4 text-center font-mono">
@@ -473,152 +408,6 @@ export const CategoriesView: React.FC = () => {
                   onChange={(e) => setFormDescription(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/15 text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059] resize-none"
                 />
-              </div>
-
-              {/* APARTADO DE TAMAÑOS / TALLAS PARA EL CLIENTE */}
-              <div className="p-4 rounded-2xl bg-black/50 border border-white/10 space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-[#c5a059]/20 flex items-center justify-center text-[#c5a059]">
-                      <Ruler size={15} />
-                    </div>
-                    <div>
-                      <span className="font-bold text-white text-xs block">
-                        Apartado de Tamaños / Tallas / Presentaciones
-                      </span>
-                      <span className="text-[11px] text-stone-400 font-light block">
-                        Permite que el cliente seleccione su tamaño antes de comprar
-                      </span>
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={sizeEnabled}
-                    onChange={(e) => setSizeEnabled(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#c5a059] accent-[#c5a059] cursor-pointer"
-                  />
-                </div>
-
-                {sizeEnabled && (
-                  <div className="space-y-3.5 pt-3 border-t border-white/10 animate-fadeIn">
-                    <div>
-                      <label className="block text-stone-300 font-semibold mb-1">
-                        Título del Selector (ej. Tamaño, Talla de Gorra, Presentación)
-                      </label>
-                      <input
-                        type="text"
-                        value={sizeLabel}
-                        onChange={(e) => setSizeLabel(e.target.value)}
-                        placeholder="Ej. Tamaño de Pastelito o Talla"
-                        className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/15 text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059]"
-                      />
-                    </div>
-
-                    {/* Plantillas Rápidas (1 Clic) */}
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-stone-400 tracking-wider block mb-1.5">
-                        Plantillas Rápidas (1 Clic):
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {Object.entries(SIZE_PRESETS).map(([key, preset]) => (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => {
-                              setSizeLabel(preset.label);
-                              setSizeOptions([...preset.options]);
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-[#c5a059]/20 hover:text-[#c5a059] text-stone-300 text-[11px] border border-white/10 transition-colors cursor-pointer"
-                          >
-                            {preset.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Lista de Opciones Activas */}
-                    <div>
-                      <label className="block text-stone-300 font-semibold mb-1">
-                        Opciones que podrá elegir el cliente ({sizeOptions.length})
-                      </label>
-                      <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-black/60 border border-white/15 min-h-[42px] items-center">
-                        {sizeOptions.map((opt, idx) => (
-                          <span
-                            key={idx}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#c5a059]/20 border border-[#c5a059]/40 text-[#c5a059] text-xs font-semibold"
-                          >
-                            <span>{opt}</span>
-                            <button
-                              type="button"
-                              onClick={() => setSizeOptions(sizeOptions.filter((_, i) => i !== idx))}
-                              className="text-stone-400 hover:text-white cursor-pointer"
-                            >
-                              <X size={12} />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Input para agregar opción */}
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newOptionInput}
-                        onChange={(e) => setNewOptionInput(e.target.value)}
-                        placeholder="Escribe una o varias separadas por coma..."
-                        className="flex-1 px-3 py-2 rounded-xl bg-black/60 border border-white/15 text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059]"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            if (newOptionInput.trim()) {
-                              const parts = newOptionInput.split(',').map((p) => p.trim()).filter(Boolean);
-                              setSizeOptions([...sizeOptions, ...parts]);
-                              setNewOptionInput('');
-                            }
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (newOptionInput.trim()) {
-                            const parts = newOptionInput.split(',').map((p) => p.trim()).filter(Boolean);
-                            setSizeOptions([...sizeOptions, ...parts]);
-                            setNewOptionInput('');
-                          }
-                        }}
-                        className="px-4 py-2 rounded-xl bg-white/10 hover:bg-[#c5a059] hover:text-black text-white font-bold text-xs transition-colors cursor-pointer"
-                      >
-                        + Agregar
-                      </button>
-                    </div>
-
-                    {/* Vista Previa para el Cliente */}
-                    {sizeOptions.length > 0 && (
-                      <div className="p-3 rounded-xl bg-black/80 border border-white/10 space-y-1.5">
-                        <span className="text-[10px] text-stone-400 uppercase tracking-wider block font-mono">
-                          Vista previa en la tienda:
-                        </span>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-white text-xs font-bold mr-1">{sizeLabel}:</span>
-                          {sizeOptions.map((opt, i) => (
-                            <span
-                              key={i}
-                              className={`px-2.5 py-0.5 rounded-lg text-[11px] ${
-                                i === 0
-                                  ? 'bg-[#c5a059] text-black font-bold'
-                                  : 'bg-white/5 text-stone-300 border border-white/10'
-                              }`}
-                            >
-                              {opt}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
 
               {/* Categoría Activa Switch */}
