@@ -178,18 +178,33 @@ async function startServer() {
   // Storage and DB capacity endpoint
   app.get('/api/storage-stats', (_req, res) => {
     try {
-      let totalVouchersBytes = 0;
-      let totalVouchersCount = 0;
-      if (fs.existsSync(uploadsDir)) {
-        const files = fs.readdirSync(uploadsDir);
-        totalVouchersCount = files.length;
-        files.forEach((f) => {
-          try {
-            const stat = fs.statSync(path.join(uploadsDir, f));
-            totalVouchersBytes += stat.size;
-          } catch {}
-        });
-      }
+      const countDirImages = (dir: string): { count: number; bytes: number } => {
+        let count = 0;
+        let bytes = 0;
+        try {
+          if (!fs.existsSync(dir)) return { count, bytes };
+          const items = fs.readdirSync(dir);
+          for (const it of items) {
+            const full = path.join(dir, it);
+            const stat = fs.statSync(full);
+            if (stat.isDirectory()) {
+              const sub = countDirImages(full);
+              count += sub.count;
+              bytes += sub.bytes;
+            } else if (/\.(jpg|jpeg|png|webp|svg|gif|pdf)$/i.test(it)) {
+              count += 1;
+              bytes += stat.size;
+            }
+          }
+        } catch {}
+        return { count, bytes };
+      };
+
+      const vouchersStat = countDirImages(uploadsDir);
+      const publicImagesStat = countDirImages(path.resolve(__dirname, 'public', 'images'));
+
+      const totalLocalFilesCount = vouchersStat.count + publicImagesStat.count;
+      const totalLocalFilesBytes = vouchersStat.bytes + publicImagesStat.bytes;
 
       const orders = getStoredOrders();
       const products = getStoredProducts();
@@ -197,7 +212,7 @@ async function startServer() {
       // Supabase Free Tier Limits:
       // Database: 500 MB (524,288 KB)
       // Storage: 1 GB (1,048,576 KB)
-      const storageUsedMb = totalVouchersBytes / (1024 * 1024);
+      const storageUsedMb = totalLocalFilesBytes / (1024 * 1024);
       const storageLimitMb = 1000;
       const storageFreeMb = Math.max(0, storageLimitMb - storageUsedMb);
       const storagePercent = (storageUsedMb / storageLimitMb) * 100;
@@ -215,7 +230,9 @@ async function startServer() {
           freeMb: Number(storageFreeMb.toFixed(2)),
           totalMb: storageLimitMb,
           percent: Number(storagePercent.toFixed(2)),
-          filesCount: totalVouchersCount,
+          filesCount: totalLocalFilesCount,
+          vouchersCount: vouchersStat.count,
+          localAssetsCount: publicImagesStat.count,
         },
         database: {
           usedMb: Number(dbUsedMb.toFixed(2)),

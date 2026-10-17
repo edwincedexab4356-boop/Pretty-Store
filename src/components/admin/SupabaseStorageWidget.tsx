@@ -48,6 +48,9 @@ export const SupabaseStorageWidget: React.FC = () => {
     freeMb: 999.9,
     totalMb: 1000,
     percent: 0.01,
+    totalImagesCount: 0,
+    productImagesCount: 0,
+    voucherImagesCount: 0,
     filesCount: 0,
   };
 
@@ -149,7 +152,7 @@ export const SupabaseStorageWidget: React.FC = () => {
                 <HardDrive size={16} />
               </div>
               <span className="text-xs font-bold text-white uppercase tracking-wider">
-                2. Almacenamiento de Imágenes
+                2. Almacenamiento de Imágenes (Storage)
               </span>
             </div>
             <span className="text-[10px] font-mono font-bold text-[#fbbf24] bg-[#fbbf24]/10 px-2 py-0.5 rounded-md">
@@ -159,38 +162,44 @@ export const SupabaseStorageWidget: React.FC = () => {
 
           <div>
             <div className="flex justify-between items-baseline text-xs mb-1">
-              <span className="text-stone-400 text-[11px]">Comprobantes & Fotos:</span>
+              <span className="text-stone-400 text-[11px]">Total Almacenamiento:</span>
               <span className="font-mono text-white font-bold">
-                {st.usedMb.toFixed(2)} MB / <span className="text-stone-400">{st.totalMb} MB (1 GB)</span>
+                {st.usedMb.toFixed(1)} MB / <span className="text-stone-400">{st.totalMb} MB (1 GB)</span>
               </span>
             </div>
             {/* Progress Bar */}
             <div className="w-full h-2.5 rounded-full bg-white/10 overflow-hidden p-0.5">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-[#c5a059] to-[#fbbf24] transition-all duration-500"
-                style={{ width: `${Math.max(2, Math.min(100, st.percent))}%` }}
+                style={{ width: `${Math.max(3, Math.min(100, st.percent))}%` }}
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5 text-center">
+          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5 text-center">
             <div className="p-2 rounded-lg bg-white/[0.03]">
-              <span className="text-[10px] text-stone-400 block">Comprobantes Almacenados</span>
+              <span className="text-[10px] text-stone-400 block">Total Imágenes</span>
               <span className="font-mono font-bold text-[#fbbf24] text-xs">
-                {st.filesCount} archivos
+                {st.totalImagesCount || st.filesCount} fotos
               </span>
             </div>
             <div className="p-2 rounded-lg bg-white/[0.03]">
-              <span className="text-[10px] text-stone-400 block">Límite Gratuito Total</span>
+              <span className="text-[10px] text-stone-400 block">Fotos Catálogo</span>
               <span className="font-mono font-bold text-white text-xs">
-                1,000 MB (1 GB)
+                {st.productImagesCount || 0}
+              </span>
+            </div>
+            <div className="p-2 rounded-lg bg-white/[0.03]">
+              <span className="text-[10px] text-stone-400 block">Comprobantes</span>
+              <span className="font-mono font-bold text-white text-xs">
+                {st.voucherImagesCount || 0}
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 text-[11px] text-[#fbbf24] font-medium">
             <ShieldCheck size={13} />
-            <span>Capacidad para más de 10,000 fotos de comprobantes</span>
+            <span>{(100 - st.percent).toFixed(1)}% disponible: Tienes {st.freeMb.toFixed(1)} MB libres para seguir subiendo fotos</span>
           </div>
         </div>
       </div>

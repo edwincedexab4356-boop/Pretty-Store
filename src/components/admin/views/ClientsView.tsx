@@ -6,13 +6,23 @@ import {
   deleteAdminClient,
   deleteAllAdminClients,
 } from '../../../services/adminService';
+import { ConfirmDeleteModal } from '../ConfirmDeleteModal';
+import { CheckCircle2 } from 'lucide-react';
 
 export const ClientsView: React.FC = () => {
   const [clients, setClients] = useState<Cliente[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [clientToDelete, setClientToDelete] = useState<Cliente | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | number | null>(null);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   const loadClients = async () => {
     setIsLoading(true);
@@ -28,49 +38,41 @@ export const ClientsView: React.FC = () => {
     loadClients();
   }, []);
 
-  const handleDeleteClient = async (client: Cliente) => {
-    const confirmMessage = `¿Estás seguro de que deseas eliminar al cliente "${client.nombre}" (${client.telefono})?\n\nEsta acción eliminará el registro del cliente y sus pedidos asociados de Supabase.`;
-    if (!window.confirm(confirmMessage)) return;
-
-    setDeletingId(client.id);
+  const confirmSingleDelete = async () => {
+    if (!clientToDelete) return;
+    const target = clientToDelete;
+    setDeletingId(target.id);
     try {
-      const success = await deleteAdminClient(client.id);
+      const success = await deleteAdminClient(target.id);
       if (success) {
-        setClients((prev) => prev.filter((c) => c.id !== client.id));
+        setClients((prev) => prev.filter((c) => c.id !== target.id));
+        showToast(`Cliente "${target.nombre}" eliminado exitosamente.`);
       } else {
-        alert('No se pudo eliminar el cliente. Verifica la conexión o los permisos.');
+        showToast('No se pudo eliminar el cliente. Verifica la conexión o los permisos.', 'error');
       }
     } catch (err: any) {
-      alert('Error al eliminar cliente: ' + (err?.message || 'Error desconocido'));
+      showToast('Error al eliminar cliente: ' + (err?.message || 'Error desconocido'), 'error');
     } finally {
       setDeletingId(null);
+      setClientToDelete(null);
     }
   };
 
-  const handleDeleteAllClients = async () => {
-    if (clients.length === 0) return;
-    const confirm1 = window.confirm(
-      `⚠️ ¿Estás seguro de que deseas eliminar TODOS los ${clients.length} clientes registrados?\n\nEsta acción eliminará todos los clientes y pedidos de la base de datos de Supabase.`
-    );
-    if (!confirm1) return;
-    const confirm2 = window.confirm(
-      `¡Confirmación final!\n\n¿Deseas vaciar la lista completa de clientes definitivamente?`
-    );
-    if (!confirm2) return;
-
+  const confirmDeleteAllClients = async () => {
     setIsDeletingAll(true);
     try {
       const ok = await deleteAllAdminClients();
       if (ok) {
         setClients([]);
-        alert('Se han eliminado todos los clientes exitosamente.');
+        showToast('Se han eliminado todos los clientes de Supabase exitosamente.');
       } else {
-        alert('Ocurrió un error al intentar eliminar los clientes.');
+        showToast('Ocurrió un error al intentar eliminar los clientes.', 'error');
       }
     } catch (err: any) {
-      alert('Error: ' + (err?.message || 'Error desconocido'));
+      showToast('Error: ' + (err?.message || 'Error desconocido'), 'error');
     } finally {
       setIsDeletingAll(false);
+      setShowDeleteAllModal(false);
       await loadClients();
     }
   };
@@ -84,6 +86,28 @@ export const ClientsView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification Banner */}
+      {notification && (
+        <div
+          className={`px-4 py-3 rounded-2xl flex items-center justify-between gap-3 text-xs font-semibold shadow-lg animate-fadeIn ${
+            notification.type === 'success'
+              ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+              : 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} />
+            <span>{notification.message}</span>
+          </div>
+          <button
+            onClick={() => setNotification(null)}
+            className="text-stone-400 hover:text-white cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="relative w-full sm:w-80">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500" />
@@ -98,7 +122,7 @@ export const ClientsView: React.FC = () => {
 
         <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
           <button
-            onClick={handleDeleteAllClients}
+            onClick={() => setShowDeleteAllModal(true)}
             disabled={isLoading || isDeletingAll || clients.length === 0}
             className="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-2 transition-all duration-200 cursor-pointer disabled:opacity-40 active:scale-95 hover:scale-102"
             title="Eliminar todos los clientes"
@@ -167,7 +191,7 @@ export const ClientsView: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <button
-                        onClick={() => handleDeleteClient(client)}
+                        onClick={() => setClientToDelete(client)}
                         disabled={deletingId === client.id}
                         className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer border border-rose-500/20 disabled:opacity-50"
                         title={`Eliminar cliente ${client.nombre}`}
@@ -182,6 +206,29 @@ export const ClientsView: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Modal: Confirmar Eliminar Todos los Clientes */}
+      <ConfirmDeleteModal
+        isOpen={showDeleteAllModal}
+        onClose={() => setShowDeleteAllModal(false)}
+        onConfirm={confirmDeleteAllClients}
+        title="¿Eliminar TODOS los Clientes?"
+        description="Esta acción eliminará todos los clientes registrados en Supabase."
+        confirmText="Sí, Eliminar Todos los Clientes"
+        itemCount={clients.length}
+        isLoading={isDeletingAll}
+      />
+
+      {/* Modal: Confirmar Eliminar Cliente Individual */}
+      <ConfirmDeleteModal
+        isOpen={!!clientToDelete}
+        onClose={() => setClientToDelete(null)}
+        onConfirm={confirmSingleDelete}
+        title={`¿Eliminar Cliente "${clientToDelete?.nombre}"?`}
+        description={`Se eliminará permanentemente al cliente (${clientToDelete?.telefono}) de la base de datos de Supabase.`}
+        confirmText="Eliminar Cliente"
+        isLoading={!!deletingId}
+      />
     </div>
   );
 };

@@ -18,16 +18,25 @@ import { VentaRecord, getAdminSales, deleteAdminSale, deleteAllAdminSales } from
 import { Pedido } from '../../../types/database';
 import { OfficialInvoiceModal } from '../OfficialInvoiceModal';
 import { getPrimaryProductImage } from '../../../utils/productImages';
+import { ConfirmDeleteModal } from '../ConfirmDeleteModal';
 
 export const SalesView: React.FC = () => {
   const [sales, setSales] = useState<VentaRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [saleToDelete, setSaleToDelete] = useState<VentaRecord | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [methodFilter, setMethodFilter] = useState('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Pedido | null>(null);
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -43,50 +52,42 @@ export const SalesView: React.FC = () => {
     loadData();
   }, []);
 
-  const handleDeleteSale = async (sale: VentaRecord) => {
-    const saleNum = sale.numero_orden || `#${String(sale.id).slice(0, 8)}`;
-    const confirmMsg = `¿Estás seguro de que deseas eliminar la venta ${saleNum} (${sale.cliente.nombre})?\n\nEsta acción eliminará el registro de venta y sus comprobantes de Supabase.`;
-    if (!window.confirm(confirmMsg)) return;
-
-    setDeletingId(sale.id);
+  const confirmSingleDelete = async () => {
+    if (!saleToDelete) return;
+    const target = saleToDelete;
+    const saleNum = target.numero_orden || `#${String(target.id).slice(0, 8)}`;
+    setDeletingId(target.id);
     try {
-      const ok = await deleteAdminSale(sale.id, sale.pedido_id || undefined);
+      const ok = await deleteAdminSale(target.id, target.pedido_id || undefined);
       if (ok) {
-        setSales((prev) => prev.filter((s) => s.id !== sale.id));
+        setSales((prev) => prev.filter((s) => s.id !== target.id));
+        showToast(`Venta ${saleNum} eliminada exitosamente.`);
       } else {
-        alert('No se pudo eliminar la venta.');
+        showToast('No se pudo eliminar la venta.', 'error');
       }
     } catch (err: any) {
-      alert('Error al eliminar venta: ' + (err?.message || 'Error'));
+      showToast('Error al eliminar venta: ' + (err?.message || 'Error'), 'error');
     } finally {
       setDeletingId(null);
+      setSaleToDelete(null);
     }
   };
 
-  const handleDeleteAllSales = async () => {
-    if (sales.length === 0) return;
-    const confirm1 = window.confirm(
-      `⚠️ ¿Estás seguro de que deseas eliminar TODAS las ${sales.length} ventas registradas?\n\nEsta acción eliminará el historial de ventas y los pedidos asociados de Supabase.`
-    );
-    if (!confirm1) return;
-    const confirm2 = window.confirm(
-      `¡Confirmación final!\n\n¿Deseas reiniciar y vaciar la lista completa de ventas definitivamente?`
-    );
-    if (!confirm2) return;
-
+  const confirmDeleteAllSales = async () => {
     setIsDeletingAll(true);
     try {
       const ok = await deleteAllAdminSales();
       if (ok) {
         setSales([]);
-        alert('Se han eliminado todas las ventas exitosamente.');
+        showToast('Se han eliminado todas las ventas de Supabase exitosamente.');
       } else {
-        alert('Ocurrió un error al intentar eliminar las ventas.');
+        showToast('Ocurrió un error al intentar eliminar las ventas.', 'error');
       }
     } catch (err: any) {
-      alert('Error: ' + (err?.message || 'Error desconocido'));
+      showToast('Error: ' + (err?.message || 'Error desconocido'), 'error');
     } finally {
       setIsDeletingAll(false);
+      setShowDeleteAllModal(false);
       await loadData();
     }
   };
@@ -132,13 +133,35 @@ export const SalesView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification Banner */}
+      {notification && (
+        <div
+          className={`px-4 py-3 rounded-2xl flex items-center justify-between gap-3 text-xs font-semibold shadow-lg animate-fadeIn ${
+            notification.type === 'success'
+              ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+              : 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} />
+            <span>{notification.message}</span>
+          </div>
+          <button
+            onClick={() => setNotification(null)}
+            className="text-stone-400 hover:text-white cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h3 className="font-serif-luxury font-bold text-white text-base">
           Registro de Ventas & Facturación
         </h3>
         <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
           <button
-            onClick={handleDeleteAllSales}
+            onClick={() => setShowDeleteAllModal(true)}
             disabled={isLoading || isDeletingAll || sales.length === 0}
             className="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-2 transition-all duration-200 cursor-pointer disabled:opacity-40 active:scale-95 hover:scale-102"
             title="Eliminar todas las ventas"
@@ -330,7 +353,7 @@ export const SalesView: React.FC = () => {
                               <FileText size={14} />
                             </button>
                             <button
-                              onClick={() => handleDeleteSale(sale)}
+                              onClick={() => setSaleToDelete(sale)}
                               disabled={deletingId === sale.id}
                               className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer border border-rose-500/20 disabled:opacity-50"
                               title="Eliminar Venta"
@@ -399,6 +422,29 @@ export const SalesView: React.FC = () => {
       {selectedInvoice && (
         <OfficialInvoiceModal order={selectedInvoice} onClose={() => setSelectedInvoice(null)} />
       )}
+
+      {/* Modal: Confirmar Eliminar Todas las Ventas */}
+      <ConfirmDeleteModal
+        isOpen={showDeleteAllModal}
+        onClose={() => setShowDeleteAllModal(false)}
+        onConfirm={confirmDeleteAllSales}
+        title="¿Eliminar TODAS las Ventas?"
+        description="Esta acción eliminará permanentemente todo el historial de ventas y registros de facturación de Supabase."
+        confirmText="Sí, Eliminar Todas las Ventas"
+        itemCount={sales.length}
+        isLoading={isDeletingAll}
+      />
+
+      {/* Modal: Confirmar Eliminar Venta Individual */}
+      <ConfirmDeleteModal
+        isOpen={!!saleToDelete}
+        onClose={() => setSaleToDelete(null)}
+        onConfirm={confirmSingleDelete}
+        title={`¿Eliminar Venta ${saleToDelete?.numero_orden || `#${String(saleToDelete?.id).slice(0, 8)}`}?`}
+        description={`Se eliminará permanentemente la venta de ${saleToDelete?.cliente?.nombre || 'este cliente'} de la base de datos.`}
+        confirmText="Eliminar Venta"
+        isLoading={!!deletingId}
+      />
     </div>
   );
 };

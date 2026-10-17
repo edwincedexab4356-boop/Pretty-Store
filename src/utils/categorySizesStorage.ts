@@ -13,11 +13,6 @@ export interface CategorySizeConfig {
 const STORAGE_KEY = 'pretty_store_category_sizes_v1';
 
 export const SIZE_PRESETS = {
-  gorras: {
-    name: 'Gorras (Snapback y Tallas Cerradas)',
-    label: 'Talla de Gorra',
-    options: ['Ajustable (Snapback)', 'Talla 7 1/8', 'Talla 7 1/4', 'Talla 7 3/8', 'Talla 7 1/2'],
-  },
   pastelitos: {
     name: 'Pastelitos (Pequeño y Grande)',
     label: 'Tamaño',
@@ -79,17 +74,22 @@ export function getCleanDescription(description: string = ''): string {
   return description.replace(/<!--sizes:\{.*?\}-->/g, '').trim();
 }
 
-export function getDefaultSizesForCategory(categoryName: string = '', productName: string = ''): CategorySizeConfig {
+export function isCapOrGorra(categoryName: string = '', productName: string = ''): boolean {
   const text = `${clean(categoryName)} ${clean(productName)}`;
+  return text.includes('gorra') || text.includes('cap') || text.includes('beisbolera') || text.includes('snapback') || text.includes('belica') || text.includes('legendaria');
+}
 
-  if (text.includes('gorra') || text.includes('cap') || text.includes('beisbolera') || text.includes('snapback') || text.includes('belica') || text.includes('legendaria')) {
+export function getDefaultSizesForCategory(categoryName: string = '', productName: string = ''): CategorySizeConfig {
+  if (isCapOrGorra(categoryName, productName)) {
     return {
       categoryId: '',
-      enabled: true,
-      label: 'Talla de Gorra',
-      options: ['Ajustable (Snapback)', 'Talla 7 1/8', 'Talla 7 1/4', 'Talla 7 3/8', 'Talla 7 1/2'],
+      enabled: false,
+      label: '',
+      options: [],
     };
   }
+
+  const text = `${clean(categoryName)} ${clean(productName)}`;
 
   if (text.includes('pastel') || text.includes('pastelito')) {
     return {
@@ -157,6 +157,15 @@ export function resolveSizeOptions(
   productName?: string,
   categoryDescription?: string
 ): { enabled: boolean; label: string; options: string[] } {
+  // Las gorras no tienen tallas por solicitud expresa del usuario
+  if (isCapOrGorra(categoryName || '', productName || '')) {
+    return {
+      enabled: false,
+      label: '',
+      options: [],
+    };
+  }
+
   const allConfigs = getAllCategorySizeConfigs();
   if (categoryId && allConfigs[categoryId]) {
     const custom = allConfigs[categoryId];

@@ -23,6 +23,7 @@ import {
 } from '../../../services/adminService';
 import { OfficialInvoiceModal } from '../OfficialInvoiceModal';
 import { getPrimaryProductImage } from '../../../utils/productImages';
+import { ConfirmDeleteModal } from '../ConfirmDeleteModal';
 
 export const OrdersView: React.FC = () => {
   const [orders, setOrders] = useState<Pedido[]>([]);
@@ -34,6 +35,14 @@ export const OrdersView: React.FC = () => {
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<Pedido | null>(null);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   const loadOrders = async () => {
     setIsLoading(true);
@@ -54,53 +63,44 @@ export const OrdersView: React.FC = () => {
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, estado: newStatus } : o))
     );
+    showToast(`Pedido actualizado a "${newStatus}"`);
   };
 
-  const handleDelete = async (order: Pedido) => {
-    const orderNum = order.numero_orden || String(order.id || '').slice(0, 8);
-    const clientName = order.cliente?.nombre || 'Cliente';
-    const confirmMsg = `¿Estás seguro de que deseas eliminar el pedido #${orderNum} de ${clientName}?\n\nEsta acción eliminará el registro de pedidos de Supabase.`;
-    if (!window.confirm(confirmMsg)) return;
-
-    setDeletingId(order.id);
+  const confirmSingleDelete = async () => {
+    if (!orderToDelete) return;
+    const target = orderToDelete;
+    setDeletingId(target.id);
     try {
-      const ok = await deleteAdminOrder(order.id);
+      const ok = await deleteAdminOrder(target.id);
       if (ok) {
-        setOrders((prev) => prev.filter((o) => o.id !== order.id));
+        setOrders((prev) => prev.filter((o) => o.id !== target.id));
+        showToast(`Pedido #${target.numero_orden || String(target.id).slice(0, 8)} eliminado exitosamente`);
       } else {
-        alert('No se pudo eliminar el pedido. Verifica la conexión.');
+        showToast('No se pudo eliminar el pedido. Verifica la conexión.', 'error');
       }
     } catch (err: any) {
-      alert('Error al eliminar pedido: ' + (err?.message || 'Error'));
+      showToast('Error al eliminar pedido: ' + (err?.message || 'Error'), 'error');
     } finally {
       setDeletingId(null);
+      setOrderToDelete(null);
     }
   };
 
-  const handleDeleteAllOrders = async () => {
-    if (orders.length === 0) return;
-    const confirm1 = window.confirm(
-      `⚠️ ¿Estás seguro de que deseas eliminar TODOS los ${orders.length} pedidos registrados?\n\nEsta acción eliminará todos los pedidos, comprobantes y ventas asociadas de Supabase.`
-    );
-    if (!confirm1) return;
-    const confirm2 = window.confirm(
-      `¡Confirmación final!\n\n¿Deseas vaciar la lista completa de pedidos definitivamente?`
-    );
-    if (!confirm2) return;
-
+  const confirmDeleteAllOrders = async () => {
     setIsDeletingAll(true);
     try {
       const ok = await deleteAllAdminOrders();
       if (ok) {
         setOrders([]);
-        alert('Se han eliminado todos los pedidos exitosamente.');
+        showToast('Todos los pedidos han sido eliminados de Supabase exitosamente.');
       } else {
-        alert('Ocurrió un error al intentar eliminar los pedidos.');
+        showToast('Ocurrió un error al intentar eliminar los pedidos.', 'error');
       }
     } catch (err: any) {
-      alert('Error: ' + (err?.message || 'Error desconocido'));
+      showToast('Error: ' + (err?.message || 'Error desconocido'), 'error');
     } finally {
       setIsDeletingAll(false);
+      setShowDeleteAllModal(false);
       await loadOrders();
     }
   };
@@ -121,6 +121,28 @@ export const OrdersView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification Banner */}
+      {notification && (
+        <div
+          className={`px-4 py-3 rounded-2xl flex items-center justify-between gap-3 text-xs font-semibold shadow-lg animate-fadeIn ${
+            notification.type === 'success'
+              ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+              : 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} />
+            <span>{notification.message}</span>
+          </div>
+          <button
+            onClick={() => setNotification(null)}
+            className="text-stone-400 hover:text-white cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Top Filter Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -152,7 +174,7 @@ export const OrdersView: React.FC = () => {
 
         <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
           <button
-            onClick={handleDeleteAllOrders}
+            onClick={() => setShowDeleteAllModal(true)}
             disabled={isLoading || isDeletingAll || orders.length === 0}
             className="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-2 transition-all duration-200 cursor-pointer disabled:opacity-40 shrink-0 active:scale-95 hover:scale-102"
             title="Eliminar todos los pedidos"
@@ -385,7 +407,7 @@ export const OrdersView: React.FC = () => {
                               <FileText size={14} />
                             </button>
                             <button
-                              onClick={() => handleDelete(order)}
+                              onClick={() => setOrderToDelete(order)}
                               disabled={deletingId === order.id}
                               className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer border border-rose-500/20 disabled:opacity-50"
                               title="Eliminar Pedido"
@@ -458,6 +480,29 @@ export const OrdersView: React.FC = () => {
           onClose={() => setSelectedOrder(null)}
         />
       )}
+
+      {/* Modal: Confirmar Eliminar Todos los Pedidos */}
+      <ConfirmDeleteModal
+        isOpen={showDeleteAllModal}
+        onClose={() => setShowDeleteAllModal(false)}
+        onConfirm={confirmDeleteAllOrders}
+        title="¿Eliminar TODOS los Pedidos?"
+        description="Esta acción eliminará todos los pedidos registrados en Supabase junto con sus ventas y comprobantes asociados."
+        confirmText="Sí, Eliminar Todos los Pedidos"
+        itemCount={orders.length}
+        isLoading={isDeletingAll}
+      />
+
+      {/* Modal: Confirmar Eliminar Pedido Individual */}
+      <ConfirmDeleteModal
+        isOpen={!!orderToDelete}
+        onClose={() => setOrderToDelete(null)}
+        onConfirm={confirmSingleDelete}
+        title={`¿Eliminar Pedido #${orderToDelete?.numero_orden || String(orderToDelete?.id || '').slice(0, 8)}?`}
+        description={`Se eliminará permanentemente el pedido de ${orderToDelete?.cliente?.nombre || 'este cliente'} de la base de datos.`}
+        confirmText="Eliminar Pedido"
+        isLoading={!!deletingId}
+      />
     </div>
   );
 };

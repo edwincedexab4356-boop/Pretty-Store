@@ -33,6 +33,7 @@ import {
   getPrimaryProductImage,
   hasProductRealImage,
 } from '../../../utils/productImages';
+import { ConfirmDeleteModal } from '../ConfirmDeleteModal';
 
 export const ProductsView: React.FC = () => {
   const [products, setProducts] = useState<Producto[]>([]);
@@ -46,6 +47,14 @@ export const ProductsView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Producto | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<Producto | null>(null);
+  const [isDeletingProduct, setIsDeletingProduct] = useState(false);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   // Form Fields
   const [formName, setFormName] = useState('');
@@ -217,10 +226,20 @@ export const ProductsView: React.FC = () => {
     }
   };
 
-  const handleDelete = async (p: Producto) => {
-    if (!window.confirm(`¿Seguro que deseas eliminar "${p.nombre}"?`)) return;
-    await deleteAdminProduct(p.id);
-    setProducts((prev) => prev.filter((item) => item.id !== p.id));
+  const confirmDeleteProduct = async () => {
+    if (!productToDelete) return;
+    const target = productToDelete;
+    setIsDeletingProduct(true);
+    try {
+      await deleteAdminProduct(target.id);
+      setProducts((prev) => prev.filter((item) => item.id !== target.id));
+      showToast(`Producto "${target.nombre}" eliminado exitosamente.`);
+    } catch (err: any) {
+      showToast('Error al eliminar producto: ' + (err?.message || 'Error'), 'error');
+    } finally {
+      setIsDeletingProduct(false);
+      setProductToDelete(null);
+    }
   };
 
   const filteredProducts = useMemo(() => {
@@ -245,6 +264,28 @@ export const ProductsView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification Banner */}
+      {notification && (
+        <div
+          className={`px-4 py-3 rounded-2xl flex items-center justify-between gap-3 text-xs font-semibold shadow-lg animate-fadeIn ${
+            notification.type === 'success'
+              ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+              : 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} />
+            <span>{notification.message}</span>
+          </div>
+          <button
+            onClick={() => setNotification(null)}
+            className="text-stone-400 hover:text-white cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Top Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
@@ -423,7 +464,7 @@ export const ProductsView: React.FC = () => {
                             <Edit2 size={14} />
                           </button>
                           <button
-                            onClick={() => handleDelete(p)}
+                            onClick={() => setProductToDelete(p)}
                             className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
                             title="Eliminar producto"
                           >
@@ -795,6 +836,17 @@ export const ProductsView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal: Confirmar Eliminar Producto */}
+      <ConfirmDeleteModal
+        isOpen={!!productToDelete}
+        onClose={() => setProductToDelete(null)}
+        onConfirm={confirmDeleteProduct}
+        title={`¿Eliminar Producto "${productToDelete?.nombre}"?`}
+        description="Se eliminará permanentemente este producto del catálogo y de la base de datos de Supabase."
+        confirmText="Eliminar Producto"
+        isLoading={isDeletingProduct}
+      />
     </div>
   );
 };

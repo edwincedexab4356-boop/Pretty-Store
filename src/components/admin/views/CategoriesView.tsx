@@ -32,6 +32,7 @@ import {
   embedSizeConfigInDescription,
   getCleanDescription,
 } from '../../../utils/categorySizesStorage';
+import { ConfirmDeleteModal } from '../ConfirmDeleteModal';
 
 export const CategoriesView: React.FC = () => {
   const [categories, setCategories] = useState<Categoria[]>([]);
@@ -43,6 +44,14 @@ export const CategoriesView: React.FC = () => {
   const [editingCategory, setEditingCategory] = useState<Categoria | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+  const [catToDelete, setCatToDelete] = useState<Categoria | null>(null);
+  const [isDeletingCat, setIsDeletingCat] = useState(false);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   // Form Fields
   const [formName, setFormName] = useState('');
@@ -159,13 +168,19 @@ export const CategoriesView: React.FC = () => {
     );
   };
 
-  const handleDelete = async (cat: Categoria) => {
-    if (!window.confirm(`¿Seguro que deseas eliminar la categoría "${cat.nombre}"?`)) return;
+  const confirmDeleteCategory = async () => {
+    if (!catToDelete) return;
+    const target = catToDelete;
+    setIsDeletingCat(true);
     try {
-      await deleteAdminCategory(cat.id);
-      setCategories((prev) => prev.filter((c) => c.id !== cat.id));
+      await deleteAdminCategory(target.id);
+      setCategories((prev) => prev.filter((c) => c.id !== target.id));
+      showToast(`Categoría "${target.nombre}" eliminada exitosamente.`);
     } catch (err: any) {
-      alert('No se pudo eliminar la categoría. Asegúrate de que no tenga productos asociados.');
+      showToast('No se pudo eliminar la categoría. Asegúrate de que no tenga productos asociados.', 'error');
+    } finally {
+      setIsDeletingCat(false);
+      setCatToDelete(null);
     }
   };
 
@@ -207,6 +222,28 @@ export const CategoriesView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification Banner */}
+      {notification && (
+        <div
+          className={`px-4 py-3 rounded-2xl flex items-center justify-between gap-3 text-xs font-semibold shadow-lg animate-fadeIn ${
+            notification.type === 'success'
+              ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+              : 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} />
+            <span>{notification.message}</span>
+          </div>
+          <button
+            onClick={() => setNotification(null)}
+            className="text-stone-400 hover:text-white cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Top Controls */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="relative w-full sm:w-80">
@@ -367,7 +404,7 @@ export const CategoriesView: React.FC = () => {
                             <Edit2 size={14} />
                           </button>
                           <button
-                            onClick={() => handleDelete(cat)}
+                            onClick={() => setCatToDelete(cat)}
                             className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
                             title="Eliminar Categoría"
                           >
@@ -619,6 +656,17 @@ export const CategoriesView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal: Confirmar Eliminar Categoría */}
+      <ConfirmDeleteModal
+        isOpen={!!catToDelete}
+        onClose={() => setCatToDelete(null)}
+        onConfirm={confirmDeleteCategory}
+        title={`¿Eliminar Categoría "${catToDelete?.nombre}"?`}
+        description="Se eliminará la categoría. Asegúrate de que no tenga productos asociados para evitar errores de integridad."
+        confirmText="Eliminar Categoría"
+        isLoading={isDeletingCat}
+      />
     </div>
   );
 };

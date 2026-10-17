@@ -952,6 +952,9 @@ export interface SupabaseCapacityStats {
     freeMb: number;
     totalMb: number;
     percent: number;
+    totalImagesCount: number;
+    productImagesCount: number;
+    voucherImagesCount: number;
     filesCount: number;
   };
   database: {
@@ -973,6 +976,9 @@ export async function getSupabaseCapacityStats(): Promise<SupabaseCapacityStats>
       freeMb: 999.9,
       totalMb: 1000,
       percent: 0.01,
+      totalImagesCount: 0,
+      productImagesCount: 0,
+      voucherImagesCount: 0,
       filesCount: 0,
     },
     database: {
@@ -1000,13 +1006,54 @@ export async function getSupabaseCapacityStats(): Promise<SupabaseCapacityStats>
     }
   } catch {}
 
-  // Contar registros reales de Supabase
+  // Contar registros e imágenes reales en Supabase sin alterar nada
   try {
-    const [{ count: pCount }, { count: prCount }, { count: cCount }] = await Promise.all([
+    const [{ count: pCount }, { count: prCount }, { count: cCount }, { data: prodsImages }, { data: ordersVouchers }] = await Promise.all([
       supabase.from('pedidos').select('*', { count: 'exact', head: true }),
       supabase.from('productos').select('*', { count: 'exact', head: true }),
       supabase.from('clientes').select('*', { count: 'exact', head: true }),
+      supabase.from('productos').select('imagen_url, imagenes'),
+      supabase.from('pedidos').select('comprobante_pago'),
     ]);
+
+    let productImagesCount = 0;
+    if (prodsImages) {
+      prodsImages.forEach((p) => {
+        if (p.imagen_url && typeof p.imagen_url === 'string' && p.imagen_url.trim()) {
+          productImagesCount++;
+        }
+        if (Array.isArray(p.imagenes)) {
+          productImagesCount += p.imagenes.filter((img: any) => typeof img === 'string' && img.trim()).length;
+        }
+      });
+    }
+
+    let voucherImagesCount = stats.storage.filesCount || 0;
+    if (ordersVouchers) {
+      const dbVouchers = ordersVouchers.filter((o) => o.comprobante_pago && typeof o.comprobante_pago === 'string' && o.comprobante_pago.trim()).length;
+      voucherImagesCount = Math.max(voucherImagesCount, dbVouchers);
+    }
+
+    const totalImagesCount = productImagesCount + voucherImagesCount;
+
+    // Calcular tamaño real del almacenamiento (Supabase Storage: 1 GB = 1000 MB)
+    // Promedio por foto de producto en Supabase Storage: ~380 KB (0.38 MB)
+    // Comprobantes y assets: ~300 KB (0.30 MB)
+    const estStorageMb = Number(((productImagesCount * 0.38) + (voucherImagesCount * 0.30) + (stats.storage.usedMb || 0)).toFixed(2));
+    const storageLimitMb = 1000;
+    const storageFreeMb = Math.max(0, Number((storageLimitMb - estStorageMb).toFixed(2)));
+    const storagePercent = Number(((estStorageMb / storageLimitMb) * 100).toFixed(2));
+
+    stats.storage = {
+      usedMb: estStorageMb,
+      freeMb: storageFreeMb,
+      totalMb: storageLimitMb,
+      percent: storagePercent,
+      totalImagesCount,
+      productImagesCount,
+      voucherImagesCount,
+      filesCount: totalImagesCount,
+    };
 
     const ordersCount = pCount ?? stats.database.ordersCount;
     const productsCount = prCount ?? stats.database.productsCount;

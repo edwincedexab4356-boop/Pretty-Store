@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ShoppingCart, Check, Sparkles, ShieldCheck, Truck, Ruler } from 'lucide-react';
+import { X, ShoppingCart, Check, Sparkles, Truck, Ruler } from 'lucide-react';
 import { Producto, Categoria } from '../../types/database';
 import { useCart } from '../../context/CartContext';
 import { useStoreConfig } from '../../context/StoreConfigContext';
@@ -290,25 +290,18 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 </p>
               </div>
 
-              {/* Guarantees */}
-              <div className="grid grid-cols-2 gap-2 pt-2">
-                <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl space-y-1 hover:border-[#c5a059]/30 transition-colors">
-                  <div className="flex items-center gap-1.5 text-stone-200 text-xs font-bold">
-                    <ShieldCheck size={14} className="text-[#c5a059]" />
-                    <span>Autenticidad</span>
+              {/* Shipping info */}
+              <div className="pt-2">
+                <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl flex items-center gap-3 hover:border-[#c5a059]/30 transition-colors">
+                  <div className="w-8 h-8 rounded-lg bg-[#c5a059]/15 border border-[#c5a059]/30 flex items-center justify-center text-[#c5a059] shrink-0">
+                    <Truck size={15} />
                   </div>
-                  <p className="text-[10px] text-stone-400 font-light">
-                    {config.badge_garantia_subtitulo || 'Acabados de primera calidad y empaque de colección.'}
-                  </p>
-                </div>
-                <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl space-y-1 hover:border-[#c5a059]/30 transition-colors">
-                  <div className="flex items-center gap-1.5 text-stone-200 text-xs font-bold">
-                    <Truck size={14} className="text-[#c5a059]" />
-                    <span>Envíos Seguros</span>
+                  <div>
+                    <span className="text-stone-200 text-xs font-bold block">Envíos Seguros</span>
+                    <p className="text-[10px] text-stone-400 font-light">
+                      Servientrega, Ferguson o UnoExpress a todo el país.
+                    </p>
                   </div>
-                  <p className="text-[10px] text-stone-400 font-light">
-                    Servientrega, Ferguson o UnoExpress a todo el país.
-                  </p>
                 </div>
               </div>
             </div>
