@@ -59,11 +59,18 @@ export const OrdersView: React.FC = () => {
   }, []);
 
   const handleStatusChange = async (orderId: string, newStatus: EstadoPedido) => {
-    await updateOrderStatus(orderId, newStatus);
+    const targetOrder = orders.find((o) => o.id === orderId);
+    await updateOrderStatus(orderId, newStatus, targetOrder);
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, estado: newStatus } : o))
     );
-    showToast(`Pedido actualizado a "${newStatus}"`);
+    if (newStatus === 'confirmado') {
+      showToast('¡Pedido aceptado! Se descontó del inventario y se agregó al registro de Ventas.');
+    } else if (newStatus === 'cancelado') {
+      showToast('Pedido cancelado. Si estaba confirmado, el inventario ha sido restaurado.');
+    } else {
+      showToast(`Pedido actualizado a "${newStatus}"`);
+    }
   };
 
   const confirmSingleDelete = async () => {

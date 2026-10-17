@@ -275,6 +275,18 @@ async function startServer() {
     }
   });
 
+  app.delete('/api/products/:id', (req, res) => {
+    try {
+      const { id } = req.params;
+      const products = getStoredProducts();
+      const filtered = products.filter((p) => String(p.id) !== String(id));
+      saveStoredProducts(filtered);
+      return res.json({ success: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   if (!isProd) {
     const vite = await createViteServer({
       server: { middlewareMode: true },

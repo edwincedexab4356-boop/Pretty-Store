@@ -339,10 +339,18 @@ export async function updateAdminProduct(id: string, product: Partial<Producto>)
 
 export async function deleteAdminProduct(id: string): Promise<boolean> {
   try {
-    await supabase.from('productos').delete().eq('id', id);
-  } catch {
-    // ignore
+    const { error } = await supabase.from('productos').delete().eq('id', id);
+    if (error) {
+      console.warn('Supabase delete product warning:', error);
+    }
+  } catch (err) {
+    console.warn('Error deleting product from Supabase:', err);
   }
+  try {
+    if (typeof window !== 'undefined') {
+      await fetch(`/api/products/${id}`, { method: 'DELETE' });
+    }
+  } catch {}
   invalidateCatalogCache();
   return true;
 }
@@ -581,13 +589,148 @@ export async function getAdminOrders(): Promise<Pedido[]> {
   }
 }
 
-export async function updateOrderStatus(orderId: string | number, estado: EstadoPedido): Promise<boolean> {
+export async function updateOrderStatus(
+  orderId: string | number,
+  estado: EstadoPedido,
+  existingOrder?: Pedido
+): Promise<boolean> {
   const cleanId = String(orderId);
   try {
     const { error } = await supabase.from('pedidos').update({ estado }).eq('id', cleanId);
     if (error) console.warn('Supabase update status error:', error);
   } catch (err) {
     console.warn('Update order status error:', err);
+  }
+
+  // 1. SI SE ACEPTA EL PEDIDO (estado === 'confirmado'):
+  // Descontar automáticamente del inventario (stock) de cada producto y registrar en ventas
+  if (estado === 'confirmado' && existingOrder?.estado !== 'confirmado') {
+    const itemsToDeduct = existingOrder?.items || [];
+    for (const item of itemsToDeduct) {
+      const prodId = String(item.producto_id || item.producto?.id || '');
+      const qty = Number(item.cantidad) || 1;
+      const prodName = item.producto?.nombre?.trim();
+
+      try {
+        let currentStock: number | null = null;
+        let targetId = prodId;
+
+        // Buscar producto por ID en Supabase
+        if (prodId) {
+          const { data: prodData } = await supabase
+            .from('productos')
+            .select('id, stock')
+            .eq('id', prodId)
+            .maybeSingle();
+
+          if (prodData) {
+            currentStock = Number(prodData.stock) || 0;
+            targetId = prodData.id;
+          }
+        }
+
+        // Si no se encontró por ID, intentar buscar por nombre
+        if (currentStock === null && prodName) {
+          const { data: prodByName } = await supabase
+            .from('productos')
+            .select('id, stock')
+            .ilike('nombre', prodName)
+            .maybeSingle();
+
+          if (prodByName) {
+            currentStock = Number(prodByName.stock) || 0;
+            targetId = prodByName.id;
+          }
+        }
+
+        // Si se halló en Supabase o en el objeto del pedido
+        if (currentStock === null && item.producto?.stock !== undefined) {
+          currentStock = Number(item.producto.stock) || 0;
+        }
+
+        if (currentStock !== null) {
+          const newStock = Math.max(0, currentStock - qty);
+          // Actualizar stock en Supabase
+          const { error: stockErr } = await supabase
+            .from('productos')
+            .update({ stock: newStock })
+            .eq('id', targetId);
+
+          if (stockErr) {
+            console.warn(`Error al actualizar stock para ${targetId}:`, stockErr);
+          } else {
+            console.log(`Inventario descontado con éxito para ${targetId}: ${currentStock} -> ${newStock}`);
+          }
+
+          // Sincronizar servidor express backup si aplica
+          try {
+            if (typeof window !== 'undefined') {
+              fetch('/api/products', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: targetId, stock: newStock }),
+              }).catch(() => {});
+            }
+          } catch {}
+        }
+      } catch (err) {
+        console.warn(`Error procesando descuento de inventario para producto ${prodId}:`, err);
+      }
+    }
+
+    // Invalidar caché del catálogo para que toda la tienda refleje el nuevo stock al instante
+    invalidateCatalogCache();
+
+    // Registrar explícitamente en la tabla 'ventas' de Supabase
+    try {
+      const saleRecord = {
+        pedido_id: cleanId,
+        total: Number(existingOrder?.total) || 0,
+        subtotal: Number(existingOrder?.subtotal) || Number(existingOrder?.total) || 0,
+        descuento: Number(existingOrder?.descuento) || 0,
+        metodo_pago: existingOrder?.metodo_pago || 'efectivo',
+        tipo_entrega: existingOrder?.tipo_entrega || 'delivery',
+        estado: 'confirmado',
+        fecha: new Date().toISOString(),
+      };
+
+      const { error: vErr } = await supabase.from('ventas').insert(saleRecord);
+      if (vErr) {
+        console.warn('Registro en ventas de Supabase advertencia:', vErr);
+      } else {
+        console.log('Venta registrada con éxito en Supabase:', cleanId);
+      }
+    } catch (err) {
+      console.warn('Error registrando venta en tabla ventas:', err);
+    }
+  }
+
+  // 2. SI SE CANCELA UN PEDIDO QUE YA ESTABA CONFIRMADO:
+  // Restaurar el stock al inventario
+  if (estado === 'cancelado' && existingOrder?.estado === 'confirmado') {
+    const itemsToRestore = existingOrder?.items || [];
+    for (const item of itemsToRestore) {
+      const prodId = String(item.producto_id || item.producto?.id || '');
+      const qty = Number(item.cantidad) || 1;
+      if (prodId) {
+        try {
+          const { data: prodData } = await supabase
+            .from('productos')
+            .select('id, stock')
+            .eq('id', prodId)
+            .maybeSingle();
+
+          if (prodData) {
+            const restoredStock = (Number(prodData.stock) || 0) + qty;
+            await supabase.from('productos').update({ stock: restoredStock }).eq('id', prodId);
+          }
+        } catch {}
+      }
+    }
+    invalidateCatalogCache();
+    try {
+      await supabase.from('ventas').delete().eq('pedido_id', cleanId);
+    } catch {}
   }
 
   // Cross-device server sync
