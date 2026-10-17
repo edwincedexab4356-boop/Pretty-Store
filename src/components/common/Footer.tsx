@@ -28,7 +28,7 @@ export const Footer: React.FC<FooterProps> = ({
     const next = tapCount + 1;
     if (timerRef.current) clearTimeout(timerRef.current);
 
-    if (next >= 5) {
+    if (next >= 10) {
       setTapCount(0);
       if (onOpenAdmin) onOpenAdmin();
       return;
@@ -37,7 +37,7 @@ export const Footer: React.FC<FooterProps> = ({
     setTapCount(next);
     timerRef.current = setTimeout(() => {
       setTapCount(0);
-    }, 2500);
+    }, 4000);
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -74,15 +74,17 @@ export const Footer: React.FC<FooterProps> = ({
           {/* Brand Col */}
           <div className="lg:col-span-4 space-y-4">
             <button
+              type="button"
               onClick={handleLogoTap}
-              className="flex items-center gap-3 text-left group cursor-pointer focus:outline-none"
+              className="flex items-center gap-3 text-left group cursor-pointer border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:outline-none active:ring-0 ring-0 select-none [-webkit-tap-highlight-color:transparent]"
               title="Pretty Store"
             >
-              <div className="w-9 h-9 rounded-full overflow-hidden bg-black border border-white/15 flex items-center justify-center shrink-0 transition-transform group-hover:scale-105">
+              <div className="w-9 h-9 rounded-full overflow-hidden bg-black border border-white/15 flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 select-none pointer-events-none">
                 <img
                   src={config.logo_url || '/images/logo/logotipo.jpeg'}
                   alt={config.nombre_tienda || 'Pretty Store'}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover select-none pointer-events-none"
+                  draggable={false}
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
                     if (!target.src.endsWith('/images/logo/logo.png')) {

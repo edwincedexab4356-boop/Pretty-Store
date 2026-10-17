@@ -102,7 +102,7 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  // Secret 5-tap to open admin
+  // Secret 10-tap to open admin
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -110,7 +110,7 @@ export const Header: React.FC<HeaderProps> = ({
     tapCountRef.current += 1;
     if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
 
-    if (tapCountRef.current >= 5) {
+    if (tapCountRef.current >= 10) {
       tapCountRef.current = 0;
       if (onOpenAdmin) onOpenAdmin();
       return;
@@ -118,7 +118,7 @@ export const Header: React.FC<HeaderProps> = ({
 
     tapTimerRef.current = setTimeout(() => {
       tapCountRef.current = 0;
-    }, 2500);
+    }, 4000);
 
     navigateTo('hero');
   };
@@ -145,15 +145,17 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Logo & Store Name */}
           <div className="flex items-center">
             <button
+              type="button"
               onClick={handleLogoTap}
-              className="flex items-center gap-3 group cursor-pointer text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-[#c5a059]"
+              className="flex items-center gap-3 group cursor-pointer text-left border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:outline-none active:ring-0 ring-0 select-none [-webkit-tap-highlight-color:transparent]"
               title="Pretty Store"
             >
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden bg-black border border-white/15 flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-105">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden bg-black border border-white/15 flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-105 select-none pointer-events-none">
                 <img
                   src={config.logo_url || '/images/logo/logotipo.jpeg'}
                   alt={config.nombre_tienda || 'Pretty Store'}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover select-none pointer-events-none"
+                  draggable={false}
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
                     if (!target.src.endsWith('/images/logo/logo.png')) {
@@ -162,7 +164,7 @@ export const Header: React.FC<HeaderProps> = ({
                   }}
                 />
               </div>
-              <div className="flex flex-col">
+              <div className="flex flex-col select-none">
                 <span className="text-base sm:text-lg font-serif-luxury font-semibold tracking-[0.16em] text-white uppercase leading-none transition-colors group-hover:text-[#c5a059]">
                   {config.nombre_tienda || 'Pretty Store'}
                 </span>
