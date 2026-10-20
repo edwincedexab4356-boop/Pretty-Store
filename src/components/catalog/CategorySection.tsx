@@ -145,20 +145,22 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
                       <span className="font-semibold text-xs text-white leading-snug capitalize">{c.nombre}</span>
                       {isSelected && <span className="w-2 h-2 rounded-full bg-[#c5a059] shrink-0 mt-1" />}
                     </div>
-                    <div className="mt-2 flex items-center justify-between text-[10px] text-stone-400 font-mono">
-                      <span className="truncate text-stone-500 font-sans text-[9px]">
-                        {c.descripcion ? c.descripcion.slice(0, 24) + '...' : 'Colección'}
-                      </span>
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                          count === 0
-                            ? 'bg-[#c5a059]/20 text-[#c5a059] border border-[#c5a059]/30 font-medium'
-                            : 'bg-white/5 text-stone-300 font-mono'
-                        }`}
-                      >
-                        {count === 0 ? 'Próximamente' : count}
-                      </span>
-                    </div>
+                    {count === 0 ? (
+                      <div className="mt-2 flex items-center justify-end">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#c5a059]/20 text-[#c5a059] border border-[#c5a059]/30 font-medium">
+                          Próximamente
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="mt-2 flex items-center justify-between text-[10px] text-stone-400 font-mono">
+                        <span className="truncate text-stone-500 font-sans text-[9px]">
+                          {c.descripcion ? c.descripcion.slice(0, 24) + '...' : 'Colección'}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white/5 text-stone-300 font-mono">
+                          {count}
+                        </span>
+                      </div>
+                    )}
                   </button>
                 );
               })}

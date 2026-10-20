@@ -90,6 +90,17 @@ function MainAppContent() {
     return map;
   }, [products]);
 
+  // Las categorías con productos van primero; las categorías vacías ("Próximamente") van a lo último
+  const sortedCategories = useMemo(() => {
+    return [...categories].sort((a, b) => {
+      const countA = productCountMap[a.id] || 0;
+      const countB = productCountMap[b.id] || 0;
+      if (countA > 0 && countB === 0) return -1;
+      if (countA === 0 && countB > 0) return 1;
+      return 0;
+    });
+  }, [categories, productCountMap]);
+
   // Admin Screen
   if (currentView === 'admin') {
     if (!isAuthenticated) {
@@ -172,7 +183,7 @@ function MainAppContent() {
     <div className="min-h-screen bg-[#09090b] text-[#f4f4f6] flex flex-col selection:bg-[#fbbf24] selection:text-black font-sans-clean">
       {/* Header */}
       <Header
-        categories={categories}
+        categories={sortedCategories}
         selectedCategoryId={selectedCategoryId}
         onSelectCategory={(id) => {
           setSelectedCategoryId(id);
@@ -197,7 +208,7 @@ function MainAppContent() {
 
       {/* Collections / Category Showcase Bar */}
       <CategorySection
-        categories={categories}
+        categories={sortedCategories}
         selectedCategoryId={selectedCategoryId}
         onSelectCategory={(id) => {
           setSelectedCategoryId(id);
@@ -212,7 +223,7 @@ function MainAppContent() {
       <main className="flex-1">
         <ProductGrid
           products={products}
-          categories={categories}
+          categories={sortedCategories}
           selectedCategoryId={selectedCategoryId}
           onSelectCategory={setSelectedCategoryId}
           onQuickView={(p) => setQuickViewProduct(p)}
@@ -224,7 +235,7 @@ function MainAppContent() {
 
       {/* Footer */}
       <Footer
-        categories={categories}
+        categories={sortedCategories}
         onSelectCategory={(id) => {
           setSelectedCategoryId(id);
           const el = document.getElementById('catalogo');
@@ -240,7 +251,7 @@ function MainAppContent() {
       {quickViewProduct && (
         <ProductDetailModal
           product={quickViewProduct}
-          categories={categories}
+          categories={sortedCategories}
           onClose={() => setQuickViewProduct(null)}
         />
       )}

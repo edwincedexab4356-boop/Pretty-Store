@@ -20,6 +20,9 @@ import {
   Phone,
   HelpCircle,
   ExternalLink,
+  User,
+  ArrowDown,
+  CreditCard,
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useStoreConfig } from '../../context/StoreConfigContext';
@@ -108,10 +111,56 @@ export const CheckoutDemoModal: React.FC<CheckoutModalProps> = ({ onClose }) => 
   // Confirmed Order
   const [orderDraft, setOrderDraft] = useState<OrderDraft | null>(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
 
   // Modal viewers
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [isVoucherViewerOpen, setIsVoucherViewerOpen] = useState(false);
+
+  // Step 1 Form section refs for automatic navigation
+  const formScrollRef = useRef<HTMLFormElement | null>(null);
+  const sectionEntregaRef = useRef<HTMLDivElement | null>(null);
+  const sectionEnvioDetallesRef = useRef<HTMLDivElement | null>(null);
+  const sectionContactoRef = useRef<HTMLDivElement | null>(null);
+  const sectionPagoRef = useRef<HTMLDivElement | null>(null);
+  const sectionSubmitRef = useRef<HTMLDivElement | null>(null);
+  const nombreInputRef = useRef<HTMLInputElement | null>(null);
+
+  const scrollToSection = (
+    targetRef: React.RefObject<HTMLDivElement | null>,
+    focusInputRef?: React.RefObject<HTMLInputElement | null>
+  ) => {
+    setTimeout(() => {
+      if (targetRef.current) {
+        targetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      if (focusInputRef && focusInputRef.current) {
+        setTimeout(() => {
+          focusInputRef.current?.focus();
+        }, 320);
+      }
+    }, 120);
+  };
+
+  const handleSelectRetiro = () => {
+    setDeliveryType('retiro');
+    scrollToSection(sectionContactoRef, nombreInputRef);
+  };
+
+  const handleSelectDelivery = () => {
+    setDeliveryType('delivery');
+    scrollToSection(sectionEnvioDetallesRef);
+  };
+
+  const handleSelectBranch = (branch: string) => {
+    setSelectedBranch(branch);
+    scrollToSection(sectionContactoRef, nombreInputRef);
+  };
+
+  const handleSelectPayment = (method: PaymentMethodType) => {
+    setPaymentMethod(method);
+    scrollToSection(sectionSubmitRef);
+  };
 
   // Dynamic courier branch options
   const servientregaBranches = useMemo(
@@ -270,9 +319,10 @@ export const CheckoutDemoModal: React.FC<CheckoutModalProps> = ({ onClose }) => 
     if (!file) return;
 
     if (file.size > 25 * 1024 * 1024) {
-      alert('La imagen no debe superar los 25MB.');
+      setVoucherError('La imagen no debe superar los 25MB.');
       return;
     }
+    setVoucherError(null);
 
     setIsProcessingVoucher(true);
     let finalBase64 = '';
@@ -349,9 +399,10 @@ export const CheckoutDemoModal: React.FC<CheckoutModalProps> = ({ onClose }) => 
   // Step 3 -> Step 4: Finalize and save order
   const handleConfirmOrderAndSave = async () => {
     if (!voucherDataUrl) {
-      alert('Debes adjuntar la captura del comprobante de pago para confirmar el pedido.');
+      setVoucherError('Debes adjuntar la captura del comprobante de pago para confirmar el pedido.');
       return;
     }
+    setVoucherError(null);
 
     setIsSubmittingOrder(true);
     try {
@@ -633,11 +684,53 @@ _Enviado desde Pretty Store Oficial_`;
            ======================================================== */}
         {currentStep === 'form' && (
           <form
+            ref={formScrollRef}
             onSubmit={handleContinueToReview}
-            className="overflow-y-auto overscroll-contain touch-scroll p-4 sm:p-6 lg:p-7 space-y-6 text-left"
+            className="overflow-y-auto overscroll-contain touch-scroll p-4 sm:p-6 lg:p-7 space-y-6 text-left relative"
           >
+            {/* Barra de Progreso de 3 Pasos */}
+            <div className="sticky top-0 z-20 -mx-4 -mt-4 sm:-mx-6 sm:-mt-6 lg:-mx-7 lg:-mt-7 p-2.5 sm:p-3 bg-[#09090b]/95 backdrop-blur-md border-b border-white/10 flex items-center justify-between gap-1 sm:gap-2 shadow-lg">
+              <button
+                type="button"
+                onClick={() => scrollToSection(sectionEntregaRef)}
+                className="flex-1 py-1.5 px-2 rounded-lg text-center text-[10px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer bg-white/5 hover:bg-white/10 text-white border border-white/10"
+              >
+                <span className="w-4 h-4 rounded-full bg-[#fbbf24] text-black font-black text-[9px] flex items-center justify-center">1</span>
+                <span className="truncate">1. Entrega</span>
+                {deliveryType && <Check size={11} className="text-emerald-400 shrink-0" />}
+              </button>
+
+              <span className="text-stone-600 text-xs">→</span>
+
+              <button
+                type="button"
+                onClick={() => scrollToSection(sectionContactoRef, nombreInputRef)}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-center text-[10px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer border ${
+                  nombre && telefono
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                    : 'bg-white/5 hover:bg-white/10 text-white border-white/10'
+                }`}
+              >
+                <span className="w-4 h-4 rounded-full bg-stone-700 text-white font-black text-[9px] flex items-center justify-center">2</span>
+                <span className="truncate">2. Contacto</span>
+                {nombre && telefono && <Check size={11} className="text-emerald-400 shrink-0" />}
+              </button>
+
+              <span className="text-stone-600 text-xs">→</span>
+
+              <button
+                type="button"
+                onClick={() => scrollToSection(sectionPagoRef)}
+                className="flex-1 py-1.5 px-2 rounded-lg text-center text-[10px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer bg-white/5 hover:bg-white/10 text-white border border-white/10"
+              >
+                <span className="w-4 h-4 rounded-full bg-stone-700 text-white font-black text-[9px] flex items-center justify-center">3</span>
+                <span className="truncate">3. Pago</span>
+                {paymentMethod && <Check size={11} className="text-emerald-400 shrink-0" />}
+              </button>
+            </div>
+
             {/* 1. MÉTODO DE ENTREGA Y ENVÍO (A TODO PANAMÁ) */}
-            <div className="space-y-3.5">
+            <div ref={sectionEntregaRef} className="space-y-3.5 scroll-mt-14">
               <label className="text-xs uppercase tracking-[0.16em] text-white font-bold flex items-center gap-1.5">
                 <Truck size={15} className="text-[#fbbf24]" />
                 <span>1. Modalidad de Entrega (Retiro o Envío a Panamá) *</span>
@@ -653,7 +746,7 @@ _Enviado desde Pretty Store Oficial_`;
                     {/* Opción 1: Retiro en Sucursal */}
                     <button
                       type="button"
-                      onClick={() => setDeliveryType('retiro')}
+                      onClick={handleSelectRetiro}
                       className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
                         deliveryType === 'retiro'
                           ? 'border-[#fbbf24] bg-[#fbbf24]/20 ring-2 ring-[#fbbf24] shadow-lg shadow-[#fbbf24]/10'
@@ -687,7 +780,7 @@ _Enviado desde Pretty Store Oficial_`;
                     {/* Opción 2: Envío */}
                     <button
                       type="button"
-                      onClick={() => setDeliveryType('delivery')}
+                      onClick={handleSelectDelivery}
                       className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
                         deliveryType === 'delivery'
                           ? 'border-[#fbbf24] bg-[#fbbf24]/20 ring-2 ring-[#fbbf24] shadow-lg shadow-[#fbbf24]/10'
@@ -741,7 +834,7 @@ _Enviado desde Pretty Store Oficial_`;
 
                 {/* Si elige Envío: se despliega la selección de Courier, Provincia y Sucursal/Casa */}
                 {deliveryType === 'delivery' && (
-                  <div className="space-y-4 pt-1 border-t border-white/10 animate-fadeIn">
+                  <div ref={sectionEnvioDetallesRef} className="space-y-4 pt-1 border-t border-white/10 animate-fadeIn scroll-mt-14">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-bold text-white uppercase tracking-wider">
                         SELECCIONA TU EMPRESA DE ENVÍO *
@@ -919,7 +1012,7 @@ _Enviado desde Pretty Store Oficial_`;
                                 <button
                                   key={b.branch}
                                   type="button"
-                                  onClick={() => setSelectedBranch(b.branch)}
+                                  onClick={() => handleSelectBranch(b.branch)}
                                   className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
                                     isSelected
                                       ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
@@ -946,7 +1039,7 @@ _Enviado desde Pretty Store Oficial_`;
                                 <button
                                   key={b.branch}
                                   type="button"
-                                  onClick={() => setSelectedBranch(b.branch)}
+                                  onClick={() => handleSelectBranch(b.branch)}
                                   className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
                                     isSelected
                                       ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
@@ -968,7 +1061,7 @@ _Enviado desde Pretty Store Oficial_`;
                                 <button
                                   key={b.branch}
                                   type="button"
-                                  onClick={() => setSelectedBranch(b.branch)}
+                                  onClick={() => handleSelectBranch(b.branch)}
                                   className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between gap-2 cursor-pointer active:scale-[0.98] ${
                                     isSelected
                                       ? 'border-[#fbbf24] bg-[#fbbf24]/20 text-white ring-1 ring-[#fbbf24]'
@@ -996,20 +1089,40 @@ _Enviado desde Pretty Store Oficial_`;
                         pendiente antes de realizar el envío.
                       </p>
                     </div>
+
+                    {/* Botón rápido para continuar al Paso 2 */}
+                    <button
+                      type="button"
+                      onClick={() => scrollToSection(sectionContactoRef, nombreInputRef)}
+                      className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#fbbf24] via-[#f59e0b] to-[#fbbf24] hover:from-[#f59e0b] hover:to-[#fbbf24] text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-[#fbbf24]/20 active:scale-[0.98]"
+                    >
+                      <span>CONTINUAR A DATOS DE CONTACTO (PASO 2)</span>
+                      <ArrowDown size={15} />
+                    </button>
                   </div>
                 )}
               </div>
             </div>
 
             {/* 2. DATOS DE CONTACTO DEL CLIENTE * */}
-            <div className="space-y-3">
-              <label className="text-xs uppercase tracking-[0.16em] text-white font-bold block">
-                2. Datos de Contacto del Cliente *
-              </label>
+            <div ref={sectionContactoRef} className="space-y-3 scroll-mt-14 pt-1">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <label className="text-xs uppercase tracking-[0.16em] text-white font-bold flex items-center gap-1.5">
+                  <User size={15} className="text-[#fbbf24]" />
+                  <span>2. Datos de Contacto del Cliente *</span>
+                </label>
+                {deliveryType && (
+                  <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-center gap-1">
+                    <CheckCircle2 size={11} />
+                    <span>{deliveryType === 'retiro' ? 'Retiro en Tienda' : `Envío: ${courier} (${selectedBranch || 'Domicilio'})`}</span>
+                  </span>
+                )}
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div className="space-y-1">
                   <label className="text-[11px] text-stone-300 font-light block">Nombre Completo *</label>
                   <input
+                    ref={nombreInputRef}
                     type="text"
                     required
                     placeholder="Ej. Roberto Cedeño"
@@ -1040,16 +1153,17 @@ _Enviado desde Pretty Store Oficial_`;
             </div>
 
             {/* 3. SELECCIONA TU MÉTODO DE PAGO * */}
-            <div className="space-y-3">
-              <label className="text-xs uppercase tracking-[0.16em] text-white font-bold block">
-                3. Selecciona tu Método de Pago *
+            <div ref={sectionPagoRef} className="space-y-3 scroll-mt-14">
+              <label className="text-xs uppercase tracking-[0.16em] text-white font-bold flex items-center gap-1.5">
+                <CreditCard size={15} className="text-[#fbbf24]" />
+                <span>3. Selecciona tu Método de Pago *</span>
               </label>
 
               <div className="grid grid-cols-3 gap-3">
                 {/* Yappy */}
                 <button
                   type="button"
-                  onClick={() => setPaymentMethod('yappy')}
+                  onClick={() => handleSelectPayment('yappy')}
                   className={`p-3.5 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
                     paymentMethod === 'yappy'
                       ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-1 ring-[#fbbf24]'
@@ -1064,7 +1178,7 @@ _Enviado desde Pretty Store Oficial_`;
                 {/* Banco General */}
                 <button
                   type="button"
-                  onClick={() => setPaymentMethod('transferencia')}
+                  onClick={() => handleSelectPayment('transferencia')}
                   className={`p-3.5 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
                     paymentMethod === 'transferencia'
                       ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-1 ring-[#fbbf24]'
@@ -1079,7 +1193,7 @@ _Enviado desde Pretty Store Oficial_`;
                 {/* Tarjeta */}
                 <button
                   type="button"
-                  onClick={() => setPaymentMethod('tarjeta')}
+                  onClick={() => handleSelectPayment('tarjeta')}
                   className={`p-3.5 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
                     paymentMethod === 'tarjeta'
                       ? 'border-[#fbbf24] bg-[#fbbf24]/15 text-white ring-1 ring-[#fbbf24]'
@@ -1120,7 +1234,7 @@ _Enviado desde Pretty Store Oficial_`;
             </div>
 
             {/* Submit Button */}
-            <div className="pt-2">
+            <div ref={sectionSubmitRef} className="pt-2 scroll-mt-10">
               <button
                 type="submit"
                 className="w-full py-4 px-6 rounded-xl bg-[#fbbf24] hover:bg-[#f59e0b] text-black font-extrabold uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer shadow-xl shadow-[#fbbf24]/20 hover:shadow-2xl hover:shadow-[#fbbf24]/30 hover:scale-[1.01] active:scale-[0.98]"
@@ -1669,6 +1783,12 @@ _Enviado desde Pretty Store Oficial_`;
 
             {/* PASO 3: CONFIRMAR PEDIDO */}
             <div className="space-y-3 pt-2">
+              {voucherError && (
+                <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center gap-2 shadow-lg animate-shake">
+                  <AlertCircle size={16} className="shrink-0 text-rose-400" />
+                  <span>{voucherError}</span>
+                </div>
+              )}
               {voucherDataUrl ? (
                 <button
                   type="button"

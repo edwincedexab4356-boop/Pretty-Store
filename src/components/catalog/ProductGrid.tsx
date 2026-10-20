@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, SlidersHorizontal, Package, RefreshCw, Sparkles, Clock, MessageCircle } from 'lucide-react';
+import { Search, SlidersHorizontal, Package, RefreshCw } from 'lucide-react';
 import { Producto, Categoria } from '../../types/database';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 import { ProductCard } from './ProductCard';
@@ -161,52 +161,21 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
             ))}
           </div>
         ) : isCategoryEmpty ? (
-          <div className="py-16 sm:py-24 text-center max-w-md mx-auto flex flex-col items-center animate-fadeIn px-4">
-            <div className="relative mb-5">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border border-[#c5a059]/40 bg-[#c5a059]/10 flex items-center justify-center text-[#c5a059] shadow-2xl shadow-[#c5a059]/20">
-                <Sparkles size={28} className="animate-pulse" />
-              </div>
-              <span className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-stone-900 border border-[#c5a059]/40 text-[#c5a059]">
-                <Clock size={12} />
-              </span>
-            </div>
-
-            <span className="px-3 py-1 rounded-full bg-[#c5a059]/15 text-[#c5a059] border border-[#c5a059]/30 text-[11px] font-bold uppercase tracking-[0.2em] mb-3">
+          <div className="py-20 sm:py-28 text-center max-w-md mx-auto flex flex-col items-center animate-fadeIn px-4">
+            <h3 className="text-3xl sm:text-4xl font-serif-luxury font-bold text-white mb-6 tracking-wide">
               Próximamente
-            </span>
-
-            <h3 className="text-xl sm:text-2xl font-serif-luxury font-bold text-white mb-2">
-              Colección {currentCategoryTitle}
             </h3>
 
-            <p className="text-xs sm:text-sm text-stone-400 mb-6 font-light leading-relaxed">
-              Estamos preparando nuevas piezas exclusivas para esta colección. Muy pronto estarán disponibles con los más altos estándares de calidad y distinción de Pretty Store.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-              <button
-                onClick={() => {
-                  setSearchTerm('');
-                  onSelectCategory('all');
-                }}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#c5a059] hover:bg-[#b5914a] text-black text-xs font-bold uppercase tracking-wider rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-[#c5a059]/20 hover:scale-105 active:scale-95"
-              >
-                <RefreshCw size={14} />
-                <span>Explorar Otras Colecciones</span>
-              </button>
-
-              <a
-                href={`https://api.whatsapp.com/send?phone=50762150251&text=${encodeURIComponent(
-                  `Hola Pretty Store, me gustaría consultar cuándo estarán disponibles nuevas piezas en la categoría "${currentCategoryTitle}". ¡Muchas gracias!`
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 bg-stone-900 hover:bg-stone-800 text-stone-200 border border-white/10 hover:border-white/25 text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer active:scale-95"
-              >
-                <MessageCircle size={14} className="text-[#25D366]" />
-                <span>Consultar por WhatsApp</span>
-              </a>
-            </div>
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                onSelectCategory('all');
+              }}
+              className="inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-[#c5a059] hover:bg-[#b5914a] text-black text-xs font-bold uppercase tracking-wider rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-[#c5a059]/20 hover:scale-105 active:scale-95"
+            >
+              <RefreshCw size={14} />
+              <span>Ver Catálogo Completo</span>
+            </button>
           </div>
         ) : (
           <div className="py-20 text-center max-w-sm mx-auto flex flex-col items-center">

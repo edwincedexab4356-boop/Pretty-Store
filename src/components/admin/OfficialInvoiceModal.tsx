@@ -17,6 +17,7 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({ orde
   const [imgError, setImgError] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Fallback voucher resolution
   let initialVoucherUrl = order?.comprobante_pago || null;
@@ -39,6 +40,7 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({ orde
     if (!file) return;
 
     setIsUploading(true);
+    setUploadError(null);
     try {
       const reader = new FileReader();
       const base64: string = await new Promise((resolve) => {
@@ -83,10 +85,10 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({ orde
           // ignore
         }
       } else {
-        alert('Error al subir el comprobante.');
+        setUploadError('Error al subir el comprobante.');
       }
     } catch (err: any) {
-      alert('Error al procesar archivo: ' + (err?.message || 'Error'));
+      setUploadError('Error al procesar archivo: ' + (err?.message || 'Error'));
     } finally {
       setIsUploading(false);
     }
@@ -399,6 +401,12 @@ export const OfficialInvoiceModal: React.FC<OfficialInvoiceModalProps> = ({ orde
                     />
                   </label>
                 </div>
+
+                {uploadError && (
+                  <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs font-semibold text-center">
+                    {uploadError}
+                  </div>
+                )}
 
                 <p className="text-[10px] text-stone-400 pt-1">
                   💡 Soporta imágenes JPG, PNG, WEBP y recibos PDF de Banco General o Yappy.

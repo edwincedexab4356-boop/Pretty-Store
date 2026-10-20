@@ -74,10 +74,6 @@ export const Hero: React.FC<HeroProps> = ({ videoUrl = '/videos/hero.mp4', onExp
 
       {/* Content */}
       <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center justify-center min-h-[85vh] sm:min-h-[90vh]">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/40 border border-[#c5a059]/30 text-[10px] sm:text-xs uppercase tracking-[0.35em] font-medium text-[#c5a059] mb-6 backdrop-blur-md animate-floatGentle shadow-lg shadow-black/50">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#c5a059] animate-pulse" />
-          <span>The New Collection</span>
-        </div>
         <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-serif-luxury font-light text-white tracking-tight leading-[1.06] mb-6 max-w-3xl drop-shadow-md">
           Define your style.
         </h1>

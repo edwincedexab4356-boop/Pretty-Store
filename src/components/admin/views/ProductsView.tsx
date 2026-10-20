@@ -220,7 +220,7 @@ export const ProductsView: React.FC = () => {
       }
       await loadData();
     } catch (err: any) {
-      alert('Error al guardar el producto: ' + (err?.message || 'Error'));
+      showToast('Error al guardar el producto: ' + (err?.message || 'Error'), 'error');
     } finally {
       setIsSubmitting(false);
     }
