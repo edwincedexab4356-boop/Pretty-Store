@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { Categoria, Producto, Pedido, Cliente, Inventario, EstadoPedido, PedidoItem } from '../types/database';
+import { Categoria, Producto, Pedido, Cliente, Inventario, EstadoPedido, PedidoItem, Novedad } from '../types/database';
 import {
   getAllSavedOrderReceipts,
   getOrderReceiptById,
@@ -15,45 +15,80 @@ import {
   saveLocalProductOptions,
 } from '../utils/productOptions';
 import { invalidateCatalogCache } from './catalogService';
+import { compressImageForUpload } from '../utils/imageCompressor';
 
 /* ==================== SUBIDA DE IMÁGENES A SUPABASE STORAGE ==================== */
 export async function uploadProductImageToStorage(file: File): Promise<string> {
-  try {
-    const ext = file.name ? file.name.split('.').pop()?.toLowerCase() || 'jpg' : 'jpg';
-    const cleanExt = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? ext : 'jpg';
-    const mimeType = file.type || `image/${cleanExt === 'jpg' ? 'jpeg' : cleanExt}`;
-    const fileName = `prod_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
+  let fileToUpload = file;
+  let compressedDataUrl = '';
 
+  try {
+    const compressed = await compressImageForUpload(file);
+    fileToUpload = compressed.file;
+    compressedDataUrl = compressed.dataUrl;
+  } catch (err) {
+    console.warn('Image compression warning, using raw file:', err);
+  }
+
+  const ext = fileToUpload.name ? fileToUpload.name.split('.').pop()?.toLowerCase() || 'jpg' : 'jpg';
+  const cleanExt = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? ext : 'jpg';
+  const mimeType = fileToUpload.type || `image/${cleanExt === 'jpg' ? 'jpeg' : cleanExt}`;
+  const fileName = `prod_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
+
+  // 1. Intentar subir a Supabase Storage
+  try {
     const { data, error } = await supabase.storage
       .from('product-images')
-      .upload(fileName, file, {
+      .upload(fileName, fileToUpload, {
         contentType: mimeType,
         upsert: true,
       });
 
-    if (error) {
-      console.warn('Supabase storage upload error:', error);
-      throw error;
+    if (!error && data) {
+      const { data: pubData } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(fileName);
+
+      if (pubData?.publicUrl) {
+        return pubData.publicUrl;
+      }
     }
-
-    const { data: pubData } = supabase.storage
-      .from('product-images')
-      .getPublicUrl(fileName);
-
-    if (pubData?.publicUrl) {
-      return pubData.publicUrl;
-    }
-
-    throw new Error('No se pudo generar la URL pública de la imagen.');
-  } catch (err: any) {
-    console.error('Error in uploadProductImageToStorage, fallback base64:', err);
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error('No se pudo leer el archivo de imagen'));
-      reader.readAsDataURL(file);
-    });
+  } catch (supabaseErr) {
+    console.warn('Supabase product image upload warning:', supabaseErr);
   }
+
+  // 2. Fallback a servidor local (/api/upload-image) si Supabase no está configurado
+  if (compressedDataUrl) {
+    try {
+      const res = await fetch('/api/upload-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: compressedDataUrl,
+          prefix: 'prod',
+          filename: file.name,
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.url) return json.url;
+      }
+    } catch (serverErr) {
+      console.warn('Local server upload fallback error:', serverErr);
+    }
+  }
+
+  // 3. Fallback DataURL final
+  if (compressedDataUrl) {
+    return compressedDataUrl;
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo de imagen'));
+    reader.readAsDataURL(file);
+  });
 }
 
 /* ==================== CATEGORIAS ==================== */
@@ -1232,5 +1267,399 @@ export async function updateAdminStock(productId: string, newStock: number): Pro
     .eq('id', productId);
 
   if (error) throw error;
+  return true;
+}
+
+/* ==================== NOVEDADES & STORAGE DELETION ==================== */
+
+export const DEFAULT_NOVEDADES: Novedad[] = [
+  {
+    id: 'nov-1',
+    titulo: 'Colección Urbana 2026',
+    subtitulo: 'Gorras legendarias y drops limitados disponibles en Panamá',
+    badge: 'DROP EXCLUSIVO',
+    imagen_url: '/images/banners/banner-1.jpg',
+    enlace_url: '#catalogo',
+    orden: 1,
+    activo: true,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'nov-2',
+    titulo: 'Cronógrafos de Precisión',
+    subtitulo: 'Líneas arquitectónicas y elegancia que trasciende temporadas',
+    badge: 'TENDENCIA',
+    imagen_url: '/images/banners/banner-2.jpg',
+    enlace_url: '#catalogo',
+    orden: 2,
+    activo: true,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'nov-3',
+    titulo: 'Alta Perfumería Selecta',
+    subtitulo: 'Aromas únicos con proyección envolvente de larga duración',
+    badge: 'EXCLUSIVO',
+    imagen_url: '/images/banners/hero-poster.jpg',
+    enlace_url: '#catalogo',
+    orden: 3,
+    activo: true,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'nov-4',
+    titulo: 'Marroquinería & Accesorios',
+    subtitulo: 'Billeteras, cadenas y detalles de lujo con acabados de primera',
+    badge: 'TOP VENTAS',
+    imagen_url: '/images/banners/banner-1.jpg',
+    enlace_url: '#catalogo',
+    orden: 4,
+    activo: true,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'nov-5',
+    titulo: 'Envíos a Todo Panamá',
+    subtitulo: 'Entrega rápida a sucursal o domicilio vía Servientrega, Ferguson y Uno Express',
+    badge: 'OFICIAL',
+    imagen_url: '/images/banners/banner-2.jpg',
+    enlace_url: '#catalogo',
+    orden: 5,
+    activo: true,
+    created_at: new Date().toISOString(),
+  },
+];
+
+/**
+ * Elimina físicamente un archivo de Supabase Storage a partir de su URL pública.
+ * Soporta cualquier bucket ('novedades', 'product-images', etc.)
+ */
+export async function deleteSupabaseStorageFile(url?: string | null): Promise<boolean> {
+  if (!url || typeof url !== 'string') return false;
+  try {
+    const marker = '/storage/v1/object/public/';
+    if (!url.includes(marker)) return false;
+
+    const parts = url.split(marker)[1];
+    if (!parts) return false;
+
+    const slashIdx = parts.indexOf('/');
+    if (slashIdx === -1) return false;
+
+    const bucket = parts.substring(0, slashIdx);
+    const rawFilePath = parts.substring(slashIdx + 1);
+    const filePath = decodeURIComponent(rawFilePath.split('?')[0]); // Quitar query params si existen
+
+    const { error } = await supabase.storage.from(bucket).remove([filePath]);
+    if (error) {
+      console.warn(`Supabase Storage remove warning (${bucket}/${filePath}):`, error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Error deleting file from Supabase Storage:', err);
+    return false;
+  }
+}
+
+/**
+ * Sube una imagen de novedad a Supabase Storage con compresión inteligente y fallback automático.
+ */
+export async function uploadNovedadImageToStorage(file: File): Promise<string> {
+  let fileToUpload = file;
+  let compressedDataUrl = '';
+
+  try {
+    const compressed = await compressImageForUpload(file, 2048, 0.88);
+    fileToUpload = compressed.file;
+    compressedDataUrl = compressed.dataUrl;
+  } catch (err) {
+    console.warn('Compression warning in uploadNovedadImageToStorage:', err);
+  }
+
+  const ext = fileToUpload.name ? fileToUpload.name.split('.').pop()?.toLowerCase() || 'jpg' : 'jpg';
+  const cleanExt = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? ext : 'jpg';
+  const mimeType = fileToUpload.type || `image/${cleanExt === 'jpg' ? 'jpeg' : cleanExt}`;
+  const fileName = `nov_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
+
+  // 1. Intentar primero en el bucket 'novedades', luego en 'product-images'
+  const targetBuckets = ['novedades', 'product-images'];
+
+  for (const bucket of targetBuckets) {
+    try {
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .upload(fileName, fileToUpload, {
+          contentType: mimeType,
+          upsert: true,
+        });
+
+      if (!error && data) {
+        const { data: pubData } = supabase.storage
+          .from(bucket)
+          .getPublicUrl(fileName);
+
+        if (pubData?.publicUrl) {
+          return pubData.publicUrl;
+        }
+      }
+    } catch {
+      // Probar siguiente bucket
+    }
+  }
+
+  // 2. Fallback: subir al servidor local (/api/upload-image)
+  if (compressedDataUrl) {
+    try {
+      const res = await fetch('/api/upload-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: compressedDataUrl,
+          prefix: 'nov',
+          filename: file.name,
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.url) return json.url;
+      }
+    } catch (serverErr) {
+      console.warn('Local server upload fallback error for novedad:', serverErr);
+    }
+  }
+
+  // 3. Fallback: DataURL seguro
+  if (compressedDataUrl) {
+    return compressedDataUrl;
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('No se pudo procesar la imagen local'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Obtiene todas las novedades para el panel de administración (activas y ocultas).
+ */
+export async function getAdminNovedades(): Promise<Novedad[]> {
+  try {
+    const { data, error } = await supabase
+      .from('novedades')
+      .select('*')
+      .order('orden', { ascending: true });
+
+    if (!error && data && data.length > 0) {
+      return data;
+    }
+  } catch (e) {
+    console.warn('Supabase getAdminNovedades error:', e);
+  }
+
+  // Fallback servidor / local
+  try {
+    const res = await fetch('/api/novedades');
+    if (res.ok) {
+      const list = await res.json();
+      if (Array.isArray(list) && list.length > 0) {
+        return list;
+      }
+    }
+  } catch {}
+
+  return DEFAULT_NOVEDADES;
+}
+
+/**
+ * Obtiene las novedades activas (visibles) para la tienda pública.
+ */
+export async function getPublicNovedades(): Promise<Novedad[]> {
+  try {
+    const { data, error } = await supabase
+      .from('novedades')
+      .select('*')
+      .eq('activo', true)
+      .order('orden', { ascending: true });
+
+    if (!error && data && data.length > 0) {
+      return data;
+    }
+  } catch (e) {
+    console.warn('Supabase getPublicNovedades error:', e);
+  }
+
+  // Fallback servidor
+  try {
+    const res = await fetch('/api/novedades');
+    if (res.ok) {
+      const list = await res.json();
+      if (Array.isArray(list) && list.length > 0) {
+        return list.filter((n: Novedad) => n.activo);
+      }
+    }
+  } catch {}
+
+  return DEFAULT_NOVEDADES.filter((n) => n.activo);
+}
+
+/**
+ * Crea una nueva novedad en Supabase y sincroniza con el servidor.
+ */
+export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Novedad | null> {
+  const newId = novedad.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `nov-${Date.now()}`);
+  const payload = {
+    id: newId,
+    titulo: novedad.titulo || null,
+    subtitulo: novedad.subtitulo || null,
+    badge: novedad.badge || null,
+    imagen_url: novedad.imagen_url || '',
+    enlace_url: novedad.enlace_url || '#catalogo',
+    orden: typeof novedad.orden === 'number' ? novedad.orden : 0,
+    activo: novedad.activo !== undefined ? novedad.activo : true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from('novedades')
+      .insert(payload)
+      .select('*')
+      .single();
+
+    if (!error && data) {
+      // Sync local server backup
+      try {
+        await fetch('/api/novedades', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+      } catch {}
+      return data;
+    }
+  } catch (err) {
+    console.warn('Supabase createAdminNovedad error:', err);
+  }
+
+  // Backup en servidor si la tabla aún no existe en Supabase
+  try {
+    await fetch('/api/novedades', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return payload as Novedad;
+  } catch {}
+
+  return payload as Novedad;
+}
+
+/**
+ * Actualiza una novedad existente en Supabase y sincroniza con el servidor.
+ */
+export async function updateAdminNovedad(id: string, updates: Partial<Novedad>): Promise<Novedad | null> {
+  const payload = {
+    ...updates,
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from('novedades')
+      .update(payload)
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (!error && data) {
+      try {
+        await fetch('/api/novedades', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+      } catch {}
+      return data;
+    }
+  } catch (err) {
+    console.warn('Supabase updateAdminNovedad error:', err);
+  }
+
+  // Backup servidor
+  try {
+    const res = await fetch('/api/novedades', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, ...payload }),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      return json.item || ({ id, ...payload } as Novedad);
+    }
+  } catch {}
+
+  return { id, ...payload } as Novedad;
+}
+
+/**
+ * Alterna la visibilidad (oculto / visible) de una novedad.
+ */
+export async function toggleNovedadVisibility(id: string, activo: boolean): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('novedades')
+      .update({ activo, updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (error) {
+      console.warn('Supabase toggle visibility warning:', error);
+    }
+  } catch (e) {
+    console.warn('Error toggling visibility in Supabase:', e);
+  }
+
+  try {
+    await fetch('/api/novedades', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, activo }),
+    });
+  } catch {}
+
+  return true;
+}
+
+/**
+ * Elimina una novedad de Supabase Y elimina físicamente su archivo de imagen en Supabase Storage.
+ */
+export async function deleteAdminNovedad(id: string, imagenUrl?: string | null): Promise<boolean> {
+  // 1. Eliminar de Supabase Database
+  try {
+    const { error } = await supabase
+      .from('novedades')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.warn('Supabase delete novedad warning:', error);
+    }
+  } catch (err) {
+    console.warn('Error deleting novedad from Supabase table:', err);
+  }
+
+  // 2. Eliminar imagen físicamente de Supabase Storage
+  if (imagenUrl) {
+    await deleteSupabaseStorageFile(imagenUrl);
+  }
+
+  // 3. Eliminar de servidor backup
+  try {
+    await fetch(`/api/novedades/${id}`, { method: 'DELETE' });
+  } catch {}
+
   return true;
 }

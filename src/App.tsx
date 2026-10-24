@@ -26,6 +26,8 @@ import { ClientsView } from './components/admin/views/ClientsView';
 import { InventoryView } from './components/admin/views/InventoryView';
 import { SalesView } from './components/admin/views/SalesView';
 import { SettingsView } from './components/admin/views/SettingsView';
+import { NovedadesView } from './components/admin/views/NovedadesView';
+import { NovedadesSection } from './components/catalog/NovedadesSection';
 import { getActiveCategories, getActiveProducts } from './services/catalogService';
 import { Categoria, Producto } from './types/database';
 
@@ -160,6 +162,7 @@ function MainAppContent() {
               {adminTab === 'clients' && <ClientsView />}
               {adminTab === 'inventory' && <InventoryView />}
               {adminTab === 'sales' && <SalesView />}
+              {adminTab === 'novedades' && <NovedadesView />}
               {adminTab === 'settings' && <SettingsView />}
             </div>
           </main>
@@ -201,6 +204,16 @@ function MainAppContent() {
           }}
           onCategoriesClick={() => {
             const el = document.getElementById('categorias');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }}
+        />
+      </div>
+
+      {/* Apartado de Novedades (Bucle Infinito Horizontal) */}
+      <div id="novedades">
+        <NovedadesSection
+          onExploreCatalog={() => {
+            const el = document.getElementById('catalogo');
             if (el) el.scrollIntoView({ behavior: 'smooth' });
           }}
         />

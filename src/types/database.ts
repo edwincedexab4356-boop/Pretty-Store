@@ -130,3 +130,16 @@ export interface ConfiguracionTienda {
   badge_garantia_subtitulo?: string;
   updated_at?: string;
 }
+
+export interface Novedad {
+  id: string;
+  titulo?: string | null;
+  subtitulo?: string | null;
+  badge?: string | null;
+  imagen_url: string;
+  enlace_url?: string | null;
+  orden: number;
+  activo: boolean;
+  created_at?: string;
+  updated_at?: string;
+}

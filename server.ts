@@ -23,6 +23,11 @@ async function startServer() {
     fs.mkdirSync(uploadsDir, { recursive: true });
   }
 
+  const imagesDir = path.resolve(__dirname, 'public', 'uploads', 'images');
+  if (!fs.existsSync(imagesDir)) {
+    fs.mkdirSync(imagesDir, { recursive: true });
+  }
+
   // Serve uploads statically with open CORS and cache
   app.use('/uploads', (req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -35,6 +40,7 @@ async function startServer() {
   }
   const ordersFilePath = path.join(dataDir, 'orders.json');
   const productsFilePath = path.join(dataDir, 'products.json');
+  const novedadesFilePath = path.join(dataDir, 'novedades.json');
 
   const getStoredOrders = (): any[] => {
     try {
@@ -71,6 +77,25 @@ async function startServer() {
       fs.writeFileSync(productsFilePath, JSON.stringify(products, null, 2), 'utf-8');
     } catch (e) {
       console.warn('Error writing products.json:', e);
+    }
+  };
+
+  const getStoredNovedades = (): any[] => {
+    try {
+      if (fs.existsSync(novedadesFilePath)) {
+        return JSON.parse(fs.readFileSync(novedadesFilePath, 'utf-8'));
+      }
+    } catch (e) {
+      console.warn('Error reading novedades.json:', e);
+    }
+    return [];
+  };
+
+  const saveStoredNovedades = (novedades: any[]) => {
+    try {
+      fs.writeFileSync(novedadesFilePath, JSON.stringify(novedades, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('Error writing novedades.json:', e);
     }
   };
 
@@ -129,6 +154,45 @@ async function startServer() {
     }
   });
 
+  // API endpoint for uploading product & novedad images from user's device
+  app.post('/api/upload-image', (req, res) => {
+    try {
+      const { image, filename: clientFilename, prefix = 'img' } = req.body;
+      if (!image || typeof image !== 'string') {
+        return res.status(400).json({ error: 'No image provided' });
+      }
+
+      if (image.startsWith('http://') || image.startsWith('https://')) {
+        return res.json({ url: image });
+      }
+
+      const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (!matches || matches.length !== 3) {
+        return res.status(400).json({ error: 'Invalid base64 image format' });
+      }
+
+      const mimeType = matches[1].toLowerCase();
+      let ext = 'jpg';
+      if (mimeType.includes('png')) ext = 'png';
+      else if (mimeType.includes('webp')) ext = 'webp';
+      else if (mimeType.includes('gif')) ext = 'gif';
+      else if (mimeType.includes('svg')) ext = 'svg';
+
+      const buffer = Buffer.from(matches[2], 'base64');
+      const safePrefix = (prefix || 'img').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const uniqueFilename = `${safePrefix}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+      const filePath = path.join(imagesDir, uniqueFilename);
+
+      fs.writeFileSync(filePath, buffer);
+
+      const publicUrl = `/uploads/images/${uniqueFilename}`;
+      return res.json({ url: publicUrl, filename: uniqueFilename, success: true });
+    } catch (err: any) {
+      console.error('Error in /api/upload-image:', err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // Cross-device orders sync backup
   app.get('/api/orders', (_req, res) => {
     res.json(getStoredOrders());
@@ -169,6 +233,50 @@ async function startServer() {
       const orders = getStoredOrders();
       const filtered = orders.filter((o) => String(o.id) !== String(id) && o.numero_orden !== id);
       saveStoredOrders(filtered);
+      return res.json({ success: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Novedades backup endpoints
+  app.get('/api/novedades', (_req, res) => {
+    try {
+      const list = getStoredNovedades();
+      return res.json(list);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/novedades', (req, res) => {
+    try {
+      const item = req.body;
+      if (!item || !item.id) {
+        return res.status(400).json({ error: 'Invalid novedad data' });
+      }
+      const list = getStoredNovedades();
+      const idx = list.findIndex((n) => String(n.id) === String(item.id));
+      if (idx >= 0) {
+        list[idx] = { ...list[idx], ...item, updated_at: new Date().toISOString() };
+      } else {
+        list.push({ ...item, created_at: item.created_at || new Date().toISOString() });
+      }
+      // Sort by order
+      list.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+      saveStoredNovedades(list);
+      return res.json({ success: true, item });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete('/api/novedades/:id', (req, res) => {
+    try {
+      const { id } = req.params;
+      const list = getStoredNovedades();
+      const filtered = list.filter((n) => String(n.id) !== String(id));
+      saveStoredNovedades(filtered);
       return res.json({ success: true });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });

@@ -186,6 +186,15 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             <button
+              onClick={() => navigateTo('novedades')}
+              className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)] active:scale-95 flex items-center gap-1.5"
+            >
+              <span>Novedades</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="absolute bottom-0 left-0 w-0 h-[2.5px] bg-[#fbbf24] group-hover:w-full transition-all duration-300 rounded-full" />
+            </button>
+
+            <button
               onClick={() => navigateTo('catalogo')}
               className="text-[#fbbf24] hover:text-white transition-all duration-200 cursor-pointer py-1 relative group drop-shadow-[0_1px_6px_rgba(251,191,36,0.4)] hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.8)] active:scale-95"
             >
@@ -321,6 +330,16 @@ export const Header: React.FC<HeaderProps> = ({
             className="text-left py-2.5 px-3 text-[#fbbf24] hover:text-white hover:bg-white/5 rounded-xl transition-colors drop-shadow-[0_1px_4px_rgba(251,191,36,0.3)]"
           >
             Inicio
+          </button>
+
+          <button
+            onClick={() => navigateTo('novedades')}
+            className="text-left py-2.5 px-3 text-[#fbbf24] hover:text-white hover:bg-white/5 rounded-xl transition-colors drop-shadow-[0_1px_4px_rgba(251,191,36,0.3)] flex items-center justify-between"
+          >
+            <span>Novedades</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              En vivo
+            </span>
           </button>
 
           <button

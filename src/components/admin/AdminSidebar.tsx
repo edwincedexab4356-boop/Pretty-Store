@@ -12,6 +12,7 @@ import {
   Store,
   Shield,
   X,
+  Sparkles,
 } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 import { useStoreConfig } from '../../context/StoreConfigContext';
@@ -21,6 +22,7 @@ export type AdminTab =
   | 'orders'
   | 'products'
   | 'categories'
+  | 'novedades'
   | 'clients'
   | 'inventory'
   | 'sales'
@@ -48,6 +50,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'products', label: 'Productos', icon: Package },
     { id: 'categories', label: 'Categorías', icon: Layers },
+    { id: 'novedades', label: 'Novedades', icon: Sparkles },
     { id: 'inventory', label: 'Inventario', icon: Boxes },
     { id: 'orders', label: 'Pedidos', icon: ShoppingCart },
     { id: 'clients', label: 'Clientes', icon: Users },

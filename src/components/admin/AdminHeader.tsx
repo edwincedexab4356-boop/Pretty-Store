@@ -23,6 +23,10 @@ const TAB_DESCRIPTIONS: Record<AdminTab, { title: string; subtitle: string }> = 
     title: 'Categorías',
     subtitle: 'Organización de colecciones y estructura visible en el catálogo',
   },
+  novedades: {
+    title: 'Novedades & Banners',
+    subtitle: 'Gestión del carrusel infinito de la tienda, activación, orden y subida de imágenes a Supabase',
+  },
   inventory: {
     title: 'Inventario',
     subtitle: 'Control de existencias, rotación y alertas de reposición',
