@@ -31,6 +31,7 @@ import {
   updateAdminNovedad,
   toggleNovedadVisibility,
   deleteAdminNovedad,
+  deleteAllAdminNovedades,
   uploadNovedadImageToStorage,
 } from '../../../services/adminService';
 import { ConfirmDeleteModal } from '../ConfirmDeleteModal';
@@ -119,14 +120,6 @@ BEGIN
     USING (bucket_id = 'novedades');
   END IF;
 END $$;
-
--- 7. Datos iniciales de demostración
-INSERT INTO public.novedades (titulo, subtitulo, badge, imagen_url, enlace_url, orden, activo)
-VALUES 
-  ('Colección Urbana 2026', 'Gorras legendarias y drops limitados disponibles en Panamá', 'DROP EXCLUSIVO', '/images/banners/banner-1.jpg', '#catalogo', 1, true),
-  ('Cronógrafos de Precisión', 'Líneas arquitectónicas y elegancia que trasciende temporadas', 'TENDENCIA', '/images/banners/banner-2.jpg', '#catalogo', 2, true),
-  ('Alta Perfumería Selecta', 'Aromas únicos con proyección envolvente de larga duración', 'EXCLUSIVO', '/images/banners/hero-poster.jpg', '#catalogo', 3, true)
-ON CONFLICT DO NOTHING;
 `;
 
 export const NovedadesView: React.FC = () => {
@@ -344,6 +337,22 @@ export const NovedadesView: React.FC = () => {
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (!window.confirm('¿Seguro que deseas eliminar todas las novedades y fotos? Podrás subir tus fotos desde cero.')) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await deleteAllAdminNovedades();
+      setNovedades([]);
+      showToast('Se han eliminado todas las fotos y novedades con éxito.');
+    } catch {
+      showToast('Error al vaciar las novedades', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleCopySql = () => {
     navigator.clipboard.writeText(NOVEDADES_SQL_SCRIPT);
     setCopiedSql(true);
@@ -415,6 +424,19 @@ export const NovedadesView: React.FC = () => {
             <Smartphone size={14} className="text-emerald-400" />
             <span>Subir Foto de Mi Dispositivo</span>
           </button>
+
+          {novedades.length > 0 && (
+            <button
+              type="button"
+              onClick={handleDeleteAll}
+              disabled={isDeleting}
+              className="px-3 py-2 rounded-xl border border-rose-500/30 hover:border-rose-500/50 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Eliminar todas las novedades y fotos"
+            >
+              <Trash2 size={14} />
+              <span className="hidden sm:inline">Vaciar Todo</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -509,7 +531,7 @@ export const NovedadesView: React.FC = () => {
                     alt={item.titulo || 'Novedad'}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = '/images/banners/banner-1.jpg';
+                      (e.currentTarget as HTMLImageElement).src = '/images/logo/logotipo.jpeg';
                     }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />

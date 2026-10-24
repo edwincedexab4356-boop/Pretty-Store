@@ -271,6 +271,15 @@ async function startServer() {
     }
   });
 
+  app.delete('/api/novedades', (_req, res) => {
+    try {
+      saveStoredNovedades([]);
+      return res.json({ success: true, count: 0 });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   app.delete('/api/novedades/:id', (req, res) => {
     try {
       const { id } = req.params;

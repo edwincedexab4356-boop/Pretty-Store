@@ -182,16 +182,26 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
               {/* Promo Banner if applicable */}
               {promoRule && (
-                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-[#c5a059]/15 to-transparent border border-amber-500/40 space-y-1">
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-[#c5a059]/15 to-transparent border border-amber-500/40 space-y-1.5">
                   <div className="flex items-center gap-2">
                     <Sparkles size={15} className="text-[#fbbf24] animate-pulse" />
                     <span className="text-white text-xs font-bold tracking-wide">
                       ¡Promo Exclusiva: {promoRule.badgeText}!
                     </span>
                   </div>
-                  <p className="text-[11px] text-stone-300 font-light leading-relaxed">
-                    Lleva 2 artículos de esta colección y te quedan en <strong className="text-[#fbbf24] font-mono font-bold">${promoRule.pairPrice.toFixed(2)} USD</strong>. El descuento de <strong className="text-emerald-400 font-mono">-${promoRule.pairDiscount.toFixed(2)} USD</strong> se aplica de forma automática en tu carrito.
-                  </p>
+                  {promoRule.key === 'legendaria_base' ? (
+                    <p className="text-[11px] text-stone-300 font-light leading-relaxed">
+                      Lleva 1 por <strong className="text-white font-mono font-bold">$32.00 USD</strong> o 2 por <strong className="text-[#fbbf24] font-mono font-bold">$58.00 USD</strong>. Además, si combinas 1 Gorra Legendaria + 1 Gorra Legendaria 2.0, <strong className="text-emerald-400 font-mono font-bold">¡ambas te quedan a solo $58.00 USD!</strong>
+                    </p>
+                  ) : promoRule.key === 'legendaria_20' ? (
+                    <p className="text-[11px] text-stone-300 font-light leading-relaxed">
+                      Lleva 2 de esta colección por <strong className="text-[#fbbf24] font-mono font-bold">$55.00 USD</strong>. Y si combinas 1 con una Gorra Legendaria base, <strong className="text-emerald-400 font-mono font-bold">¡el par te queda en solo $58.00 USD!</strong>
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-stone-300 font-light leading-relaxed">
+                      Lleva 2 artículos de esta colección y te quedan en <strong className="text-[#fbbf24] font-mono font-bold">${promoRule.pairPrice.toFixed(2)} USD</strong>. El descuento de <strong className="text-emerald-400 font-mono">-${promoRule.pairDiscount.toFixed(2)} USD</strong> se aplica de forma automática en tu carrito.
+                    </p>
+                  )}
                 </div>
               )}
 

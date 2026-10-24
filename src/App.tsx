@@ -29,6 +29,7 @@ import { SettingsView } from './components/admin/views/SettingsView';
 import { NovedadesView } from './components/admin/views/NovedadesView';
 import { NovedadesSection } from './components/catalog/NovedadesSection';
 import { getActiveCategories, getActiveProducts } from './services/catalogService';
+import { notifyNovedadesChanged } from './services/adminService';
 import { Categoria, Producto } from './types/database';
 
 function MainAppContent() {
@@ -54,10 +55,11 @@ function MainAppContent() {
   const [quickViewProduct, setQuickViewProduct] = useState<Producto | null>(null);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
-  // Keep page title synced
+  // Keep page title synced and refresh public novedades
   useEffect(() => {
     if (currentView === 'store') {
       document.title = 'prettystroe.store';
+      notifyNovedadesChanged();
     }
   }, [currentView]);
 

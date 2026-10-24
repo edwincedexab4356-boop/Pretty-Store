@@ -19,8 +19,12 @@ export const NovedadesSection: React.FC<NovedadesSectionProps> = ({ onExploreCat
     try {
       const data = await getPublicNovedades();
       setNovedades(data);
-      if (data.length > 0 && !activeTabId) {
-        setActiveTabId(data[0].id);
+      if (data.length > 0) {
+        if (!activeTabId || !data.some((d) => d.id === activeTabId)) {
+          setActiveTabId(data[0].id);
+        }
+      } else {
+        setActiveTabId(null);
       }
     } catch (err) {
       console.warn('Error fetching public novedades:', err);
@@ -31,9 +35,21 @@ export const NovedadesSection: React.FC<NovedadesSectionProps> = ({ onExploreCat
 
   useEffect(() => {
     fetchNovedades();
+
+    const handleUpdate = () => {
+      fetchNovedades();
+    };
+
+    window.addEventListener('novedades-updated', handleUpdate);
+    window.addEventListener('focus', handleUpdate);
+
+    return () => {
+      window.removeEventListener('novedades-updated', handleUpdate);
+      window.removeEventListener('focus', handleUpdate);
+    };
   }, []);
 
-  // Si no hay novedades activas (el admin las ocultó todas o no hay), no mostramos la sección
+  // Si no hay novedades activas (el admin las eliminó u ocultó), no mostramos la sección
   if (!isLoading && novedades.length === 0) {
     return null;
   }

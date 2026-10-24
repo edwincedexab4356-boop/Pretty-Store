@@ -1272,63 +1272,18 @@ export async function updateAdminStock(productId: string, newStock: number): Pro
 
 /* ==================== NOVEDADES & STORAGE DELETION ==================== */
 
-export const DEFAULT_NOVEDADES: Novedad[] = [
-  {
-    id: 'nov-1',
-    titulo: 'Colección Urbana 2026',
-    subtitulo: 'Gorras legendarias y drops limitados disponibles en Panamá',
-    badge: 'DROP EXCLUSIVO',
-    imagen_url: '/images/banners/banner-1.jpg',
-    enlace_url: '#catalogo',
-    orden: 1,
-    activo: true,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 'nov-2',
-    titulo: 'Cronógrafos de Precisión',
-    subtitulo: 'Líneas arquitectónicas y elegancia que trasciende temporadas',
-    badge: 'TENDENCIA',
-    imagen_url: '/images/banners/banner-2.jpg',
-    enlace_url: '#catalogo',
-    orden: 2,
-    activo: true,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 'nov-3',
-    titulo: 'Alta Perfumería Selecta',
-    subtitulo: 'Aromas únicos con proyección envolvente de larga duración',
-    badge: 'EXCLUSIVO',
-    imagen_url: '/images/banners/hero-poster.jpg',
-    enlace_url: '#catalogo',
-    orden: 3,
-    activo: true,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 'nov-4',
-    titulo: 'Marroquinería & Accesorios',
-    subtitulo: 'Billeteras, cadenas y detalles de lujo con acabados de primera',
-    badge: 'TOP VENTAS',
-    imagen_url: '/images/banners/banner-1.jpg',
-    enlace_url: '#catalogo',
-    orden: 4,
-    activo: true,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 'nov-5',
-    titulo: 'Envíos a Todo Panamá',
-    subtitulo: 'Entrega rápida a sucursal o domicilio vía Servientrega, Ferguson y Uno Express',
-    badge: 'OFICIAL',
-    imagen_url: '/images/banners/banner-2.jpg',
-    enlace_url: '#catalogo',
-    orden: 5,
-    activo: true,
-    created_at: new Date().toISOString(),
-  },
-];
+// Lista vacía por defecto para que no aparezcan fotos demo no deseadas
+export const DEFAULT_NOVEDADES: Novedad[] = [];
+
+/**
+ * Notifica a toda la aplicación (tienda pública, cabecera, componentes)
+ * que las novedades han cambiado para sincronizar la vista al instante.
+ */
+export function notifyNovedadesChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('novedades-updated'));
+  }
+}
 
 /**
  * Elimina físicamente un archivo de Supabase Storage a partir de su URL pública.
@@ -1444,39 +1399,43 @@ export async function uploadNovedadImageToStorage(file: File): Promise<string> {
 
 /**
  * Obtiene todas las novedades para el panel de administración (activas y ocultas).
+ * Si no hay novedades o se eliminaron, retorna un arreglo vacío [] (sin fotos demo).
  */
 export async function getAdminNovedades(): Promise<Novedad[]> {
+  // 1. Intentar leer desde Supabase
   try {
     const { data, error } = await supabase
       .from('novedades')
       .select('*')
       .order('orden', { ascending: true });
 
-    if (!error && data && data.length > 0) {
+    if (!error && Array.isArray(data)) {
       return data;
     }
   } catch (e) {
-    console.warn('Supabase getAdminNovedades error:', e);
+    // Error de conexión o tabla aún no creada en Supabase
   }
 
-  // Fallback servidor / local
+  // 2. Fallback a servidor local (/api/novedades)
   try {
     const res = await fetch('/api/novedades');
     if (res.ok) {
       const list = await res.json();
-      if (Array.isArray(list) && list.length > 0) {
+      if (Array.isArray(list)) {
         return list;
       }
     }
   } catch {}
 
-  return DEFAULT_NOVEDADES;
+  return [];
 }
 
 /**
  * Obtiene las novedades activas (visibles) para la tienda pública.
+ * Retorna única y exclusivamente las novedades creadas por el usuario con activo === true.
  */
 export async function getPublicNovedades(): Promise<Novedad[]> {
+  // 1. Intentar leer desde Supabase
   try {
     const { data, error } = await supabase
       .from('novedades')
@@ -1484,25 +1443,25 @@ export async function getPublicNovedades(): Promise<Novedad[]> {
       .eq('activo', true)
       .order('orden', { ascending: true });
 
-    if (!error && data && data.length > 0) {
+    if (!error && Array.isArray(data)) {
       return data;
     }
   } catch (e) {
-    console.warn('Supabase getPublicNovedades error:', e);
+    // Error de conexión o tabla aún no creada en Supabase
   }
 
-  // Fallback servidor
+  // 2. Fallback a servidor local (/api/novedades)
   try {
     const res = await fetch('/api/novedades');
     if (res.ok) {
       const list = await res.json();
-      if (Array.isArray(list) && list.length > 0) {
-        return list.filter((n: Novedad) => n.activo);
+      if (Array.isArray(list)) {
+        return list.filter((n: Novedad) => Boolean(n && n.activo));
       }
     }
   } catch {}
 
-  return DEFAULT_NOVEDADES.filter((n) => n.activo);
+  return [];
 }
 
 /**
@@ -1510,7 +1469,7 @@ export async function getPublicNovedades(): Promise<Novedad[]> {
  */
 export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Novedad | null> {
   const newId = novedad.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `nov-${Date.now()}`);
-  const payload = {
+  const payload: Novedad = {
     id: newId,
     titulo: novedad.titulo || null,
     subtitulo: novedad.subtitulo || null,
@@ -1531,7 +1490,7 @@ export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Nov
       .single();
 
     if (!error && data) {
-      // Sync local server backup
+      // Sincronizar backup en servidor local
       try {
         await fetch('/api/novedades', {
           method: 'POST',
@@ -1539,6 +1498,7 @@ export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Nov
           body: JSON.stringify(data),
         });
       } catch {}
+      notifyNovedadesChanged();
       return data;
     }
   } catch (err) {
@@ -1552,10 +1512,10 @@ export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Nov
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    return payload as Novedad;
   } catch {}
 
-  return payload as Novedad;
+  notifyNovedadesChanged();
+  return payload;
 }
 
 /**
@@ -1583,6 +1543,7 @@ export async function updateAdminNovedad(id: string, updates: Partial<Novedad>):
           body: JSON.stringify(data),
         });
       } catch {}
+      notifyNovedadesChanged();
       return data;
     }
   } catch (err) {
@@ -1598,10 +1559,12 @@ export async function updateAdminNovedad(id: string, updates: Partial<Novedad>):
     });
     if (res.ok) {
       const json = await res.json();
+      notifyNovedadesChanged();
       return json.item || ({ id, ...payload } as Novedad);
     }
   } catch {}
 
+  notifyNovedadesChanged();
   return { id, ...payload } as Novedad;
 }
 
@@ -1610,14 +1573,10 @@ export async function updateAdminNovedad(id: string, updates: Partial<Novedad>):
  */
 export async function toggleNovedadVisibility(id: string, activo: boolean): Promise<boolean> {
   try {
-    const { error } = await supabase
+    await supabase
       .from('novedades')
       .update({ activo, updated_at: new Date().toISOString() })
       .eq('id', id);
-
-    if (error) {
-      console.warn('Supabase toggle visibility warning:', error);
-    }
   } catch (e) {
     console.warn('Error toggling visibility in Supabase:', e);
   }
@@ -1630,6 +1589,7 @@ export async function toggleNovedadVisibility(id: string, activo: boolean): Prom
     });
   } catch {}
 
+  notifyNovedadesChanged();
   return true;
 }
 
@@ -1639,21 +1599,19 @@ export async function toggleNovedadVisibility(id: string, activo: boolean): Prom
 export async function deleteAdminNovedad(id: string, imagenUrl?: string | null): Promise<boolean> {
   // 1. Eliminar de Supabase Database
   try {
-    const { error } = await supabase
+    await supabase
       .from('novedades')
       .delete()
       .eq('id', id);
-
-    if (error) {
-      console.warn('Supabase delete novedad warning:', error);
-    }
   } catch (err) {
     console.warn('Error deleting novedad from Supabase table:', err);
   }
 
   // 2. Eliminar imagen físicamente de Supabase Storage
   if (imagenUrl) {
-    await deleteSupabaseStorageFile(imagenUrl);
+    try {
+      await deleteSupabaseStorageFile(imagenUrl);
+    } catch {}
   }
 
   // 3. Eliminar de servidor backup
@@ -1661,5 +1619,34 @@ export async function deleteAdminNovedad(id: string, imagenUrl?: string | null):
     await fetch(`/api/novedades/${id}`, { method: 'DELETE' });
   } catch {}
 
+  notifyNovedadesChanged();
+  return true;
+}
+
+/**
+ * Elimina todas las novedades de la base de datos y del servidor.
+ */
+export async function deleteAllAdminNovedades(): Promise<boolean> {
+  // 1. Obtener lista para limpiar archivos
+  try {
+    const items = await getAdminNovedades();
+    for (const it of items) {
+      if (it.imagen_url) {
+        await deleteSupabaseStorageFile(it.imagen_url);
+      }
+    }
+  } catch {}
+
+  // 2. Borrar de Supabase
+  try {
+    await supabase.from('novedades').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  } catch {}
+
+  // 3. Borrar de servidor
+  try {
+    await fetch('/api/novedades', { method: 'DELETE' });
+  } catch {}
+
+  notifyNovedadesChanged();
   return true;
 }
