@@ -33,6 +33,7 @@ import {
   deleteAdminNovedad,
   deleteAllAdminNovedades,
   uploadNovedadImageToStorage,
+  checkSupabaseNovedadesStatus,
 } from '../../../services/adminService';
 import { ConfirmDeleteModal } from '../ConfirmDeleteModal';
 
@@ -156,6 +157,11 @@ export const NovedadesView: React.FC = () => {
   // Modal SQL
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
+  const [supabaseStatus, setSupabaseStatus] = useState<{
+    checked: boolean;
+    tableExists: boolean;
+    bucketExists: boolean;
+  }>({ checked: false, tableExists: false, bucketExists: false });
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ message, type });
@@ -165,8 +171,14 @@ export const NovedadesView: React.FC = () => {
   const loadData = async () => {
     try {
       setIsLoading(true);
-      const data = await getAdminNovedades();
+      const [data, status] = await Promise.all([
+        getAdminNovedades(),
+        checkSupabaseNovedadesStatus().catch(() => ({ tableExists: false, bucketExists: false })),
+      ]);
       setNovedades(data);
+      if (status) {
+        setSupabaseStatus({ checked: true, ...status });
+      }
     } catch {
       showToast('Error al cargar las novedades', 'error');
     } finally {
@@ -490,7 +502,64 @@ export const NovedadesView: React.FC = () => {
         </div>
       </div>
 
+      {/* Supabase Status Banner */}
+      {supabaseStatus.checked && !supabaseStatus.tableExists && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent border border-amber-500/30 text-amber-200 text-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-lg shadow-amber-500/5">
+          <div className="flex items-start gap-3">
+            <span className="p-2.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0 mt-0.5">
+              <Database size={18} />
+            </span>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400 text-black uppercase tracking-wider">
+                  Acción requerida en Supabase
+                </span>
+                <span className="font-bold text-white text-sm">
+                  Falta crear la tabla de Novedades en tu Base de Datos
+                </span>
+              </div>
+              <p className="text-stone-300 leading-relaxed text-xs max-w-3xl">
+                Tus novedades se están guardando localmente en tu navegador mediante <strong>IndexedDB</strong>, pero para que no dependan del navegador y se sincronicen de inmediato con todos tus clientes y dispositivos, necesitas ejecutar el script SQL en tu consola de Supabase.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 w-full md:w-auto">
+            <button
+              type="button"
+              onClick={handleCopySql}
+              className="px-4 py-2.5 rounded-xl bg-[#c5a059] text-black hover:bg-[#d5b069] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md w-full md:w-auto text-xs active:scale-95"
+            >
+              {copiedSql ? <Check size={14} /> : <Copy size={14} />}
+              <span>{copiedSql ? '¡SQL Copiado!' : 'Copiar Código SQL'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsSqlModalOpen(true)}
+              className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-white/10 text-xs"
+            >
+              <Code2 size={14} />
+              <span>Ver Pasos</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {supabaseStatus.checked && supabaseStatus.tableExists && (
+        <div className="px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs flex items-center justify-between gap-2 shadow-sm">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
+            <span>
+              <strong>Base de datos Supabase conectada:</strong> Tus novedades y fotos están sincronizadas en la nube para todos los visitantes.
+            </span>
+          </div>
+          <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+            Cloud Sync Activo
+          </span>
+        </div>
+      )}
+
       {/* Info Pill */}
+
       <div className="p-3.5 rounded-xl bg-black/40 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-stone-300">
         <div className="flex items-center gap-2">
           <Layers size={15} className="text-[#c5a059] shrink-0" />
