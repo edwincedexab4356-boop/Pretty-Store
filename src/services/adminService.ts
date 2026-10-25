@@ -1340,10 +1340,11 @@ export function generateUUID(): string {
 
 function getApiUrl(apiPath: string): string {
   if (apiPath.startsWith('http://') || apiPath.startsWith('https://')) return apiPath;
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return `${window.location.origin.replace(/\/+$/, '')}${apiPath.startsWith('/') ? apiPath : `/${apiPath}`}`;
+  const cleanPath = apiPath.startsWith('/') ? apiPath : `/${apiPath}`;
+  if (typeof window !== 'undefined') {
+    return cleanPath;
   }
-  return `http://127.0.0.1:${process.env.PORT || 3000}${apiPath.startsWith('/') ? apiPath : `/${apiPath}`}`;
+  return `http://127.0.0.1:${process.env.PORT || 3000}${cleanPath}`;
 }
 
 export function getLocalNovedades(): Novedad[] {
@@ -1364,14 +1365,14 @@ export function setLocalNovedades(items: Novedad[]): void {
   memoryNovedades = items;
   if (typeof window === 'undefined') return;
 
-  // 1. Intentar localStorage (puede fallar si la imagen base64 excede 5MB)
+  // 1. Guardar en localStorage
   try {
     localStorage.setItem(NOVEDADES_STORAGE_KEY, JSON.stringify(items));
   } catch (e) {
-    console.warn('LocalStorage limit exceeded for novedades, using IndexedDB fallback:', e);
+    console.warn('LocalStorage limit note:', e);
   }
 
-  // 2. Guardar en IndexedDB para persistencia permanente de alta resolución
+  // 2. Guardar en IndexedDB
   saveNovedadesToIndexedDb(items).catch((err) => {
     console.warn('IndexedDB save warning:', err);
   });
@@ -1408,110 +1409,115 @@ export async function checkSupabaseNovedadesStatus(): Promise<{
 }
 
 /**
- * Sube una imagen de novedad a Supabase Storage con compresión inteligente y fallback automático.
+ * Sube una foto de novedad desde el dispositivo.
+ * Guarda en el servidor permanente (/uploads/images/) y en Supabase Storage si está disponible.
+ * Devuelve una URL accesible globalmente desde cualquier dispositivo móvil o computadora.
  */
 export async function uploadNovedadImageToStorage(file: File): Promise<string> {
-  let fileToUpload = file;
   let compressedDataUrl = '';
 
   try {
     const compressed = await compressImageForUpload(file, 1600, 0.82);
-    fileToUpload = compressed.file;
     compressedDataUrl = compressed.dataUrl;
   } catch (err) {
     console.warn('Compression warning in uploadNovedadImageToStorage:', err);
   }
 
-  const ext = fileToUpload.name ? fileToUpload.name.split('.').pop()?.toLowerCase() || 'jpg' : 'jpg';
-  const cleanExt = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? ext : 'jpg';
-  const mimeType = fileToUpload.type || `image/${cleanExt === 'jpg' ? 'jpeg' : cleanExt}`;
-  const fileName = `nov_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
-
-  // 1. Intentar subir a Supabase Storage si el bucket existe (con timeout rápido de 2s)
-  const targetBuckets = ['novedades', 'product-images'];
-
-  for (const bucket of targetBuckets) {
-    try {
-      const uploadPromise = supabase.storage
-        .from(bucket)
-        .upload(fileName, fileToUpload, {
-          contentType: mimeType,
-          upsert: true,
-        });
-
-      const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
-        setTimeout(() => reject(new Error('Storage upload timeout')), 2000)
-      );
-
-      const { data, error } = (await Promise.race([uploadPromise, timeoutPromise])) as any;
-
-      if (!error && data) {
-        const { data: pubData } = supabase.storage.from(bucket).getPublicUrl(fileName);
-        if (pubData?.publicUrl) {
-          return pubData.publicUrl;
-        }
-      }
-    } catch {
-      // Probar siguiente bucket o pasar al servidor
-    }
+  // Si no se obtuvo dataUrl por compresión, leer directamente del archivo
+  if (!compressedDataUrl) {
+    compressedDataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('No se pudo leer la imagen'));
+      reader.readAsDataURL(file);
+    });
   }
 
-  // 2. Fallback: subir al servidor local (/api/upload-image)
-  if (compressedDataUrl) {
-    try {
-      const res = await fetch(getApiUrl('/api/upload-image'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image: compressedDataUrl,
-          prefix: 'nov',
-          filename: file.name,
-        }),
+  // 1. SUBIR AL SERVIDOR LOCAL /api/upload-image (PERSISTENTE EN DISCO PARA TODOS LOS DISPOSITIVOS)
+  let serverUploadedUrl: string | null = null;
+  try {
+    const res = await fetch('/api/upload-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image: compressedDataUrl,
+        prefix: 'nov',
+        filename: file.name,
+      }),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.url) {
+        serverUploadedUrl = json.url;
+      }
+    }
+  } catch (serverErr) {
+    console.warn('Server upload error for novedad:', serverErr);
+  }
+
+  // 2. INTENTAR SUBIR A SUPABASE STORAGE EN PARALELO
+  try {
+    const ext = file.name ? file.name.split('.').pop()?.toLowerCase() || 'jpg' : 'jpg';
+    const cleanExt = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? ext : 'jpg';
+    const mimeType = file.type || `image/${cleanExt === 'jpg' ? 'jpeg' : cleanExt}`;
+    const fileName = `nov_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
+
+    const { data, error } = await supabase.storage
+      .from('novedades')
+      .upload(fileName, file, {
+        contentType: mimeType,
+        upsert: true,
       });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.url) return json.url;
+
+    if (!error && data) {
+      const { data: pubData } = supabase.storage.from('novedades').getPublicUrl(fileName);
+      if (pubData?.publicUrl) {
+        return pubData.publicUrl;
       }
-    } catch (serverErr) {
-      console.warn('Local server upload fallback error for novedad:', serverErr);
     }
+  } catch {
+    // Continuar con el URL del servidor
   }
 
-  // 3. Fallback: DataURL comprimido directo
-  if (compressedDataUrl) {
-    return compressedDataUrl;
+  // Si el servidor guardó la foto en disco, usar su URL permanente
+  if (serverUploadedUrl) {
+    return serverUploadedUrl;
   }
 
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('No se pudo procesar la imagen local'));
-    reader.readAsDataURL(file);
-  });
+  // Fallback si la subida falló: devolver el DataURL comprimido
+  return compressedDataUrl;
 }
 
 /**
- * Obtiene todas las novedades para el panel de administración (activas y ocultas).
- * Sincroniza Supabase, IndexedDB, localStorage y servidor Express.
+ * Obtiene todas las novedades para el panel de administración y la tienda pública.
+ * Sincroniza en tiempo real:
+ *  1. Servidor Express (/api/novedades en disco para persistencia multi-dispositivo)
+ *  2. Supabase Cloud Database
+ *  3. Almacenamiento local (IndexedDB + localStorage)
  */
 export async function getAdminNovedades(): Promise<Novedad[]> {
   const localList = getLocalNovedades();
-  const idbList = await getNovedadesFromIndexedDb();
+  const idbList = await getNovedadesFromIndexedDb().catch(() => []);
 
-  // Combinar localList con idbList para no perder nada guardado en el cliente
-  const clientMap = new Map<string, Novedad>();
-  for (const item of idbList) {
-    if (item && item.id) clientMap.set(String(item.id), item);
-  }
-  for (const item of localList) {
-    if (item && item.id && !clientMap.has(String(item.id))) {
-      clientMap.set(String(item.id), item);
+  // 1. Obtener lista desde el servidor en Express (servidor compartido entre todos los dispositivos)
+  let serverList: Novedad[] = [];
+  try {
+    const res = await fetch(`/api/novedades?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { Pragma: 'no-cache' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        serverList = data;
+      }
     }
+  } catch (err) {
+    console.warn('Error fetching /api/novedades:', err);
   }
-  const clientResolved = Array.from(clientMap.values());
 
-  // 1. Intentar leer desde Supabase con timeout de 2.5s
-  let supabaseList: Novedad[] | null = null;
+  // 2. Obtener lista desde Supabase Cloud con timeout seguro de 2s
+  let supabaseList: Novedad[] = [];
   try {
     const supabasePromise = supabase
       .from('novedades')
@@ -1519,61 +1525,66 @@ export async function getAdminNovedades(): Promise<Novedad[]> {
       .order('orden', { ascending: true });
 
     const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
-      setTimeout(() => reject(new Error('Supabase timeout')), 2500)
+      setTimeout(() => reject(new Error('Supabase timeout')), 2000)
     );
 
     const { data, error } = (await Promise.race([supabasePromise, timeoutPromise])) as any;
-    if (!error && Array.isArray(data)) {
+    if (!error && Array.isArray(data) && data.length > 0) {
       supabaseList = data;
     }
   } catch {
-    // Supabase no configurado o timeout
+    // Supabase no configurado o permisos no concedidos
   }
 
-  // Si Supabase devolvió una lista con elementos, es la fuente primaria
-  if (supabaseList && supabaseList.length > 0) {
-    setLocalNovedades(supabaseList);
-    return supabaseList;
+  // 3. Fusionar datos de todas las fuentes garantizando persistencia
+  const mergedMap = new Map<string, Novedad>();
+
+  // Prioridad 1: Supabase si tiene novedades
+  for (const item of supabaseList) {
+    if (item && item.id) mergedMap.set(String(item.id), item);
   }
 
-  // 2. Intentar leer desde servidor Express
-  let serverList: Novedad[] | null = null;
-  try {
-    const res = await fetch(getApiUrl(`/api/novedades?_t=${Date.now()}`), { cache: 'no-store' });
-    if (res.ok) {
-      const list = await res.json();
-      if (Array.isArray(list) && list.length > 0) {
-        serverList = list;
+  // Prioridad 2: Servidor permanente
+  for (const item of serverList) {
+    if (item && item.id) {
+      if (!mergedMap.has(String(item.id))) {
+        mergedMap.set(String(item.id), item);
       }
     }
-  } catch {}
-
-  // 3. Fusionar serverList y clientResolved asegurando que no se borre nada
-  const mergedMap = new Map<string, Novedad>();
-  if (serverList) {
-    for (const item of serverList) {
-      if (item && item.id) mergedMap.set(String(item.id), item);
-    }
   }
-  for (const item of clientResolved) {
+
+  // Prioridad 3: Elementos guardados localmente en este dispositivo que no hayan sincronizado
+  const unsyncedItems: Novedad[] = [];
+  for (const item of idbList) {
     if (item && item.id && !mergedMap.has(String(item.id))) {
       mergedMap.set(String(item.id), item);
+      unsyncedItems.push(item);
+    }
+  }
+  for (const item of localList) {
+    if (item && item.id && !mergedMap.has(String(item.id))) {
+      mergedMap.set(String(item.id), item);
+      unsyncedItems.push(item);
     }
   }
 
-  const finalMerged = Array.from(mergedMap.values()).sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
-  if (finalMerged.length > 0) {
-    setLocalNovedades(finalMerged);
-    return finalMerged;
+  // Si había elementos locales no sincronizados con el servidor, sincronizarlos ahora
+  if (unsyncedItems.length > 0) {
+    fetch('/api/novedades/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: unsyncedItems }),
+    }).catch(() => {});
   }
 
-  // Si Supabase existe pero la tabla está vacía y no hay nada local
-  if (supabaseList !== null && supabaseList.length === 0 && finalMerged.length === 0) {
-    setLocalNovedades([]);
-    return [];
-  }
+  const finalResult = Array.from(mergedMap.values()).sort(
+    (a, b) => (a.orden ?? 0) - (b.orden ?? 0)
+  );
 
-  return clientResolved;
+  // Actualizar caché local para renderizado instantáneo en este dispositivo
+  setLocalNovedades(finalResult);
+
+  return finalResult;
 }
 
 /**
@@ -1585,12 +1596,12 @@ export async function getPublicNovedades(): Promise<Novedad[]> {
 }
 
 /**
- * Crea una nueva novedad en IndexedDB, localStorage, servidor local y Supabase.
+ * Crea una nueva novedad y la persiste inmediatamente en el servidor para todos los dispositivos.
  */
 export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Novedad> {
   const newId = novedad.id && novedad.id.length >= 10 ? novedad.id : generateUUID();
 
-  const payload: Novedad = {
+  let payload: Novedad = {
     id: newId,
     titulo: novedad.titulo || null,
     subtitulo: novedad.subtitulo || null,
@@ -1603,7 +1614,24 @@ export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Nov
     updated_at: new Date().toISOString(),
   };
 
-  // 1. Guardar de inmediato en memoria, localStorage e IndexedDB (0ms)
+  // 1. Guardar de inmediato en el servidor Express (para que cualquier otro dispositivo la vea)
+  try {
+    const res = await fetch('/api/novedades', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.item) {
+        payload = data.item;
+      }
+    }
+  } catch (serverErr) {
+    console.warn('Error saving novelty to server:', serverErr);
+  }
+
+  // 2. Guardar en memoria, localStorage e IndexedDB en este dispositivo
   const current = getLocalNovedades();
   const next = [...current.filter((n) => n.id !== payload.id), payload].sort(
     (a, b) => (a.orden ?? 0) - (b.orden ?? 0)
@@ -1611,25 +1639,11 @@ export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Nov
   setLocalNovedades(next);
   notifyNovedadesChanged();
 
-  // 2. Guardar en servidor Express local en paralelo
+  // 3. Guardar en Supabase Database si está configurada la tabla
   try {
-    await fetch(getApiUrl('/api/novedades'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-  } catch (serverErr) {
-    console.warn('Error saving to server /api/novedades:', serverErr);
-  }
-
-  // 3. Intentar guardar en Supabase Database
-  try {
-    const { error: sbErr } = await supabase.from('novedades').insert(payload);
-    if (sbErr) {
-      console.warn('Supabase insert novedad note (¿tabla existe?):', sbErr);
-    }
+    await supabase.from('novedades').insert(payload);
   } catch (sbErr) {
-    console.warn('Supabase insert novedad catch note:', sbErr);
+    console.warn('Supabase insert novedad note:', sbErr);
   }
 
   notifyNovedadesChanged();
@@ -1637,13 +1651,13 @@ export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Nov
 }
 
 /**
- * Actualiza una novedad existente en IndexedDB, localStorage, servidor local y Supabase.
+ * Actualiza una novedad existente y la sincroniza con el servidor y Supabase.
  */
 export async function updateAdminNovedad(id: string, updates: Partial<Novedad>): Promise<Novedad> {
   const current = getLocalNovedades();
   const existing = current.find((n) => n.id === id);
 
-  const payload: Novedad = {
+  let payload: Novedad = {
     id,
     titulo: updates.titulo !== undefined ? updates.titulo : existing?.titulo || null,
     subtitulo: updates.subtitulo !== undefined ? updates.subtitulo : existing?.subtitulo || null,
@@ -1656,21 +1670,29 @@ export async function updateAdminNovedad(id: string, updates: Partial<Novedad>):
     updated_at: new Date().toISOString(),
   };
 
-  // 1. Actualizar de inmediato en memoria, localStorage e IndexedDB
+  // 1. Guardar en servidor Express
+  try {
+    const res = await fetch(`/api/novedades/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.item) {
+        payload = data.item;
+      }
+    }
+  } catch (serverErr) {
+    console.warn('Error updating novelty on server:', serverErr);
+  }
+
+  // 2. Guardar en memoria, localStorage e IndexedDB
   const next = current.map((n) => (n.id === id ? payload : n)).sort(
     (a, b) => (a.orden ?? 0) - (b.orden ?? 0)
   );
   setLocalNovedades(next);
   notifyNovedadesChanged();
-
-  // 2. Actualizar en servidor Express
-  try {
-    await fetch(getApiUrl('/api/novedades'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-  } catch {}
 
   // 3. Actualizar en Supabase si existe la tabla
   try {
@@ -1693,10 +1715,10 @@ export async function toggleNovedadVisibility(id: string, activo: boolean): Prom
   notifyNovedadesChanged();
 
   try {
-    await fetch(getApiUrl('/api/novedades'), {
-      method: 'POST',
+    await fetch(`/api/novedades/${id}`, {
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, activo }),
+      body: JSON.stringify({ activo, updated_at: new Date().toISOString() }),
     });
   } catch {}
 
@@ -1712,18 +1734,18 @@ export async function toggleNovedadVisibility(id: string, activo: boolean): Prom
 }
 
 /**
- * Elimina una novedad de IndexedDB, localStorage, servidor y Supabase.
+ * Elimina una novedad de todos los dispositivos (Servidor, IndexedDB, localStorage y Supabase).
  */
 export async function deleteAdminNovedad(id: string, imagenUrl?: string | null): Promise<boolean> {
-  // 1. Eliminar de inmediato en local e IndexedDB
+  // 1. Eliminar en memoria y local
   const current = getLocalNovedades();
   const next = current.filter((n) => n.id !== id);
   setLocalNovedades(next);
   notifyNovedadesChanged();
 
-  // 2. Eliminar de servidor local
+  // 2. Eliminar del servidor permanente
   try {
-    await fetch(getApiUrl(`/api/novedades/${id}`), { method: 'DELETE' });
+    await fetch(`/api/novedades/${id}`, { method: 'DELETE' });
   } catch {}
 
   // 3. Eliminar de Supabase Database
@@ -1731,7 +1753,7 @@ export async function deleteAdminNovedad(id: string, imagenUrl?: string | null):
     await supabase.from('novedades').delete().eq('id', id);
   } catch {}
 
-  // 4. Eliminar imagen de Storage si aplica
+  // 4. Eliminar imagen de Supabase Storage si aplica
   if (imagenUrl) {
     try {
       await deleteSupabaseStorageFile(imagenUrl);
@@ -1743,20 +1765,17 @@ export async function deleteAdminNovedad(id: string, imagenUrl?: string | null):
 }
 
 /**
- * Elimina todas las novedades de la base de datos, IndexedDB, localStorage y del servidor.
+ * Elimina todas las novedades de la tienda en todos los dispositivos.
  */
 export async function deleteAllAdminNovedades(): Promise<boolean> {
-  // 1. Limpiar localmente de inmediato
   setLocalNovedades([]);
   clearNovedadesInIndexedDb().catch(() => {});
   notifyNovedadesChanged();
 
-  // 2. Limpiar servidor Express
   try {
-    await fetch(getApiUrl('/api/novedades'), { method: 'DELETE' });
+    await fetch('/api/novedades', { method: 'DELETE' });
   } catch {}
 
-  // 3. Limpiar Supabase
   try {
     await supabase.from('novedades').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   } catch {}

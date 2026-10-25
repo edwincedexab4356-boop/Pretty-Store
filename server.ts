@@ -239,7 +239,34 @@ async function startServer() {
     }
   });
 
-  // Novedades backup endpoints
+  // Helper function to persist base64 data to static file if needed
+  const persistBase64ImageIfNeeded = (imgUrl: string, prefix = 'nov'): string => {
+    if (!imgUrl || typeof imgUrl !== 'string') return imgUrl;
+    if (!imgUrl.startsWith('data:image/')) return imgUrl;
+
+    try {
+      const matches = imgUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (!matches || matches.length !== 3) return imgUrl;
+
+      const mimeType = matches[1].toLowerCase();
+      let ext = 'jpg';
+      if (mimeType.includes('png')) ext = 'png';
+      else if (mimeType.includes('webp')) ext = 'webp';
+      else if (mimeType.includes('gif')) ext = 'gif';
+      else if (mimeType.includes('svg')) ext = 'svg';
+
+      const buffer = Buffer.from(matches[2], 'base64');
+      const uniqueFilename = `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+      const filePath = path.join(imagesDir, uniqueFilename);
+      fs.writeFileSync(filePath, buffer);
+      return `/uploads/images/${uniqueFilename}`;
+    } catch (e) {
+      console.warn('Error saving base64 image to disk:', e);
+      return imgUrl;
+    }
+  };
+
+  // Novedades persistent cross-device endpoints
   app.get('/api/novedades', (_req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -258,6 +285,12 @@ async function startServer() {
       if (!item || !item.id) {
         return res.status(400).json({ error: 'Invalid novedad data' });
       }
+
+      // Convert any base64 image to static file on disk
+      if (item.imagen_url && item.imagen_url.startsWith('data:image/')) {
+        item.imagen_url = persistBase64ImageIfNeeded(item.imagen_url, 'nov');
+      }
+
       const list = getStoredNovedades();
       const idx = list.findIndex((n) => String(n.id) === String(item.id));
       let savedItem: any;
@@ -272,6 +305,67 @@ async function startServer() {
       list.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
       saveStoredNovedades(list);
       return res.json({ success: true, item: savedItem });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put('/api/novedades/:id', (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body || {};
+      if (updates.imagen_url && updates.imagen_url.startsWith('data:image/')) {
+        updates.imagen_url = persistBase64ImageIfNeeded(updates.imagen_url, 'nov');
+      }
+
+      const list = getStoredNovedades();
+      const idx = list.findIndex((n) => String(n.id) === String(id));
+      if (idx >= 0) {
+        list[idx] = { ...list[idx], ...updates, id, updated_at: new Date().toISOString() };
+        list.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+        saveStoredNovedades(list);
+        return res.json({ success: true, item: list[idx] });
+      } else {
+        const newItem = { ...updates, id, created_at: new Date().toISOString() };
+        list.push(newItem);
+        list.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+        saveStoredNovedades(list);
+        return res.json({ success: true, item: newItem });
+      }
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/novedades/sync', (req, res) => {
+    try {
+      const { items } = req.body;
+      if (!Array.isArray(items)) {
+        return res.status(400).json({ error: 'items must be an array' });
+      }
+
+      const list = getStoredNovedades();
+      const map = new Map<string, any>();
+      for (const item of list) {
+        if (item && item.id) map.set(String(item.id), item);
+      }
+
+      for (const clientItem of items) {
+        if (!clientItem || !clientItem.id) continue;
+        if (clientItem.imagen_url && clientItem.imagen_url.startsWith('data:image/')) {
+          clientItem.imagen_url = persistBase64ImageIfNeeded(clientItem.imagen_url, 'nov');
+        }
+        const existing = map.get(String(clientItem.id));
+        map.set(String(clientItem.id), {
+          ...existing,
+          ...clientItem,
+          updated_at: new Date().toISOString(),
+        });
+      }
+
+      const merged = Array.from(map.values()).sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+      saveStoredNovedades(merged);
+      return res.json({ success: true, items: merged });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }

@@ -39,7 +39,7 @@ import { ConfirmDeleteModal } from '../ConfirmDeleteModal';
 
 export const NOVEDADES_SQL_SCRIPT = `-- ========================================================
 -- PRETTY STORE · TABLA DE NOVEDADES Y POLÍTICAS EN SUPABASE
--- Pega este script completo en el SQL Editor de tu Supabase
+-- Pega este script completo en el SQL Editor de tu Supabase y presiona "RUN"
 -- ========================================================
 
 -- 1. Crear tabla de novedades
@@ -56,71 +56,61 @@ CREATE TABLE IF NOT EXISTS public.novedades (
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 2. Habilitar Seguridad por Fila (RLS)
+-- 2. Conceder permisos explícitos al rol anon y authenticated (SOLUCIONA ERROR 42501 permission denied)
+GRANT ALL ON TABLE public.novedades TO postgres, anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+
+-- 3. Habilitar Seguridad por Fila (RLS)
 ALTER TABLE public.novedades ENABLE ROW LEVEL SECURITY;
 
--- 3. Políticas de acceso a la tabla novedades
-DO $$ 
-BEGIN
-  -- Lectura pública (tienda y catálogo)
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'novedades' AND policyname = 'Permitir lectura publica de novedades') THEN
-    CREATE POLICY "Permitir lectura publica de novedades" 
-    ON public.novedades FOR SELECT 
-    USING (true);
-  END IF;
+-- 4. Recrear política permisiva unificada para lectura y escritura pública
+DROP POLICY IF EXISTS "Permitir lectura publica de novedades" ON public.novedades;
+DROP POLICY IF EXISTS "Permitir insercion de novedades" ON public.novedades;
+DROP POLICY IF EXISTS "Permitir actualizacion de novedades" ON public.novedades;
+DROP POLICY IF EXISTS "Permitir eliminacion de novedades" ON public.novedades;
+DROP POLICY IF EXISTS "Acceso total novedades" ON public.novedades;
 
-  -- Inserción permitida
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'novedades' AND policyname = 'Permitir insercion de novedades') THEN
-    CREATE POLICY "Permitir insercion de novedades" 
-    ON public.novedades FOR INSERT 
-    WITH CHECK (true);
-  END IF;
+CREATE POLICY "Acceso total novedades" 
+ON public.novedades 
+FOR ALL 
+TO public 
+USING (true) 
+WITH CHECK (true);
 
-  -- Actualización permitida
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'novedades' AND policyname = 'Permitir actualizacion de novedades') THEN
-    CREATE POLICY "Permitir actualizacion de novedades" 
-    ON public.novedades FOR UPDATE 
-    USING (true);
-  END IF;
-
-  -- Eliminación permitida
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'novedades' AND policyname = 'Permitir eliminacion de novedades') THEN
-    CREATE POLICY "Permitir eliminacion de novedades" 
-    ON public.novedades FOR DELETE 
-    USING (true);
-  END IF;
-END $$;
-
--- 4. Índice para optimizar orden y velocidad
+-- 5. Índice para optimizar orden y velocidad
 CREATE INDEX IF NOT EXISTS idx_novedades_activo_orden 
 ON public.novedades (activo, orden ASC, created_at DESC);
 
--- 5. Crear bucket de almacenamiento en Supabase Storage (si no existe)
-INSERT INTO storage.buckets (id, name, public) 
-VALUES ('novedades', 'novedades', true)
+-- 6. Crear bucket de almacenamiento en Supabase Storage (si no existe)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) 
+VALUES ('novedades', 'novedades', true, 52428800, ARRAY['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'])
 ON CONFLICT (id) DO UPDATE SET public = true;
 
--- 6. Políticas de acceso para el bucket 'novedades'
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'Public Access Novedades') THEN
-    CREATE POLICY "Public Access Novedades"
-    ON storage.objects FOR SELECT
-    USING (bucket_id = 'novedades');
-  END IF;
+-- 7. Políticas de acceso para el bucket 'novedades' en Storage
+DROP POLICY IF EXISTS "Public Access Novedades" ON storage.objects;
+DROP POLICY IF EXISTS "Upload Novedades" ON storage.objects;
+DROP POLICY IF EXISTS "Update Novedades" ON storage.objects;
+DROP POLICY IF EXISTS "Delete Novedades" ON storage.objects;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'Upload Novedades') THEN
-    CREATE POLICY "Upload Novedades"
-    ON storage.objects FOR INSERT
-    WITH CHECK (bucket_id = 'novedades');
-  END IF;
+CREATE POLICY "Public Access Novedades"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'novedades');
 
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'Delete Novedades') THEN
-    CREATE POLICY "Delete Novedades"
-    ON storage.objects FOR DELETE
-    USING (bucket_id = 'novedades');
-  END IF;
-END $$;
+CREATE POLICY "Upload Novedades"
+ON storage.objects FOR INSERT
+TO public
+WITH CHECK (bucket_id = 'novedades');
+
+CREATE POLICY "Update Novedades"
+ON storage.objects FOR UPDATE
+TO public
+USING (bucket_id = 'novedades');
+
+CREATE POLICY "Delete Novedades"
+ON storage.objects FOR DELETE
+TO public
+USING (bucket_id = 'novedades');
 `;
 
 export const NovedadesView: React.FC = () => {
