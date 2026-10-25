@@ -54,14 +54,17 @@ export const NovedadesSection: React.FC<NovedadesSectionProps> = ({ onExploreCat
     return null;
   }
 
-  // Duplicamos las novedades para lograr el bucle infinito continuo sin saltos
-  const loopItems = novedades.length > 0
-    ? novedades.length === 1
-      ? [...novedades, ...novedades, ...novedades, ...novedades]
-      : novedades.length <= 3
-      ? [...novedades, ...novedades, ...novedades]
-      : [...novedades, ...novedades]
-    : [];
+  // Duplicamos las novedades asegurando exactamente 2 mitades idénticas para un ciclo infinito continuo sin saltos (-50% transform)
+  const baseItems = (() => {
+    if (novedades.length === 0) return [];
+    let items = [...novedades];
+    while (items.length < 4) {
+      items = [...items, ...novedades];
+    }
+    return items;
+  })();
+
+  const loopItems = [...baseItems, ...baseItems];
 
   const handleCardClick = (item: Novedad) => {
     if (item.enlace_url && item.enlace_url.startsWith('#')) {
@@ -149,9 +152,7 @@ export const NovedadesSection: React.FC<NovedadesSectionProps> = ({ onExploreCat
       >
         <div
           ref={trackRef}
-          className={`flex gap-5 sm:gap-6 py-2 px-4 will-change-transform ${
-            isPaused ? '' : 'animate-marquee-infinite'
-          }`}
+          className="flex gap-5 sm:gap-6 py-2 px-4 will-change-transform animate-marquee-infinite"
           style={{
             animationPlayState: isPaused ? 'paused' : 'running',
           }}

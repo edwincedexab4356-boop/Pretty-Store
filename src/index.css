@@ -120,6 +120,11 @@
   animation-play-state: paused;
 }
 
+.mask-gradient-x {
+  mask-image: linear-gradient(to right, transparent, black 3%, black 97%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 3%, black 97%, transparent);
+}
+
 .animate-fadeIn {
   animation: fadeIn 0.25s ease-out forwards;
 }

@@ -20,6 +20,7 @@ import {
   saveNovedadesToIndexedDb,
   getNovedadesFromIndexedDb,
   clearNovedadesInIndexedDb,
+  deleteNovedadFromIndexedDb,
 } from '../utils/novedadesDb';
 
 
@@ -1347,33 +1348,70 @@ function getApiUrl(apiPath: string): string {
   return `http://127.0.0.1:${process.env.PORT || 3000}${cleanPath}`;
 }
 
+const NOVEDADES_DELETED_KEY = 'pretty_store_deleted_novedades_ids_v2';
+
+export function getDeletedNovedadIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(NOVEDADES_DELETED_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function addDeletedNovedadId(id: string): void {
+  if (typeof window === 'undefined' || !id) return;
+  try {
+    const set = getDeletedNovedadIds();
+    set.add(String(id));
+    const arr = Array.from(set).slice(-200);
+    localStorage.setItem(NOVEDADES_DELETED_KEY, JSON.stringify(arr));
+  } catch {}
+}
+
+export function clearDeletedNovedadIds(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(NOVEDADES_DELETED_KEY);
+  } catch {}
+}
+
 export function getLocalNovedades(): Novedad[] {
-  if (typeof window === 'undefined') return memoryNovedades;
+  const deletedIds = getDeletedNovedadIds();
+  if (typeof window === 'undefined') {
+    return memoryNovedades.filter((n) => n && n.id && !deletedIds.has(String(n.id)));
+  }
   try {
     const raw = localStorage.getItem(NOVEDADES_STORAGE_KEY);
-    if (!raw) return memoryNovedades;
+    if (!raw) return memoryNovedades.filter((n) => n && n.id && !deletedIds.has(String(n.id)));
     const parsed = JSON.parse(raw);
     const list = Array.isArray(parsed) ? parsed : [];
-    if (list.length > 0) memoryNovedades = list;
-    return list;
+    const filtered = list.filter((n) => n && n.id && !deletedIds.has(String(n.id)));
+    memoryNovedades = filtered;
+    return filtered;
   } catch {
-    return memoryNovedades;
+    return memoryNovedades.filter((n) => n && n.id && !deletedIds.has(String(n.id)));
   }
 }
 
 export function setLocalNovedades(items: Novedad[]): void {
-  memoryNovedades = items;
+  const deletedIds = getDeletedNovedadIds();
+  const cleanItems = items.filter((n) => n && n.id && !deletedIds.has(String(n.id)));
+  memoryNovedades = cleanItems;
   if (typeof window === 'undefined') return;
 
   // 1. Guardar en localStorage
   try {
-    localStorage.setItem(NOVEDADES_STORAGE_KEY, JSON.stringify(items));
+    localStorage.setItem(NOVEDADES_STORAGE_KEY, JSON.stringify(cleanItems));
   } catch (e) {
     console.warn('LocalStorage limit note:', e);
   }
 
   // 2. Guardar en IndexedDB
-  saveNovedadesToIndexedDb(items).catch((err) => {
+  saveNovedadesToIndexedDb(cleanItems).catch((err) => {
     console.warn('IndexedDB save warning:', err);
   });
 }
@@ -1496,11 +1534,11 @@ export async function uploadNovedadImageToStorage(file: File): Promise<string> {
  *  3. Almacenamiento local (IndexedDB + localStorage)
  */
 export async function getAdminNovedades(): Promise<Novedad[]> {
-  const localList = getLocalNovedades();
-  const idbList = await getNovedadesFromIndexedDb().catch(() => []);
+  const deletedIds = getDeletedNovedadIds();
 
-  // 1. Obtener lista desde el servidor en Express (servidor compartido entre todos los dispositivos)
+  // 1. Obtener lista desde el servidor en Express (compartido entre todos los dispositivos)
   let serverList: Novedad[] = [];
+  let serverSuccess = false;
   try {
     const res = await fetch(`/api/novedades?_t=${Date.now()}`, {
       cache: 'no-store',
@@ -1509,15 +1547,17 @@ export async function getAdminNovedades(): Promise<Novedad[]> {
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data)) {
-        serverList = data;
+        serverList = data.filter((item) => item && item.id && !deletedIds.has(String(item.id)));
+        serverSuccess = true;
       }
     }
   } catch (err) {
     console.warn('Error fetching /api/novedades:', err);
   }
 
-  // 2. Obtener lista desde Supabase Cloud con timeout seguro de 2s
+  // 2. Obtener lista desde Supabase Cloud con timeout seguro de 2.5s
   let supabaseList: Novedad[] = [];
+  let supabaseSuccess = false;
   try {
     const supabasePromise = supabase
       .from('novedades')
@@ -1525,66 +1565,60 @@ export async function getAdminNovedades(): Promise<Novedad[]> {
       .order('orden', { ascending: true });
 
     const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
-      setTimeout(() => reject(new Error('Supabase timeout')), 2000)
+      setTimeout(() => reject(new Error('Supabase timeout')), 2500)
     );
 
     const { data, error } = (await Promise.race([supabasePromise, timeoutPromise])) as any;
-    if (!error && Array.isArray(data) && data.length > 0) {
-      supabaseList = data;
+    if (!error && Array.isArray(data)) {
+      supabaseList = data.filter((item) => item && item.id && !deletedIds.has(String(item.id)));
+      supabaseSuccess = true;
     }
   } catch {
-    // Supabase no configurado o permisos no concedidos
+    // Supabase no configurado o timeout
   }
 
-  // 3. Fusionar datos de todas las fuentes garantizando persistencia
-  const mergedMap = new Map<string, Novedad>();
+  // 3. Si cualquiera de las fuentes online (Supabase o Servidor) respondió con éxito:
+  if (supabaseSuccess || serverSuccess) {
+    const mergedMap = new Map<string, Novedad>();
 
-  // Prioridad 1: Supabase si tiene novedades
-  for (const item of supabaseList) {
-    if (item && item.id) mergedMap.set(String(item.id), item);
-  }
-
-  // Prioridad 2: Servidor permanente
-  for (const item of serverList) {
-    if (item && item.id) {
-      if (!mergedMap.has(String(item.id))) {
+    // Supabase es la fuente cloud principal
+    for (const item of supabaseList) {
+      if (item && item.id && !deletedIds.has(String(item.id))) {
         mergedMap.set(String(item.id), item);
       }
     }
-  }
 
-  // Prioridad 3: Elementos guardados localmente en este dispositivo que no hayan sincronizado
-  const unsyncedItems: Novedad[] = [];
-  for (const item of idbList) {
-    if (item && item.id && !mergedMap.has(String(item.id))) {
-      mergedMap.set(String(item.id), item);
-      unsyncedItems.push(item);
+    // Servidor Express permanente para sincronización multi-dispositivo
+    for (const item of serverList) {
+      if (item && item.id && !deletedIds.has(String(item.id))) {
+        if (!mergedMap.has(String(item.id))) {
+          mergedMap.set(String(item.id), item);
+        }
+      }
     }
-  }
-  for (const item of localList) {
-    if (item && item.id && !mergedMap.has(String(item.id))) {
-      mergedMap.set(String(item.id), item);
-      unsyncedItems.push(item);
-    }
+
+    const finalResult = Array.from(mergedMap.values()).sort(
+      (a, b) => (a.orden ?? 0) - (b.orden ?? 0)
+    );
+
+    // Actualizamos el almacenamiento local (IndexedDB y localStorage) con la verdad del servidor/Supabase.
+    // NUNCA resucitamos novedades eliminadas.
+    setLocalNovedades(finalResult);
+
+    return finalResult;
   }
 
-  // Si había elementos locales no sincronizados con el servidor, sincronizarlos ahora
-  if (unsyncedItems.length > 0) {
-    fetch('/api/novedades/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: unsyncedItems }),
-    }).catch(() => {});
-  }
-
-  const finalResult = Array.from(mergedMap.values()).sort(
-    (a, b) => (a.orden ?? 0) - (b.orden ?? 0)
+  // Fallback offline (solo si no hay internet ni acceso al servidor/Supabase):
+  const localList = getLocalNovedades().filter((n) => n && n.id && !deletedIds.has(String(n.id)));
+  const idbList = (await getNovedadesFromIndexedDb().catch(() => [])).filter(
+    (n) => n && n.id && !deletedIds.has(String(n.id))
   );
 
-  // Actualizar caché local para renderizado instantáneo en este dispositivo
-  setLocalNovedades(finalResult);
+  const fallbackMap = new Map<string, Novedad>();
+  for (const item of idbList) fallbackMap.set(String(item.id), item);
+  for (const item of localList) fallbackMap.set(String(item.id), item);
 
-  return finalResult;
+  return Array.from(fallbackMap.values()).sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
 }
 
 /**
@@ -1595,11 +1629,25 @@ export async function getPublicNovedades(): Promise<Novedad[]> {
   return all.filter((n) => Boolean(n && n.activo));
 }
 
+export function isValidUUID(str?: string | null): boolean {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
+}
+
 /**
  * Crea una nueva novedad y la persiste inmediatamente en el servidor para todos los dispositivos.
  */
 export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Novedad> {
-  const newId = novedad.id && novedad.id.length >= 10 ? novedad.id : generateUUID();
+  const newId = isValidUUID(novedad.id) ? novedad.id! : generateUUID();
+
+  // Si este ID estaba marcado como borrado previamente, removerlo
+  try {
+    const deletedIds = getDeletedNovedadIds();
+    if (deletedIds.has(newId)) {
+      deletedIds.delete(newId);
+      localStorage.setItem('pretty_store_deleted_novedades_ids_v2', JSON.stringify(Array.from(deletedIds)));
+    }
+  } catch {}
 
   let payload: Novedad = {
     id: newId,
@@ -1637,13 +1685,15 @@ export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Nov
     (a, b) => (a.orden ?? 0) - (b.orden ?? 0)
   );
   setLocalNovedades(next);
-  notifyNovedadesChanged();
 
   // 3. Guardar en Supabase Database si está configurada la tabla
   try {
-    await supabase.from('novedades').insert(payload);
+    const { error: sbErr } = await supabase.from('novedades').insert(payload);
+    if (sbErr) {
+      console.warn('Supabase insert novedad note:', sbErr);
+    }
   } catch (sbErr) {
-    console.warn('Supabase insert novedad note:', sbErr);
+    console.warn('Supabase insert novedad exception:', sbErr);
   }
 
   notifyNovedadesChanged();
@@ -1692,11 +1742,11 @@ export async function updateAdminNovedad(id: string, updates: Partial<Novedad>):
     (a, b) => (a.orden ?? 0) - (b.orden ?? 0)
   );
   setLocalNovedades(next);
-  notifyNovedadesChanged();
 
   // 3. Actualizar en Supabase si existe la tabla
   try {
-    await supabase.from('novedades').update(payload).eq('id', id);
+    const { error: sbErr } = await supabase.from('novedades').update(payload).eq('id', id);
+    if (sbErr) console.warn('Supabase update note:', sbErr);
   } catch {}
 
   notifyNovedadesChanged();
@@ -1712,7 +1762,6 @@ export async function toggleNovedadVisibility(id: string, activo: boolean): Prom
     n.id === id ? { ...n, activo, updated_at: new Date().toISOString() } : n
   );
   setLocalNovedades(next);
-  notifyNovedadesChanged();
 
   try {
     await fetch(`/api/novedades/${id}`, {
@@ -1723,10 +1772,11 @@ export async function toggleNovedadVisibility(id: string, activo: boolean): Prom
   } catch {}
 
   try {
-    await supabase
+    const { error: sbErr } = await supabase
       .from('novedades')
       .update({ activo, updated_at: new Date().toISOString() })
       .eq('id', id);
+    if (sbErr) console.warn('Supabase toggle visibility note:', sbErr);
   } catch {}
 
   notifyNovedadesChanged();
@@ -1734,32 +1784,46 @@ export async function toggleNovedadVisibility(id: string, activo: boolean): Prom
 }
 
 /**
- * Elimina una novedad de todos los dispositivos (Servidor, IndexedDB, localStorage y Supabase).
+ * Elimina una novedad de todos los dispositivos (Supabase, Servidor, IndexedDB, localStorage y Storage).
  */
 export async function deleteAdminNovedad(id: string, imagenUrl?: string | null): Promise<boolean> {
-  // 1. Eliminar en memoria y local
+  if (!id) return false;
+
+  // 1. Marcar como ID eliminado para evitar resurrección en cualquier caché
+  addDeletedNovedadId(id);
+
+  // 2. Eliminar de memoria y local (localStorage e IndexedDB) de inmediato
   const current = getLocalNovedades();
-  const next = current.filter((n) => n.id !== id);
+  const next = current.filter((n) => String(n.id) !== String(id));
   setLocalNovedades(next);
-  notifyNovedadesChanged();
+  await deleteNovedadFromIndexedDb(id).catch(() => {});
+  await saveNovedadesToIndexedDb(next).catch(() => {});
 
-  // 2. Eliminar del servidor permanente
+  // 3. Eliminar de Supabase Cloud Database de forma prioritaria
   try {
-    await fetch(`/api/novedades/${id}`, { method: 'DELETE' });
-  } catch {}
+    const { error: sbError } = await supabase.from('novedades').delete().eq('id', id);
+    if (sbError) {
+      console.warn('Supabase delete error note:', sbError);
+    }
+  } catch (sbErr) {
+    console.warn('Supabase delete exception:', sbErr);
+  }
 
-  // 3. Eliminar de Supabase Database
-  try {
-    await supabase.from('novedades').delete().eq('id', id);
-  } catch {}
-
-  // 4. Eliminar imagen de Supabase Storage si aplica
+  // 4. Eliminar imagen física del bucket en Supabase Storage si corresponde
   if (imagenUrl) {
     try {
       await deleteSupabaseStorageFile(imagenUrl);
     } catch {}
   }
 
+  // 5. Eliminar del servidor Express persistente
+  try {
+    await fetch(`/api/novedades/${id}`, { method: 'DELETE' });
+  } catch (srvErr) {
+    console.warn('Server delete exception:', srvErr);
+  }
+
+  // 6. Notificar a toda la aplicación (panel admin y tienda pública) SOLO después de completar
   notifyNovedadesChanged();
   return true;
 }
@@ -1768,19 +1832,35 @@ export async function deleteAdminNovedad(id: string, imagenUrl?: string | null):
  * Elimina todas las novedades de la tienda en todos los dispositivos.
  */
 export async function deleteAllAdminNovedades(): Promise<boolean> {
-  setLocalNovedades([]);
-  clearNovedadesInIndexedDb().catch(() => {});
-  notifyNovedadesChanged();
+  clearDeletedNovedadIds();
 
+  // 1. Limpiar memoria, localStorage e IndexedDB
+  setLocalNovedades([]);
+  await clearNovedadesInIndexedDb().catch(() => {});
+
+  // 2. Limpiar Supabase Cloud Database
+  try {
+    const { error: sbError } = await supabase
+      .from('novedades')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+    if (sbError) {
+      console.warn('Supabase deleteAll error note:', sbError);
+    }
+  } catch (sbErr) {
+    console.warn('Supabase deleteAll exception:', sbErr);
+  }
+
+  // 3. Limpiar servidor Express
   try {
     await fetch('/api/novedades', { method: 'DELETE' });
-  } catch {}
+  } catch (srvErr) {
+    console.warn('Server deleteAll exception:', srvErr);
+  }
 
-  try {
-    await supabase.from('novedades').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  } catch {}
-
+  // 4. Notificar a toda la tienda
   notifyNovedadesChanged();
   return true;
 }
+
 

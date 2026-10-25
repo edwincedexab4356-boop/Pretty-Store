@@ -83,3 +83,19 @@ export async function clearNovedadesInIndexedDb(): Promise<void> {
     console.warn('Error clearing IndexedDB novedades:', err);
   }
 }
+
+export async function deleteNovedadFromIndexedDb(id: string): Promise<void> {
+  try {
+    const db = await openNovedadesDb();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    store.delete(id);
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (err) {
+    console.warn('Error deleting novedad from IndexedDB:', err);
+  }
+}
+
