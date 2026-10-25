@@ -241,6 +241,9 @@ async function startServer() {
 
   // Novedades backup endpoints
   app.get('/api/novedades', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     try {
       const list = getStoredNovedades();
       return res.json(list);
@@ -257,15 +260,18 @@ async function startServer() {
       }
       const list = getStoredNovedades();
       const idx = list.findIndex((n) => String(n.id) === String(item.id));
+      let savedItem: any;
       if (idx >= 0) {
         list[idx] = { ...list[idx], ...item, updated_at: new Date().toISOString() };
+        savedItem = list[idx];
       } else {
-        list.push({ ...item, created_at: item.created_at || new Date().toISOString() });
+        savedItem = { ...item, created_at: item.created_at || new Date().toISOString() };
+        list.push(savedItem);
       }
       // Sort by order
       list.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
       saveStoredNovedades(list);
-      return res.json({ success: true, item });
+      return res.json({ success: true, item: savedItem });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }

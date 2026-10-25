@@ -1317,6 +1317,42 @@ export async function deleteSupabaseStorageFile(url?: string | null): Promise<bo
   }
 }
 
+/* ==================== NOVEDADES STORAGE & MULTI-TIER SYNC ==================== */
+const NOVEDADES_STORAGE_KEY = 'pretty_store_novedades_v2';
+let memoryNovedades: Novedad[] = [];
+
+function getApiUrl(apiPath: string): string {
+  if (apiPath.startsWith('http://') || apiPath.startsWith('https://')) return apiPath;
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin.replace(/\/+$/, '')}${apiPath.startsWith('/') ? apiPath : `/${apiPath}`}`;
+  }
+  return `http://127.0.0.1:${process.env.PORT || 3000}${apiPath.startsWith('/') ? apiPath : `/${apiPath}`}`;
+}
+
+export function getLocalNovedades(): Novedad[] {
+  if (typeof window === 'undefined') return memoryNovedades;
+  try {
+    const raw = localStorage.getItem(NOVEDADES_STORAGE_KEY);
+    if (!raw) return memoryNovedades;
+    const parsed = JSON.parse(raw);
+    const list = Array.isArray(parsed) ? parsed : [];
+    if (list.length > 0) memoryNovedades = list;
+    return list;
+  } catch {
+    return memoryNovedades;
+  }
+}
+
+export function setLocalNovedades(items: Novedad[]): void {
+  memoryNovedades = items;
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(NOVEDADES_STORAGE_KEY, JSON.stringify(items));
+  } catch (e) {
+    console.warn('Error saving novedades to localStorage:', e);
+  }
+}
+
 /**
  * Sube una imagen de novedad a Supabase Storage con compresión inteligente y fallback automático.
  */
@@ -1325,7 +1361,7 @@ export async function uploadNovedadImageToStorage(file: File): Promise<string> {
   let compressedDataUrl = '';
 
   try {
-    const compressed = await compressImageForUpload(file, 2048, 0.88);
+    const compressed = await compressImageForUpload(file, 1600, 0.82);
     fileToUpload = compressed.file;
     compressedDataUrl = compressed.dataUrl;
   } catch (err) {
@@ -1337,36 +1373,39 @@ export async function uploadNovedadImageToStorage(file: File): Promise<string> {
   const mimeType = fileToUpload.type || `image/${cleanExt === 'jpg' ? 'jpeg' : cleanExt}`;
   const fileName = `nov_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
 
-  // 1. Intentar primero en el bucket 'novedades', luego en 'product-images'
+  // 1. Intentar subir a Supabase Storage si el bucket existe (con timeout rápido de 2s)
   const targetBuckets = ['novedades', 'product-images'];
 
   for (const bucket of targetBuckets) {
     try {
-      const { data, error } = await supabase.storage
+      const uploadPromise = supabase.storage
         .from(bucket)
         .upload(fileName, fileToUpload, {
           contentType: mimeType,
           upsert: true,
         });
 
-      if (!error && data) {
-        const { data: pubData } = supabase.storage
-          .from(bucket)
-          .getPublicUrl(fileName);
+      const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
+        setTimeout(() => reject(new Error('Storage upload timeout')), 2000)
+      );
 
+      const { data, error } = (await Promise.race([uploadPromise, timeoutPromise])) as any;
+
+      if (!error && data) {
+        const { data: pubData } = supabase.storage.from(bucket).getPublicUrl(fileName);
         if (pubData?.publicUrl) {
           return pubData.publicUrl;
         }
       }
     } catch {
-      // Probar siguiente bucket
+      // Probar siguiente bucket o pasar al servidor
     }
   }
 
   // 2. Fallback: subir al servidor local (/api/upload-image)
   if (compressedDataUrl) {
     try {
-      const res = await fetch('/api/upload-image', {
+      const res = await fetch(getApiUrl('/api/upload-image'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1384,7 +1423,7 @@ export async function uploadNovedadImageToStorage(file: File): Promise<string> {
     }
   }
 
-  // 3. Fallback: DataURL seguro
+  // 3. Fallback: DataURL comprimido directo
   if (compressedDataUrl) {
     return compressedDataUrl;
   }
@@ -1399,76 +1438,86 @@ export async function uploadNovedadImageToStorage(file: File): Promise<string> {
 
 /**
  * Obtiene todas las novedades para el panel de administración (activas y ocultas).
- * Si no hay novedades o se eliminaron, retorna un arreglo vacío [] (sin fotos demo).
+ * Sincroniza localStorage, servidor local y Supabase.
  */
 export async function getAdminNovedades(): Promise<Novedad[]> {
-  // 1. Intentar leer desde Supabase
+  const localList = getLocalNovedades();
+
+  // 1. Intentar leer desde servidor local con cache-busting
+  let serverList: Novedad[] | null = null;
   try {
-    const { data, error } = await supabase
+    const res = await fetch(getApiUrl(`/api/novedades?_t=${Date.now()}`), { cache: 'no-store' });
+    if (res.ok) {
+      const list = await res.json();
+      if (Array.isArray(list)) {
+        serverList = list;
+      }
+    }
+  } catch (err) {
+    // Servidor offline o error de red
+  }
+
+  // 2. Intentar leer desde Supabase con timeout de 2.5s (no bloquea si la tabla no existe)
+  let supabaseList: Novedad[] | null = null;
+  try {
+    const supabasePromise = supabase
       .from('novedades')
       .select('*')
       .order('orden', { ascending: true });
 
-    if (!error && Array.isArray(data)) {
-      return data;
+    const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) =>
+      setTimeout(() => reject(new Error('Supabase timeout')), 2500)
+    );
+
+    const { data, error } = (await Promise.race([supabasePromise, timeoutPromise])) as any;
+    if (!error && Array.isArray(data) && data.length > 0) {
+      supabaseList = data;
     }
-  } catch (e) {
-    // Error de conexión o tabla aún no creada en Supabase
+  } catch {
+    // Tabla no existe en Supabase o timeout
   }
 
-  // 2. Fallback a servidor local (/api/novedades)
-  try {
-    const res = await fetch('/api/novedades');
-    if (res.ok) {
-      const list = await res.json();
-      if (Array.isArray(list)) {
-        return list;
+  // Si Supabase tiene datos válidos, es la fuente primaria
+  if (supabaseList && supabaseList.length > 0) {
+    setLocalNovedades(supabaseList);
+    return supabaseList;
+  }
+
+  // Si el servidor local devolvió lista válida
+  if (serverList !== null) {
+    const mergedMap = new Map<string, Novedad>();
+    for (const item of serverList) {
+      if (item && item.id) mergedMap.set(String(item.id), item);
+    }
+    for (const item of localList) {
+      if (item && item.id && !mergedMap.has(String(item.id))) {
+        mergedMap.set(String(item.id), item);
       }
     }
-  } catch {}
+    const merged = Array.from(mergedMap.values()).sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+    setLocalNovedades(merged);
+    return merged;
+  }
 
-  return [];
+  return localList;
 }
 
 /**
  * Obtiene las novedades activas (visibles) para la tienda pública.
- * Retorna única y exclusivamente las novedades creadas por el usuario con activo === true.
  */
 export async function getPublicNovedades(): Promise<Novedad[]> {
-  // 1. Intentar leer desde Supabase
-  try {
-    const { data, error } = await supabase
-      .from('novedades')
-      .select('*')
-      .eq('activo', true)
-      .order('orden', { ascending: true });
-
-    if (!error && Array.isArray(data)) {
-      return data;
-    }
-  } catch (e) {
-    // Error de conexión o tabla aún no creada en Supabase
-  }
-
-  // 2. Fallback a servidor local (/api/novedades)
-  try {
-    const res = await fetch('/api/novedades');
-    if (res.ok) {
-      const list = await res.json();
-      if (Array.isArray(list)) {
-        return list.filter((n: Novedad) => Boolean(n && n.activo));
-      }
-    }
-  } catch {}
-
-  return [];
+  const all = await getAdminNovedades();
+  return all.filter((n) => Boolean(n && n.activo));
 }
 
 /**
- * Crea una nueva novedad en Supabase y sincroniza con el servidor.
+ * Crea una nueva novedad en localStorage, servidor local y Supabase.
  */
-export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Novedad | null> {
-  const newId = novedad.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `nov-${Date.now()}`);
+export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Novedad> {
+  const newId =
+    novedad.id ||
+    (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `nov-${Date.now()}`);
+
   const payload: Novedad = {
     id: newId,
     titulo: novedad.titulo || null,
@@ -1482,36 +1531,75 @@ export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Nov
     updated_at: new Date().toISOString(),
   };
 
-  try {
-    const { data, error } = await supabase
-      .from('novedades')
-      .insert(payload)
-      .select('*')
-      .single();
+  // 1. Guardar de inmediato en localStorage para respuesta instantánea (0ms)
+  const current = getLocalNovedades();
+  const next = [...current.filter((n) => n.id !== payload.id), payload].sort(
+    (a, b) => (a.orden ?? 0) - (b.orden ?? 0)
+  );
+  setLocalNovedades(next);
+  notifyNovedadesChanged();
 
-    if (!error && data) {
-      // Sincronizar backup en servidor local
-      try {
-        await fetch('/api/novedades', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
-      } catch {}
-      notifyNovedadesChanged();
-      return data;
-    }
-  } catch (err) {
-    console.warn('Supabase createAdminNovedad error:', err);
-  }
-
-  // Backup en servidor si la tabla aún no existe en Supabase
+  // 2. Guardar en servidor local en paralelo
   try {
-    await fetch('/api/novedades', {
+    await fetch(getApiUrl('/api/novedades'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+  } catch (serverErr) {
+    console.warn('Error saving to server /api/novedades:', serverErr);
+  }
+
+  // 3. Intentar guardar en Supabase si la tabla existe
+  try {
+    await supabase.from('novedades').insert(payload);
+  } catch (sbErr) {
+    console.warn('Supabase insert novedad note:', sbErr);
+  }
+
+  notifyNovedadesChanged();
+  return payload;
+}
+
+/**
+ * Actualiza una novedad existente en localStorage, servidor local y Supabase.
+ */
+export async function updateAdminNovedad(id: string, updates: Partial<Novedad>): Promise<Novedad> {
+  const current = getLocalNovedades();
+  const existing = current.find((n) => n.id === id);
+
+  const payload: Novedad = {
+    id,
+    titulo: updates.titulo !== undefined ? updates.titulo : existing?.titulo || null,
+    subtitulo: updates.subtitulo !== undefined ? updates.subtitulo : existing?.subtitulo || null,
+    badge: updates.badge !== undefined ? updates.badge : existing?.badge || null,
+    imagen_url: updates.imagen_url !== undefined ? updates.imagen_url : existing?.imagen_url || '',
+    enlace_url: updates.enlace_url !== undefined ? updates.enlace_url : existing?.enlace_url || '#catalogo',
+    orden: typeof updates.orden === 'number' ? updates.orden : existing?.orden ?? 0,
+    activo: updates.activo !== undefined ? updates.activo : existing?.activo ?? true,
+    created_at: existing?.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  // 1. Actualizar de inmediato en localStorage
+  const next = current.map((n) => (n.id === id ? payload : n)).sort(
+    (a, b) => (a.orden ?? 0) - (b.orden ?? 0)
+  );
+  setLocalNovedades(next);
+  notifyNovedadesChanged();
+
+  // 2. Actualizar en servidor local
+  try {
+    await fetch(getApiUrl('/api/novedades'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {}
+
+  // 3. Actualizar en Supabase si existe
+  try {
+    await supabase.from('novedades').update(payload).eq('id', id);
   } catch {}
 
   notifyNovedadesChanged();
@@ -1519,132 +1607,82 @@ export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Nov
 }
 
 /**
- * Actualiza una novedad existente en Supabase y sincroniza con el servidor.
- */
-export async function updateAdminNovedad(id: string, updates: Partial<Novedad>): Promise<Novedad | null> {
-  const payload = {
-    ...updates,
-    updated_at: new Date().toISOString(),
-  };
-
-  try {
-    const { data, error } = await supabase
-      .from('novedades')
-      .update(payload)
-      .eq('id', id)
-      .select('*')
-      .single();
-
-    if (!error && data) {
-      try {
-        await fetch('/api/novedades', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
-      } catch {}
-      notifyNovedadesChanged();
-      return data;
-    }
-  } catch (err) {
-    console.warn('Supabase updateAdminNovedad error:', err);
-  }
-
-  // Backup servidor
-  try {
-    const res = await fetch('/api/novedades', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, ...payload }),
-    });
-    if (res.ok) {
-      const json = await res.json();
-      notifyNovedadesChanged();
-      return json.item || ({ id, ...payload } as Novedad);
-    }
-  } catch {}
-
-  notifyNovedadesChanged();
-  return { id, ...payload } as Novedad;
-}
-
-/**
  * Alterna la visibilidad (oculto / visible) de una novedad.
  */
 export async function toggleNovedadVisibility(id: string, activo: boolean): Promise<boolean> {
-  try {
-    await supabase
-      .from('novedades')
-      .update({ activo, updated_at: new Date().toISOString() })
-      .eq('id', id);
-  } catch (e) {
-    console.warn('Error toggling visibility in Supabase:', e);
-  }
+  const current = getLocalNovedades();
+  const next = current.map((n) =>
+    n.id === id ? { ...n, activo, updated_at: new Date().toISOString() } : n
+  );
+  setLocalNovedades(next);
+  notifyNovedadesChanged();
 
   try {
-    await fetch('/api/novedades', {
+    await fetch(getApiUrl('/api/novedades'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, activo }),
     });
   } catch {}
 
+  try {
+    await supabase
+      .from('novedades')
+      .update({ activo, updated_at: new Date().toISOString() })
+      .eq('id', id);
+  } catch {}
+
   notifyNovedadesChanged();
   return true;
 }
 
 /**
- * Elimina una novedad de Supabase Y elimina físicamente su archivo de imagen en Supabase Storage.
+ * Elimina una novedad de localStorage, servidor y Supabase.
  */
 export async function deleteAdminNovedad(id: string, imagenUrl?: string | null): Promise<boolean> {
-  // 1. Eliminar de Supabase Database
-  try {
-    await supabase
-      .from('novedades')
-      .delete()
-      .eq('id', id);
-  } catch (err) {
-    console.warn('Error deleting novedad from Supabase table:', err);
-  }
+  // 1. Eliminar de inmediato en localStorage
+  const current = getLocalNovedades();
+  const next = current.filter((n) => n.id !== id);
+  setLocalNovedades(next);
+  notifyNovedadesChanged();
 
-  // 2. Eliminar imagen físicamente de Supabase Storage
+  // 2. Eliminar de servidor local
+  try {
+    await fetch(getApiUrl(`/api/novedades/${id}`), { method: 'DELETE' });
+  } catch {}
+
+  // 3. Eliminar de Supabase Database
+  try {
+    await supabase.from('novedades').delete().eq('id', id);
+  } catch {}
+
+  // 4. Eliminar imagen de Storage si aplica
   if (imagenUrl) {
     try {
       await deleteSupabaseStorageFile(imagenUrl);
     } catch {}
   }
 
-  // 3. Eliminar de servidor backup
-  try {
-    await fetch(`/api/novedades/${id}`, { method: 'DELETE' });
-  } catch {}
-
   notifyNovedadesChanged();
   return true;
 }
 
 /**
- * Elimina todas las novedades de la base de datos y del servidor.
+ * Elimina todas las novedades de la base de datos, localStorage y del servidor.
  */
 export async function deleteAllAdminNovedades(): Promise<boolean> {
-  // 1. Obtener lista para limpiar archivos
+  // 1. Limpiar localStorage inmediatamente
+  setLocalNovedades([]);
+  notifyNovedadesChanged();
+
+  // 2. Limpiar servidor local
   try {
-    const items = await getAdminNovedades();
-    for (const it of items) {
-      if (it.imagen_url) {
-        await deleteSupabaseStorageFile(it.imagen_url);
-      }
-    }
+    await fetch(getApiUrl('/api/novedades'), { method: 'DELETE' });
   } catch {}
 
-  // 2. Borrar de Supabase
+  // 3. Limpiar Supabase
   try {
     await supabase.from('novedades').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  } catch {}
-
-  // 3. Borrar de servidor
-  try {
-    await fetch('/api/novedades', { method: 'DELETE' });
   } catch {}
 
   notifyNovedadesChanged();

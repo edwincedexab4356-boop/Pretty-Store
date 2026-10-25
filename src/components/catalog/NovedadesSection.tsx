@@ -176,8 +176,7 @@ export const NovedadesSection: React.FC<NovedadesSectionProps> = ({ onExploreCat
                   loading="lazy"
                   className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
                   onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src =
-                      'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&w=800&q=80';
+                    (e.currentTarget as HTMLImageElement).src = '/images/logo/logotipo.jpeg';
                   }}
                 />
 

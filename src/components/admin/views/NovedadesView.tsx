@@ -176,6 +176,18 @@ export const NovedadesView: React.FC = () => {
 
   useEffect(() => {
     loadData();
+
+    const handleUpdated = () => {
+      loadData();
+    };
+
+    window.addEventListener('novedades-updated', handleUpdated);
+    window.addEventListener('focus', handleUpdated);
+
+    return () => {
+      window.removeEventListener('novedades-updated', handleUpdated);
+      window.removeEventListener('focus', handleUpdated);
+    };
   }, []);
 
   const handleRefresh = async () => {
@@ -287,11 +299,19 @@ export const NovedadesView: React.FC = () => {
       };
 
       if (editingItem) {
-        await updateAdminNovedad(editingItem.id, payload);
+        const updated = await updateAdminNovedad(editingItem.id, payload);
+        setNovedades((prev) => {
+          const next = prev.map((n) => (n.id === editingItem.id ? updated : n));
+          return next.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+        });
         showToast('Novedad actualizada correctamente.');
       } else {
-        await createAdminNovedad(payload);
-        showToast('Nueva novedad guardada en Supabase.');
+        const created = await createAdminNovedad(payload);
+        setNovedades((prev) => {
+          const next = [...prev.filter((n) => n.id !== created.id), created];
+          return next.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+        });
+        showToast('Nueva novedad guardada con éxito.');
       }
 
       setIsModalOpen(false);
