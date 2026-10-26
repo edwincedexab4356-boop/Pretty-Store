@@ -1653,6 +1653,7 @@ export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Nov
     id: newId,
     titulo: novedad.titulo || null,
     subtitulo: novedad.subtitulo || null,
+    descripcion: novedad.descripcion || null,
     badge: novedad.badge || null,
     imagen_url: novedad.imagen_url || '',
     enlace_url: novedad.enlace_url || '#catalogo',
@@ -1690,7 +1691,13 @@ export async function createAdminNovedad(novedad: Partial<Novedad>): Promise<Nov
   try {
     const { error: sbErr } = await supabase.from('novedades').insert(payload);
     if (sbErr) {
-      console.warn('Supabase insert novedad note:', sbErr);
+      // Si la columna descripcion aún no existe en Supabase (error 42703 o PGRST204), reintentar sin ese campo
+      if (sbErr.code === '42703' || sbErr.code === 'PGRST204' || String(sbErr.message).toLowerCase().includes('descripcion')) {
+        const { descripcion: _desc, ...fallbackPayload } = payload;
+        await supabase.from('novedades').insert(fallbackPayload);
+      } else {
+        console.warn('Supabase insert novedad note:', sbErr);
+      }
     }
   } catch (sbErr) {
     console.warn('Supabase insert novedad exception:', sbErr);
@@ -1711,6 +1718,7 @@ export async function updateAdminNovedad(id: string, updates: Partial<Novedad>):
     id,
     titulo: updates.titulo !== undefined ? updates.titulo : existing?.titulo || null,
     subtitulo: updates.subtitulo !== undefined ? updates.subtitulo : existing?.subtitulo || null,
+    descripcion: updates.descripcion !== undefined ? updates.descripcion : existing?.descripcion || null,
     badge: updates.badge !== undefined ? updates.badge : existing?.badge || null,
     imagen_url: updates.imagen_url !== undefined ? updates.imagen_url : existing?.imagen_url || '',
     enlace_url: updates.enlace_url !== undefined ? updates.enlace_url : existing?.enlace_url || '#catalogo',
@@ -1746,7 +1754,14 @@ export async function updateAdminNovedad(id: string, updates: Partial<Novedad>):
   // 3. Actualizar en Supabase si existe la tabla
   try {
     const { error: sbErr } = await supabase.from('novedades').update(payload).eq('id', id);
-    if (sbErr) console.warn('Supabase update note:', sbErr);
+    if (sbErr) {
+      if (sbErr.code === '42703' || sbErr.code === 'PGRST204' || String(sbErr.message).toLowerCase().includes('descripcion')) {
+        const { descripcion: _desc, ...fallbackPayload } = payload;
+        await supabase.from('novedades').update(fallbackPayload).eq('id', id);
+      } else {
+        console.warn('Supabase update note:', sbErr);
+      }
+    }
   } catch {}
 
   notifyNovedadesChanged();

@@ -135,6 +135,7 @@ export interface Novedad {
   id: string;
   titulo?: string | null;
   subtitulo?: string | null;
+  descripcion?: string | null;
   badge?: string | null;
   imagen_url: string;
   enlace_url?: string | null;
@@ -143,3 +144,4 @@ export interface Novedad {
   created_at?: string;
   updated_at?: string;
 }
+

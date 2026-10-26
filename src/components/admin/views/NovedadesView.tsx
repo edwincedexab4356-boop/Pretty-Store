@@ -23,6 +23,7 @@ import {
   UploadCloud,
   Smartphone,
   Loader2,
+  FileText,
 } from 'lucide-react';
 import { Novedad } from '../../../types/database';
 import {
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS public.novedades (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   titulo TEXT,
   subtitulo TEXT,
+  descripcion TEXT,
   badge TEXT DEFAULT 'NOVEDAD',
   imagen_url TEXT NOT NULL,
   enlace_url TEXT DEFAULT '#catalogo',
@@ -55,6 +57,9 @@ CREATE TABLE IF NOT EXISTS public.novedades (
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- 1.1 Si la tabla ya fue creada anteriormente, asegurar que exista la columna 'descripcion'
+ALTER TABLE public.novedades ADD COLUMN IF NOT EXISTS descripcion TEXT;
 
 -- 2. Conceder permisos explícitos al rol anon y authenticated (SOLUCIONA ERROR 42501 permission denied)
 GRANT ALL ON TABLE public.novedades TO postgres, anon, authenticated, service_role;
@@ -134,6 +139,7 @@ export const NovedadesView: React.FC = () => {
   // Campos del formulario
   const [formTitulo, setFormTitulo] = useState('');
   const [formSubtitulo, setFormSubtitulo] = useState('');
+  const [formDescripcion, setFormDescripcion] = useState('');
   const [formBadge, setFormBadge] = useState('NOVEDAD');
   const [formImagenUrl, setFormImagenUrl] = useState('');
   const [formEnlaceUrl, setFormEnlaceUrl] = useState('#catalogo');
@@ -147,6 +153,7 @@ export const NovedadesView: React.FC = () => {
   // Modal SQL
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
+  const [copiedColSql, setCopiedColSql] = useState(false);
   const [supabaseStatus, setSupabaseStatus] = useState<{
     checked: boolean;
     tableExists: boolean;
@@ -203,6 +210,7 @@ export const NovedadesView: React.FC = () => {
     setEditingItem(null);
     setFormTitulo('');
     setFormSubtitulo('');
+    setFormDescripcion('');
     setFormBadge('NOVEDAD');
     setFormImagenUrl('');
     setFormEnlaceUrl('#catalogo');
@@ -215,6 +223,7 @@ export const NovedadesView: React.FC = () => {
     setEditingItem(item);
     setFormTitulo(item.titulo || '');
     setFormSubtitulo(item.subtitulo || '');
+    setFormDescripcion(item.descripcion || '');
     setFormBadge(item.badge || 'NOVEDAD');
     setFormImagenUrl(item.imagen_url || '');
     setFormEnlaceUrl(item.enlace_url || '#catalogo');
@@ -293,6 +302,7 @@ export const NovedadesView: React.FC = () => {
       const payload: Partial<Novedad> = {
         titulo: formTitulo.trim() || null,
         subtitulo: formSubtitulo.trim() || null,
+        descripcion: formDescripcion.trim() || null,
         badge: formBadge.trim() || 'NOVEDAD',
         imagen_url: formImagenUrl.trim(),
         enlace_url: formEnlaceUrl.trim() || '#catalogo',
@@ -548,6 +558,34 @@ export const NovedadesView: React.FC = () => {
         </div>
       )}
 
+      {/* Banner de migración de columna descripcion para Supabase */}
+      <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-transparent border border-amber-400/20 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5">
+          <FileText size={16} className="text-amber-400 shrink-0" />
+          <div>
+            <span className="font-bold text-white block">
+              ¿Deseas sincronizar las descripciones con Supabase?
+            </span>
+            <span className="text-stone-300 text-[11px]">
+              Tus descripciones ya se guardan en el servidor. Para que también persistan en tu Supabase Cloud, ejecuta: <code className="text-amber-300 font-mono font-semibold bg-black/50 px-1.5 py-0.5 rounded">ALTER TABLE public.novedades ADD COLUMN IF NOT EXISTS descripcion TEXT;</code>
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            navigator.clipboard.writeText('ALTER TABLE public.novedades ADD COLUMN IF NOT EXISTS descripcion TEXT;');
+            setCopiedColSql(true);
+            setTimeout(() => setCopiedColSql(false), 2500);
+            showToast('Línea SQL para Supabase copiada.');
+          }}
+          className="shrink-0 px-3.5 py-2 rounded-xl bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/30 font-bold flex items-center justify-center gap-1.5 transition-all text-xs cursor-pointer active:scale-95"
+        >
+          {copiedColSql ? <Check size={13} /> : <Copy size={13} />}
+          <span>{copiedColSql ? '¡SQL Copiado!' : 'Copiar SQL Columna'}</span>
+        </button>
+      </div>
+
       {/* Info Pill */}
 
       <div className="p-3.5 rounded-xl bg-black/40 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-stone-300">
@@ -643,13 +681,21 @@ export const NovedadesView: React.FC = () => {
 
                 {/* Content */}
                 <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <h4 className="font-serif-luxury font-bold text-white text-base leading-snug line-clamp-1">
                       {item.titulo || '(Sin título)'}
                     </h4>
-                    <p className="text-xs text-stone-400 font-light line-clamp-2 leading-relaxed">
-                      {item.subtitulo || 'Sin descripción adicional'}
-                    </p>
+                    {item.subtitulo && (
+                      <p className="text-xs text-stone-300 font-light line-clamp-1 leading-relaxed">
+                        {item.subtitulo}
+                      </p>
+                    )}
+                    {item.descripcion && (
+                      <p className="text-[11px] text-amber-300/80 font-light line-clamp-2 leading-relaxed bg-amber-400/5 p-2 rounded-lg border border-amber-400/10">
+                        <span className="text-amber-400 font-semibold block text-[9px] uppercase tracking-wider">Descripción al dar click:</span>
+                        {item.descripcion}
+                      </p>
+                    )}
                   </div>
 
                   {/* Metadata & Actions */}
@@ -892,13 +938,36 @@ export const NovedadesView: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs text-stone-300 font-medium">Descripción / Subtítulo</label>
-                <textarea
-                  rows={2}
-                  placeholder="Detalles breves de la novedad o promoción..."
+                <label className="text-xs text-stone-300 font-medium flex items-center justify-between">
+                  <span>Subtítulo Corto (se ve sobre la foto)</span>
+                  <span className="text-[10px] text-stone-500">Ej. Gorras exclusivas de edición limitada</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Frase breve visible sobre la foto..."
                   value={formSubtitulo}
                   onChange={(e) => setFormSubtitulo(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-black/60 border border-white/10 rounded-xl text-xs text-white placeholder-stone-600 focus:outline-none focus:border-[#c5a059]"
+                />
+              </div>
+
+              {/* Descripción detallada al hacer click */}
+              <div className="space-y-1 p-3 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-transparent border border-amber-400/20">
+                <label className="text-xs text-amber-300 font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <FileText size={14} className="text-amber-400" />
+                    <span>Descripción Detallada (Se muestra al dar click en la novedad)</span>
+                  </span>
+                  <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300">
+                    Popup Modal
+                  </span>
+                </label>
+                <textarea
+                  rows={4}
+                  placeholder="Escribe la descripción completa: historia del modelo, materiales, colores disponibles, instrucciones o detalles que el cliente podrá leer al tocar la novedad en la tienda..."
+                  value={formDescripcion}
+                  onChange={(e) => setFormDescripcion(e.target.value)}
+                  className="w-full mt-1.5 px-3.5 py-2.5 bg-black/70 border border-amber-400/20 rounded-xl text-xs text-white placeholder-stone-500 focus:outline-none focus:border-amber-400 leading-relaxed resize-y font-light"
                 />
               </div>
 
