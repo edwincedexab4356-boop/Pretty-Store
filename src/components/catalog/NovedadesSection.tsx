@@ -86,10 +86,6 @@ export const NovedadesSection: React.FC<NovedadesSectionProps> = ({ onExploreCat
     };
   }, [selectedNovedad]);
 
-  // Si no hay novedades activas (el admin las eliminó u ocultó), no mostramos la sección
-  if (!isLoading && novedades.length === 0) {
-    return null;
-  }
 
   // Duplicamos las novedades asegurando exactamente 2 mitades idénticas para un ciclo infinito continuo
   const baseItems = (() => {
@@ -273,6 +269,11 @@ export const NovedadesSection: React.FC<NovedadesSectionProps> = ({ onExploreCat
   // Limpiar número de WhatsApp para enlace
   const rawWa = config.whatsapp || '+507 6215-0251';
   const cleanWaNumber = rawWa.replace(/\D/g, '');
+
+  // Si no hay novedades activas (el admin las eliminó u ocultó), no mostramos la sección
+  if (!isLoading && novedades.length === 0) {
+    return null;
+  }
 
   return (
     <section className="relative py-12 md:py-16 bg-gradient-to-b from-[#09090b] via-[#111116] to-[#09090b] border-y border-white/[0.06] overflow-hidden select-none">
