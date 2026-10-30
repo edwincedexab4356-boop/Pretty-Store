@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Phone, Mail, MapPin, Instagram, MessageCircle, ShieldCheck } from 'lucide-react';
+import { Phone, Mail, MapPin, Instagram, MessageCircle, ShieldCheck, Lock } from 'lucide-react';
 import { useStoreConfig } from '../../context/StoreConfigContext';
 import { Categoria } from '../../types/database';
 
@@ -351,6 +351,20 @@ export const Footer: React.FC<FooterProps> = ({
             >
               Términos y Condiciones
             </a>
+            {onOpenAdmin && (
+              <>
+                <span className="text-stone-700">·</span>
+                <button
+                  type="button"
+                  onClick={onOpenAdmin}
+                  className="hover:text-[#c5a059] transition-colors cursor-pointer flex items-center gap-1 text-stone-400"
+                  title="Acceso al Panel de Administración"
+                >
+                  <Lock size={11} className="text-[#c5a059]" />
+                  <span>Administración</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

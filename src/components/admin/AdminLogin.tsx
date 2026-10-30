@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Lock, ArrowLeft, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
+import { Mail, Lock, ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 
 interface AdminLoginProps {
@@ -28,12 +28,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
     if (!res.success) {
       setErrorMsg(res.error || 'Credenciales inválidas. Verifica tu correo y contraseña.');
     }
-  };
-
-  const handleQuickAccess = async () => {
-    setEmailOrUser('admin@prettystore.store');
-    setPassword('1234');
-    await signIn('admin@prettystore.store', '1234');
   };
 
   return (
@@ -127,15 +121,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStore }) => {
                 <ArrowRight size={16} />
               </>
             )}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleQuickAccess}
-            className="w-full py-2.5 px-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] text-stone-400 hover:text-stone-200 border border-white/[0.06] text-xs font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-          >
-            <ShieldCheck size={13} className="text-[#c5a059]" />
-            <span>Acceso Rápido Administrador</span>
           </button>
         </form>
 

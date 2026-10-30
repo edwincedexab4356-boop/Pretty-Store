@@ -38,9 +38,47 @@ function MainAppContent() {
   const { config } = useStoreConfig();
 
   // Navigation states
-  const [currentView, setCurrentView] = useState<'store' | 'admin' | 'terms' | 'privacy'>('store');
+  const [currentView, setCurrentView] = useState<'store' | 'admin' | 'terms' | 'privacy'>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash;
+      const path = window.location.pathname;
+      const search = window.location.search;
+      if (hash === '#admin' || path === '/admin' || search.includes('admin')) {
+        return 'admin';
+      }
+      if (hash === '#terminos' || path === '/terminos-y-condiciones') {
+        return 'terms';
+      }
+      if (hash === '#privacidad' || path === '/politica-de-privacidad') {
+        return 'privacy';
+      }
+    }
+    return 'store';
+  });
   const [adminTab, setAdminTab] = useState<AdminTab>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Sync currentView with browser URL hash
+  useEffect(() => {
+    const handleUrlRoute = () => {
+      const hash = window.location.hash;
+      const path = window.location.pathname;
+      const search = window.location.search;
+      if (hash === '#admin' || path === '/admin' || search.includes('admin')) {
+        setCurrentView('admin');
+      } else if (hash === '#terminos' || path === '/terminos-y-condiciones') {
+        setCurrentView('terms');
+      } else if (hash === '#privacidad' || path === '/politica-de-privacidad') {
+        setCurrentView('privacy');
+      }
+    };
+    window.addEventListener('hashchange', handleUrlRoute);
+    window.addEventListener('popstate', handleUrlRoute);
+    return () => {
+      window.removeEventListener('hashchange', handleUrlRoute);
+      window.removeEventListener('popstate', handleUrlRoute);
+    };
+  }, []);
 
   // Legal modal tab
   const [legalModalTab, setLegalModalTab] = useState<'terminos' | 'privacidad' | null>(null);
